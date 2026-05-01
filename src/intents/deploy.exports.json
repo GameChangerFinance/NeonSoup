@@ -1,0 +1,29 @@
+{
+  "exports": {
+    "ValidatorSetDeployment": {
+      "version": "1047d5ec",
+      "kernelBeaconPolicy": {
+        "hash": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
+        "deployment": {
+          "assetNameHex": "5032505f4b45524e454c5f4f57535f4245505f3130343764356563",
+          "address": "addr_test1wz6kp8v0mjgsc6vp2grjawaxkhjh9hy9px85s25an4d8ftsdkgz0z",
+          "utxo": {
+            "index": 0,
+            "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
+          }
+        }
+      },
+      "kernelSpendingValidator": {
+        "hash": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
+        "deployment": {
+          "assetNameHex": "5032505f4b45524e454c5f4f57535f5350565f3130343764356563",
+          "address": "addr_test1wz6kp8v0mjgsc6vp2grjawaxkhjh9hy9px85s25an4d8ftsdkgz0z",
+          "utxo": {
+            "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
+            "index": 1
+          }
+        }
+      }
+    }
+  }
+}
