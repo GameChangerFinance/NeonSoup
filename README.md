@@ -14,12 +14,13 @@ Inspect the recipe. Fork it. Compose your own flavors. Deploy kitchens on your o
 
 ## 🚀 Overview
 
-**NeonSoup** is a peer-to-peer execution layer for Cardano DeFi provided in a cypherpunk way: 
+**NeonSoup** is a peer-to-peer execution layer for Cardano DeFi with a deep exploration for cypherpunk values: 
 
 - User First. Protocol execution on user devices. Zero installs. Zero onboarding barrers. For mobile, desktops and the people at the streets.
 - Direct user access to a unified, global, shared liquidity. No more silos.
 - No middlemen, no exclusive frontends, no centralized order books, no batchers
-- Self-sovereign. Code designed to be inspected, forked, composed and re-deployed.
+- Self-sovereign. Design optimized to be inspected, forked and re-deployed on any platform and programming language.
+- Composable. Away from the anti-collaborative CIP30 ecosystem (but without leaving any wallet behind!), we will be using UDC open intents. Flows that turn into sealed transactions only at last mile: on user wallets.
 
 ---
 
@@ -43,9 +44,12 @@ Inspect the recipe. Fork it. Compose your own flavors. Deploy kitchens on your o
   You stay in control of the staking of locked funds,of your keys and transactions.
 
 * **User First**
-  You are the edge.
-  You are the network.
-  You are the owner.
+  Dapp suggests, user customize and decide    
+  You have the final word
+  You are the owner
+
+* **By the community, for the community** 
+  Don't expect us to be yet another DeFi "bank". If you only trust million-dollar corporations to gatekeep your liquidity and profit from your trust delegation, this project is not for you. NeonSoup is designed to be culturally-owned by you. Your own door to shared liquidity, your open source contributions, your profit opportunities, you.
 
 ---
 
@@ -107,11 +111,12 @@ Immutable. Permissionless. Composable.
 
 ## 🧩 Composability in Mind
 
-NeonSoup exposes modular, composable primitives.
+For the same liquidity, NeonSoup exposes 
+* open, 
+* modular, 
+* composable intents.
 
-All on the same shared liquidity layer.
-
-> The soup is infinite. The combinations are yours.
+> Bring your own distinctiveness into The Global Soup.
 
 ---
 
@@ -132,20 +137,29 @@ All on the same shared liquidity layer.
 * **P2P Validators** — on-chain enforcement
 * **Ejectable frontend** — Simple web app with no specialized, custom backend
 * **UDC** — Universal Dapp Connector
-* **GCFS** — on-chain code distribution
-* **GameChanger Wallet** — execution environment
+* **GCFS** — on-chain protocol library distribution
+* **GameChanger Wallet** — client side execution environment. All wallet types supported, even hardware and browser extension wallets.
 
 ---
 
 ## 🌐 Links
 
+* P2P DeFi Kernel hashes: https://github.com/fallen-icarus/cardano-swaps/blob/main/VERSIONS.md
+* Github: https://github.com/GameChangerFinance/NeonSoup
 * Website: https://gamechanger.finance
-* Repository: https://github.com/GameChangerFinance/NeonSoup
+
+---
+
+## 🙌 Acknowledgements
+
+* To *Fallen Icarus*, *P2P DeFi Kernel* should have been *The Way* years ago. Here we are trying to contribute to your cause.
+* To *Agustin Badi*, for teaming up on a demo at our presentation at *CF Open Dev Hours* about *UDC* and intent-based dapps (17/04/2026). That PoC inspired this project.
+* To *Gimbalabs* for proving competition in Web3 is useless with the *Piece of the Pie "Collaborathon"*
 
 ---
 
 ## 🧨 Final Thought
 
-*Liquidity must be a self-sovereign, collective, composable phenomenon.*
+*Web3 liquidity should be a self-sovereign, collective, collaborative phenomenon*
 
-**NeonSoup is the modern primordial soup to help bootstrap this culture.**
+**NeonSoup aims to be the modern primordial soup to help bootstrap this culture**
