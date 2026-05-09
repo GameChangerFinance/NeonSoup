@@ -1,0 +1,143 @@
+{
+    "type": "script",
+    "title": "Normalizing data...",
+    "description": "Formatting and normalizing common P2P DeFi Kernel OWS parameters...",    
+    "args": {
+        "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",
+        
+        "ask-policy-id": "ada",
+        "ask-asset-name": "ada",
+        
+        "offer-policy-id": "d4fece6b39f7cd78a3f036b2ae6508c13524b863922da80f68dd9ab7",
+        "offer-asset-name": "5553444d",
+        
+        "price-numerator": "3",
+        "price-denominator": "1"
+    },
+    "run": {
+        "beaconsPolicy": {
+            "type": "data",
+            "value": {
+                "scriptHashHex": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
+                "scriptSize": 4595,
+                "lang": "plutus_v2",                
+                "input": {
+                    "index": 0,
+                    "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
+                }                               
+            }
+        },
+        "spendingValidator": {
+            "type": "data",
+            "value": {
+                "scriptHashHex": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
+                "scriptSize": 4505,
+                "lang": "plutus_v2",                
+                "input": {
+                    "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
+                    "index": 1
+                }               
+            }
+        },       
+        "transform": {
+            "type": "macro",
+            "run": {
+                "policyIdToPairBeaconHashingPolicyId":{
+                    "{get('args.offer-policy-id')}" :"{get('args.offer-policy-id')}",
+                    "{get('args.ask-policy-id')}"   :"{get('args.ask-policy-id')}",
+                    "ada"                           :"00"                       
+                },  
+                "assetNameHexToPairBeaconHashingAssetNameHex":{
+                    "{get('args.offer-asset-name')}":"{get('args.offer-asset-name')}",
+                    "{get('args.ask-asset-name')}"  :"{get('args.ask-asset-name')}",
+                    "ada"                           :"{return('')}"
+                },                        
+                "policyIdToBeaconHashPolicyId":{
+                    "{get('args.offer-policy-id')}" :"{get('args.offer-policy-id')}",
+                    "{get('args.ask-policy-id')}"   :"{get('args.ask-policy-id')}",
+                    "ada"                           :"{return('')}"
+                },
+                "assetNameHexToBeaconHashAssetNameHex":{
+                    "{get('args.offer-asset-name')}":"{get('args.offer-asset-name')}",
+                    "{get('args.ask-asset-name')}"  :"{get('args.ask-asset-name')}",
+                    "ada"                           :"{return('')}"
+                },
+                "policyIdToDatumPolicyId":{
+                    "{get('args.offer-policy-id')}" :"{get('args.offer-policy-id')}",
+                    "{get('args.ask-policy-id')}"   :"{get('args.ask-policy-id')}",
+                    "ada"                           :"{return('')}"
+                },
+                "assetNameHexToDatumAssetNameHex":{
+                    "{get('args.offer-asset-name')}":"{get('args.offer-asset-name')}",
+                    "{get('args.ask-asset-name')}"  :"{get('args.ask-asset-name')}",
+                    "ada"                           :"{return('')}"
+                }
+            }                   
+        },
+        "normalized": {
+            "type": "macro",
+            "run": {
+                "forDatum":{
+                    "offer-policy-id"   : "{get(join('.','cache','transform','policyIdToDatumPolicyId'                   ,get('args.offer-policy-id')))}",
+                    "offer-asset-name"  : "{get(join('.','cache','transform','assetNameHexToDatumAssetNameHex'           ,get('args.offer-asset-name')))}",
+                    "ask-policy-id"     : "{get(join('.','cache','transform','policyIdToDatumPolicyId'                   ,get('args.ask-policy-id')))}",
+                    "ask-asset-name"    : "{get(join('.','cache','transform','assetNameHexToDatumAssetNameHex'           ,get('args.ask-asset-name')))}"
+                },
+                "forOfferBeaconHashing":{
+                    "offer-policy-id"   : "{get(join('.','cache','transform','policyIdToBeaconHashPolicyId'              ,get('args.offer-policy-id')))}",
+                    "offer-asset-name"  : "{get(join('.','cache','transform','assetNameHexToBeaconHashAssetNameHex'      ,get('args.offer-asset-name')))}",
+                    "prefix"            : "01"
+                },                        
+                "forAskBeaconHashing":{
+                    "ask-policy-id"     : "{get(join('.','cache','transform','policyIdToBeaconHashPolicyId'              ,get('args.ask-policy-id')))}",
+                    "ask-asset-name"    : "{get(join('.','cache','transform','assetNameHexToBeaconHashAssetNameHex'      ,get('args.ask-asset-name')))}",
+                    "prefix"            : "02"
+                },                                                
+                "forPairBeaconHashing":{
+                    "offer-policy-id"   : "{get(join('.','cache','transform','policyIdToPairBeaconHashingPolicyId'        ,get('args.offer-policy-id')))}",
+                    "offer-asset-name"  : "{get(join('.','cache','transform','assetNameHexToPairBeaconHashingAssetNameHex',get('args.offer-asset-name')))}",
+                    "ask-policy-id"     : "{get(join('.','cache','transform','policyIdToPairBeaconHashingPolicyId'        ,get('args.ask-policy-id')))}",
+                    "ask-asset-name"    : "{get(join('.','cache','transform','assetNameHexToPairBeaconHashingAssetNameHex',get('args.ask-asset-name')))}"
+                },
+                "forTx":{
+                    "offer-policy-id"   : "{get('args.offer-policy-id')}",
+                    "offer-asset-name"  : "{get('args.offer-asset-name')}",
+                    "ask-policy-id"     : "{get('args.ask-policy-id')}",
+                    "ask-asset-name"    : "{get('args.ask-asset-name')}"
+                }
+            }                   
+        },
+        "pairBeacon": {
+            "type": "macro",
+            "run": "{sha256(flatten(hexToByteArray(get('cache.normalized.forPairBeaconHashing.offer-policy-id')), hexToByteArray(get('cache.normalized.forPairBeaconHashing.offer-asset-name')),  hexToByteArray(get('cache.normalized.forPairBeaconHashing.ask-policy-id')), hexToByteArray(get('cache.normalized.forPairBeaconHashing.ask-asset-name'))))}"
+        },
+        "offerBeacon": {
+            "type": "macro",
+            "run": "{sha256(flatten(hexToByteArray(get('cache.normalized.forOfferBeaconHashing.prefix')), hexToByteArray(get('cache.normalized.forOfferBeaconHashing.offer-policy-id')), hexToByteArray(get('cache.normalized.forOfferBeaconHashing.offer-asset-name'))))}"
+        },
+        "askBeacon": {
+            "type": "macro",
+            "run": "{sha256(flatten(hexToByteArray(get('cache.normalized.forAskBeaconHashing.prefix')), hexToByteArray(get('cache.normalized.forAskBeaconHashing.ask-policy-id')), hexToByteArray(get('cache.normalized.forAskBeaconHashing.ask-asset-name'))))}"
+        },
+        "dappAddress": {
+            "type": "buildAddress",
+            "name": "DAppAddress",
+            "addr": {
+                "spendScriptHashHex": "{get('cache.spendingValidator.scriptHashHex')}",
+                "stakePubKeyHashHex": "{get('args.owner-stake-keyhash')}"
+            }
+        },
+        "swapRedeemer": {
+            "type": "plutusData",
+            "data": {
+                "fromJSON": {
+                    "schema": 1,
+                    "obj": {
+                        "constructor": 2,
+                        "fields": []
+                    }
+                }
+            }
+        }             
+    }
+}
