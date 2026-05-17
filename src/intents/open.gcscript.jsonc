@@ -1,0 +1,106 @@
+{
+    "type": "script",
+    "title": "Open Offer",
+    "description": "Opening a one-way swap offer on P2P DeFi Kernel...",    
+    "exportAs": "openLimitOrder",
+    "return":{
+        "mode":"last"
+    },    
+    "args": {
+        "offer-policy-id": "ada",
+        "offer-asset-name": "ada",
+        "offer-quantity": "3000000",
+        "ask-policy-id": "d4fece6b39f7cd78a3f036b2ae6508c13524b863922da80f68dd9ab7",
+        "ask-asset-name": "5553444d",
+        "price-numerator": "1",
+        "price-denominator": "3",         
+
+        "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",
+        "intent-id": "1"
+    },
+    "run": {
+        "openOfferIntent": {
+            "type": "$importAsScript",                        
+            "args": "{get('args')}",
+            "return":{
+                "mode":"macro",
+                "exec":"{get('cache.openOfferIntent.open')}"
+            },                    
+            "from": {
+                "open": "app://lib/open.gcscript.jsonc"
+            }
+        },        
+        // "openOfferIntent": {
+        //     "type": "script",
+        //     "args": "{get('args')}",
+        //     "return":{
+        //         "mode":"macro",
+        //         "exec":"{get('cache.openOfferIntent.import.open')}"
+        //     },
+        //     "run": {  
+        //         "import": {
+        //             "type": "$importAsScript",                        
+        //             "args": "{get('args')}",
+        //             "from": {
+        //                 "open": "app://lib/open.gcscript.jsonc"
+        //             }
+        //         }                
+        //     }
+        // }, 
+        "tx": {
+            "type": "macro",
+            "run": {
+                "mints": [
+                    "{get('cache.openOfferIntent.tx.mints.beacons')}"
+                ],
+                "outputs": [
+                    "{get('cache.openOfferIntent.tx.outputs.offerWithBeacons')}"                                        
+                ],
+                "witnesses": {
+                    "plutus": {
+                        "scripts": [
+                            "{get('cache.openOfferIntent.tx.witnesses.plutus.scripts.beaconsPolicy')}"
+                        ],
+                        "consumers": [
+                            "{get('cache.openOfferIntent.tx.witnesses.plutus.consumers.beaconsMint')}"
+                        ]
+                    }
+                },
+                "options": {
+                    "collateralCoinSelection": "LASLAD"
+                }
+            }
+        },
+        "build": {
+            "type": "buildTx",
+            "title": "Open Limit Order",
+            "tx": "{get('cache.tx')}"
+        },
+        "sign": {
+            "type": "signTxs",
+            "detailedPermissions": false,
+            "txs": [
+                "{get('cache.build.txHex')}"
+            ]
+        },
+        "submit": {
+            "type": "submitTxs",
+            "mode": "noWait",
+            "txs": "{get('cache.sign')}"
+        },
+        "finally": {
+            "type": "macro",
+            "run": {                                
+                "txHash": "{get('cache.build.txHash')}",
+                "index": "{get('cache.build.indexMap.output.swap-output')}",
+                "pairBeacon": "{get('cache.openOfferIntent.pairBeacon')}",
+                "offerPolicyId": "{get('args.offer-policy-id')}",
+                "offerAssetName": "{get('args.offer-asset-name')}",
+                "offerBeacon": "{get('cache.openOfferIntent.offerBeacon')}",
+                "askPolicyId": "{get('args.ask-policy-id')}",
+                "askAssetName": "{get('args.ask-asset-name')}",
+                "askBeacon": "{get('cache.openOfferIntent.askBeacon')}"                    
+            }
+        }         
+    }
+}

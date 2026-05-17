@@ -1,19 +1,22 @@
+// Example args
+// "args": {
+//     "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",
+    
+//     "ask-policy-id": "ada",
+//     "ask-asset-name": "ada",
+    
+//     "offer-policy-id": "d4fece6b39f7cd78a3f036b2ae6508c13524b863922da80f68dd9ab7",
+//     "offer-asset-name": "5553444d",
+    
+//     "price-numerator": "3",
+//     "price-denominator": "1"
+// },
 {
     "type": "script",
     "title": "Normalizing data...",
     "description": "Formatting and normalizing common P2P DeFi Kernel OWS parameters...",    
-    "args": {
-        "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",
-        
-        "ask-policy-id": "ada",
-        "ask-asset-name": "ada",
-        
-        "offer-policy-id": "d4fece6b39f7cd78a3f036b2ae6508c13524b863922da80f68dd9ab7",
-        "offer-asset-name": "5553444d",
-        
-        "price-numerator": "3",
-        "price-denominator": "1"
-    },
+    "args": "{get('args')}",
+    "isolateCache": true,
     "run": {
         "beaconsPolicy": {
             "type": "data",
