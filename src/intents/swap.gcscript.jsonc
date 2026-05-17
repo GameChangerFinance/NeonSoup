@@ -1,0 +1,152 @@
+{
+    "type": "script",
+    "title": "Swap",
+    "description": "Filling a one-way swap offer on P2P DeFi Kernel...",    
+    "exportAs": "swapLimitOrder",
+    "return":{
+        "mode":"last"
+    },    
+    "args": {
+        "offer-policy-id": "d4fece6b39f7cd78a3f036b2ae6508c13524b863922da80f68dd9ab7",
+        "offer-asset-name": "5553444d",
+        "ask-policy-id": "ada",
+        "ask-asset-name": "ada",            
+        "price-numerator": "3",
+        "price-denominator": "1",       
+
+        "utxo-tx-hash": "59e968d21a2f49368f38073301ab6a40f25d36a408a365939cba5c2869b2eba0",
+        "utxo-tx-index": "0",
+        "utxo-coin-quantity": "10000000",
+        "utxo-offer-quantity": "10000000",        
+        "ask-quantity": "1500000",        
+        "offer-quantity": "500000",
+        
+        "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",
+        "intent-id": "1"
+    },
+    "run": {
+        "myAddress": {
+            "type": "getCurrentAddress"
+        },
+        "swapOfferIntent": {
+            "type": "$importAsScript",                        
+            "args": {
+                "offer-policy-id"     : "{get('args.offer-policy-id')}",
+                "offer-asset-name"    : "{get('args.offer-asset-name')}",
+                "ask-policy-id"       : "{get('args.ask-policy-id')}",
+                "ask-asset-name"      : "{get('args.ask-asset-name')}",
+                "price-numerator"     : "{get('args.price-numerator')}",
+                "price-denominator"   : "{get('args.price-denominator')}",
+
+                "utxo-tx-hash"        : "{get('args.utxo-tx-hash')}",
+                "utxo-tx-index"       : "{get('args.utxo-tx-index')}",
+                "utxo-coin-quantity"  : "{get('args.utxo-coin-quantity')}",
+                "utxo-offer-quantity" : "{get('args.utxo-offer-quantity')}",
+                "ask-quantity"        : "{get('args.ask-quantity')}",
+                "offer-quantity"      : "{get('args.offer-quantity')}",
+                "offer-address"       : "{get('cache.myAddress')}",
+                "owner-stake-keyhash" : "{get('args.owner-stake-keyhash')}",
+                "intent-id"           : "{get('args.intent-id')}"
+
+            },
+            "return":{
+                "mode":"macro",
+                "exec":"{get('cache.swapOfferIntent.swap')}"
+            },                    
+            "from": {
+                "swap": "app://lib/swap.gcscript.jsonc"
+            }
+        },         
+        // "swapOfferIntent": {
+        //     "type": "script",
+        //     "args":{
+        //         "offer-policy-id"     : "{get('args.offer-policy-id')}",
+        //         "offer-asset-name"    : "{get('args.offer-asset-name')}",
+        //         "ask-policy-id"       : "{get('args.ask-policy-id')}",
+        //         "ask-asset-name"      : "{get('args.ask-asset-name')}",
+        //         "price-numerator"     : "{get('args.price-numerator')}",
+        //         "price-denominator"   : "{get('args.price-denominator')}",
+
+        //         "utxo-tx-hash"        : "{get('args.utxo-tx-hash')}",
+        //         "utxo-tx-index"       : "{get('args.utxo-tx-index')}",
+        //         "utxo-coin-quantity"  : "{get('args.utxo-coin-quantity')}",
+        //         "utxo-offer-quantity" : "{get('args.utxo-offer-quantity')}",
+        //         "ask-quantity"        : "{get('args.ask-quantity')}",
+        //         "offer-quantity"      : "{get('args.offer-quantity')}",
+        //         "offer-address"       : "{get('cache.myAddress')}",
+        //         "owner-stake-keyhash" : "{get('args.owner-stake-keyhash')}",
+        //         "intent-id"           : "{get('args.intent-id')}"
+
+        //     },
+        //     "return":{
+        //         "mode":"macro",
+        //         "exec":"{get('cache.swapOfferIntent.import.swap')}"
+        //     },
+        //     "run": {
+        //         "import": {
+        //             "type": "$importAsScript",                        
+        //             "args": "{get('args')}",
+        //             "from": {
+        //                 "swap": "app://lib/swap.gcscript.jsonc"
+        //             }
+        //         }                  
+        //     }
+        // }, 
+        "tx": {
+            "type": "macro",
+            "run": {
+                "inputs": [
+                    "{get('cache.swapOfferIntent.tx.inputs.offerWithBeacons')}"
+                ],
+                "outputs": [
+                    "{get('cache.swapOfferIntent.tx.outputs.filledOffer')}",
+                    "{get('cache.swapOfferIntent.tx.outputs.remainingOfferWithBeacons')}"                                        
+                ],
+                "witnesses": {
+                    "plutus": {
+                        "scripts": [
+                            "{get('cache.swapOfferIntent.tx.witnesses.plutus.scripts.spendingValidator')}"
+                        ],
+                        "consumers": [
+                            "{get('cache.swapOfferIntent.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}"
+                        ]
+                    }
+                },
+                "options": {
+                    "collateralCoinSelection": "LASLAD"
+                }
+            }
+        },
+        "build": {
+            "type": "buildTx",
+            "title": "Swapp Limit Order",
+            "tx": "{get('cache.tx')}"
+        },
+        "sign": {
+            "type": "signTxs",
+            "detailedPermissions": false,
+            "txs": [
+                "{get('cache.build.txHex')}"
+            ]
+        },
+        "submit": {
+            "type": "submitTxs",
+            "mode": "noWait",
+            "txs": "{get('cache.sign')}"
+        },        
+        "finally": {
+            "type": "macro",
+            "run": {                                
+                "txHash": "{get('cache.build.txHash')}",
+                "index": "{get(  join('.','cache.build.indexMap.output', join('-',get('cache.swapOfferIntent.intentTag'),'remainingOfferWithBeacons') )  )}",
+                "pairBeacon": "{get('cache.swapOfferIntent.pairBeacon')}",
+                "offerPolicyId": "{get('args.offer-policy-id')}",
+                "offerAssetName": "{get('args.offer-asset-name')}",
+                "offerBeacon": "{get('cache.swapOfferIntent.offerBeacon')}",
+                "askPolicyId": "{get('args.ask-policy-id')}",
+                "askAssetName": "{get('args.ask-asset-name')}",
+                "askBeacon": "{get('cache.swapOfferIntent.askBeacon')}"                    
+            }
+        }         
+    }
+}

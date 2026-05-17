@@ -1,0 +1,181 @@
+//Example args
+// "args": {
+//     "offer-policy-id": "ada",
+//     "offer-asset-name": "ada",
+//     "ask-policy-id": "d4fece6b39f7cd78a3f036b2ae6508c13524b863922da80f68dd9ab7",
+//     "ask-asset-name": "5553444d",
+
+
+//     "utxo-tx-hash": "59e968d21a2f49368f38073301ab6a40f25d36a408a365939cba5c2869b2eba0",
+//     "utxo-tx-index": "0",
+//     "utxo-coin-quantity": "10000000",
+//     "utxo-offer-quantity": "10000000",
+//     "offer-address": "addr_test1qpf7s7teq4d5g5sfhztshnxjvfnlxtz335mwnq2ruvvd8k9a9ww7ur94zw24dnf6wwrvp5v4u937m0zpjwqjqt2898ks4wugl5",
+//     "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",        
+//     "intent-id": "1"
+// },
+{
+    "type": "script",
+    "title": "Preparing to close an Offer...",
+    "description": "Preparing a composable intent to close a one-way swap offer on P2P DeFi Kernel and withdraw remaining asset...",    
+    "return":{
+        "mode":"last"
+    },    
+    "args": "{get('args')}",
+    "isolateCache": true,
+    "run": {
+        "intentTag":{
+            "type":"macro",
+            "run":"{join('-','P2PDeFiKernel','OWS','close',get('args.intent-id'))}"
+        },   
+        "dependencies": {
+            "type": "$importAsScript",                        
+            "args": "{get('args')}",
+            "return":{
+                "mode":"macro",
+                "exec":"{get('cache.dependencies.common')}"
+            },                  
+            "from": {
+                "common": "app://./common.gcscript.jsonc"
+            }
+        },                
+        // "dependencies": {
+        //     "type": "script",
+        //     "args": "{get('args')}",
+        //     "return":{
+        //         "mode":"macro",
+        //         "exec":"{get('cache.dependencies.import.common')}"
+        //     },
+        //     "run": {
+        //         "import": {
+        //             "type": "$importAsScript",                        
+        //             "args": "{get('args')}",
+        //             "from": {
+        //                 "common": "app://./common.gcscript.jsonc"
+        //             }
+        //         }                    
+        //     }
+        // },       
+        "quantity":{
+            "type": "macro",
+            "run":{
+                "utxo":{
+                    "ada-ada":"{get('args.utxo-coin-quantity')}",                                                                
+                    "{join('-', get('args.offer-policy-id'), get('args.offer-asset-name'))}":"{get('args.utxo-offer-quantity')}"
+                }
+            }
+        },         
+        "currentADA": {
+            "type": "macro",
+            "run": "{get('cache.quantity.utxo.ada-ada')}"
+        },                
+        "currentOffer": {
+            "type": "macro",            
+            "run": "{get(join('.','cache','quantity','utxo',  join('-',get('cache.dependencies.normalized.forTx.offer-policy-id'),get('cache.dependencies.normalized.forTx.offer-asset-name'))  ))}"
+        },        
+        "emptyRedeemer": {
+            "type": "plutusData",
+            "data": {
+                "fromJSON": {
+                    "schema": 1,
+                    "obj": {
+                        "constructor": 0,
+                        "fields": []
+                    }
+                }
+            }
+        },
+        "tx": {
+            "type": "macro",
+            "run": {
+                "inputs": {
+                    "offerWithBeacons":{
+                        "txHash": "{get('args.utxo-tx-hash')}",
+                        "index": "{jsonToObj(get('args.utxo-tx-index'))}",
+                        "idPattern": "{join('-',get('cache.intentTag'),'offerWithBeacons')}"
+                    }
+                },               
+                "outputs":{
+                    "unfilledOffer":{
+                        "idPattern": "{join('-',get('cache.intentTag'),'unfilledOffer')}",
+                        "address": "{get('args.offer-address')}",
+                        "assets": [
+                            {
+                                "policyId": "{get('cache.dependencies.normalized.forTx.offer-policy-id')}",
+                                "assetNameHex": "{get('cache.dependencies.normalized.forTx.offer-asset-name')}",
+                                "quantity": "{get('cache.currentOffer')}"
+                            }
+                        ]
+                    } 
+                },
+                "mints": {
+                    "beacons":{
+                        "idPattern": "{join('-',get('cache.intentTag'),'beacons')}",
+                        "policyId": "{get('cache.dependencies.beaconsPolicy.scriptHashHex')}",                        
+                        "assets": [
+                            {"assetNameHex": "{get('cache.dependencies.pairBeacon')}", "quantity": "-1"},
+                            {"assetNameHex": "{get('cache.dependencies.offerBeacon')}", "quantity": "-1"},
+                            {"assetNameHex": "{get('cache.dependencies.askBeacon')}", "quantity": "-1"}
+                        ]
+                    }
+                },
+                "witnesses": {
+                    "plutus": {
+                        "scripts": {
+                            "beaconsPolicy":{
+                                "scriptHashHex": "{get('cache.dependencies.beaconsPolicy.scriptHashHex')}",
+                                "lang": "{get('cache.dependencies.beaconsPolicy.lang')}",
+                                "scriptSize": "{get('cache.dependencies.beaconsPolicy.scriptSize')}",
+                                "input": "{get('cache.dependencies.beaconsPolicy.input')}"
+                            },
+                            "spendingValidator":{
+                                "scriptHashHex": "{get('cache.dependencies.spendingValidator.scriptHashHex')}",
+                                "lang": "{get('cache.dependencies.spendingValidator.lang')}",
+                                "scriptSize": "{get('cache.dependencies.spendingValidator.scriptSize')}",
+                                "input": "{get('cache.dependencies.spendingValidator.input')}"                                
+                            }                          
+                        },
+                        "consumers": {
+                            "beaconsMint":{
+                                "scriptHashHex": "{get('cache.dependencies.beaconsPolicy.scriptHashHex')}",
+                                "redeemer": {
+                                    "dataHex": "{get('cache.emptyRedeemer.dataHex')}",
+                                    "type": "mint",                                    
+                                    "itemIdPattern": "{join('-',get('cache.intentTag'),'beacons')}"
+                                }
+                            },                            
+                            "offerWithBeaconsSpend":{
+                                "scriptHashHex": "{get('cache.dependencies.spendingValidator.scriptHashHex')}",
+                                "redeemer": {
+                                    "dataHex": "{get('cache.emptyRedeemer.dataHex')}",
+                                    "type": "spend",
+                                    "itemIdPattern": "{join('-',get('cache.intentTag'),'offerWithBeacons')}"
+                                }
+                            }
+                        }
+                    }
+                },
+                "requiredSigners": [
+                    "{get('args.owner-stake-key-hash')}"
+                ],
+                "options": {
+                    "collateralCoinSelection": "LASLAD"
+                }
+            }
+        },
+        "finally": {
+            "type": "macro",
+            "run": {
+                "intentTag":"{get('cache.intentTag')}",
+                "tx": "{get('cache.tx')}",
+                "pairBeacon": "{get('cache.dependencies.pairBeacon')}",
+                "offerPolicyId": "{get('args.offer-policy-id')}",
+                "offerAssetName": "{get('args.offer-asset-name')}",
+                "offerBeacon": "{get('cache.dependencies.offerBeacon')}",
+                "askPolicyId": "{get('args.ask-policy-id')}",
+                "askAssetName": "{get('args.ask-asset-name')}",
+                "askBeacon": "{get('cache.dependencies.askBeacon')}"                    
+            }
+        }         
+    }
+}

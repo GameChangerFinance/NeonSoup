@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+.rollup.cache/
+.rollup.cache/**/*
+
+# Schemas not committed.
+**/.lang.def
+**/.lang.def.*
+**/index.json.full
+**/index.json.min
+**/schema/index.json.full
+**/schema/index.json.min
+
