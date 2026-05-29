@@ -156,7 +156,7 @@
                     }
                 },
                 "requiredSigners": [
-                    "{get('args.owner-stake-key-hash')}"
+                    "{get('args.owner-stake-keyhash')}"
                 ],
                 "options": {
                     "collateralCoinSelection": "LASLAD"

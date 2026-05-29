@@ -87,11 +87,33 @@
         },
         "remainingADA": {
             "type": "macro",
-            "run": "{addBigNum(get('cache.currentADA'), get('cache.quantity.ask.ada-ada') )}"
+            // Former code only added ADA paid as the ask asset. For ADA-offer fills,
+            // the taken ADA must also leave the continuing swap UTxO.
+            // "run": "{addBigNum(get('cache.currentADA'), get('cache.quantity.ask.ada-ada') )}"
+            "run": "{subBigNum(addBigNum(get('cache.currentADA'), get('cache.quantity.ask.ada-ada')), get('cache.quantity.offer.ada-ada'))}"
         },                
         "remainingOffer": {
             "type": "macro",
             "run": "{subBigNum(get('cache.currentOffer') , get('args.offer-quantity') )}"
+        },
+        "outputQuantity":{
+            "type": "macro",
+            "run":{
+                "remainingOffer":{
+                    // If the offer asset is ADA, remainingADA already carries the
+                    // adjusted lovelace value. Keep this output row neutral so the
+                    // builder does not add the remaining ADA twice.
+                    "{join('-', get('args.offer-policy-id'), get('args.offer-asset-name'))}":"{get('cache.remainingOffer')}",
+                    "ada-ada":"0"
+                },
+                "askDeposit":{
+                    // If the ask asset is ADA, remainingADA already includes the
+                    // paid ADA. For native-token asks, this row deposits the ask
+                    // asset into the continuing order UTxO.
+                    "{join('-', get('args.ask-policy-id'), get('args.ask-asset-name'))}":"{get('args.ask-quantity')}",
+                    "ada-ada":"0"
+                }
+            }
         },        
         "swapDatum": {
             "type": "plutusData",
@@ -133,7 +155,11 @@
                 "fromJSON": {
                     "schema": 1,
                     "obj": {
-                        "constructor": 1,
+                        // Former code used constructor 1, which is SpendWithStake
+                        // in the one-way swap validator and requires owner approval.
+                        // Fill is permissionless and must use Swap, constructor 2.
+                        // "constructor": 1,
+                        "constructor": 2,
                         "fields": []
                     }
                 }
@@ -176,7 +202,15 @@
                             {
                                 "policyId": "{get('cache.dependencies.normalized.forTx.offer-policy-id')}",
                                 "assetNameHex": "{get('cache.dependencies.normalized.forTx.offer-asset-name')}",
-                                "quantity": "{get('cache.remainingOffer')}"
+                                "quantity": "{get(join('.','cache','outputQuantity','remainingOffer', join('-',get('cache.dependencies.normalized.forTx.offer-policy-id'),get('cache.dependencies.normalized.forTx.offer-asset-name')) ))}"
+                            },
+                            {
+                                // Deposit the ask asset into the continuing order.
+                                // For ADA asks this resolves to zero because ADA is
+                                // handled by remainingADA above.
+                                "policyId": "{get('cache.dependencies.normalized.forTx.ask-policy-id')}",
+                                "assetNameHex": "{get('cache.dependencies.normalized.forTx.ask-asset-name')}",
+                                "quantity": "{get(join('.','cache','outputQuantity','askDeposit', join('-',get('cache.dependencies.normalized.forTx.ask-policy-id'),get('cache.dependencies.normalized.forTx.ask-asset-name')) ))}"
                             },
                             {
                                 "policyId": "{get('cache.dependencies.beaconsPolicy.scriptHashHex')}",
