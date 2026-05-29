@@ -11,6 +11,12 @@ Inspect the recipe. Fork it. Compose your own flavors. Deploy kitchens on your o
 **Cardano DeFi, the cypherpunk way**
 
 ---
+## 🍿 Try it live
+
+- **🥣 Neon Soup dapp:**  In development
+- **[🛠️ Development dapp](https://neonsoup-dev.netlify.app/):** Tool used for development - WIP
+
+**Not production ready yet! Use only on testnet.**
 
 ## 🚀 Overview
 
