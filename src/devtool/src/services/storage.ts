@@ -1,29 +1,43 @@
 import { APP_CONFIG } from '../config/appConfig';
 import type { AppOptions, AppState, AssetMetadata, NetworkTag, WalletConnection } from '../state/types';
 
-interface StoredState {
-  version: number;
+export interface StoredState {
+  version?: string;
   options?: Partial<AppOptions>;
   forms?: Partial<AppState['forms']>;
   wallet?: WalletConnection | null;
   customAssets?: Partial<Record<NetworkTag, Record<string, AssetMetadata>>>;
 }
 
-export function loadStoredState(): StoredState {
+export interface StoredStateResult {
+  stored: StoredState;
+  migrationNeeded: boolean;
+  migrationSourceVersion: string;
+  corrupted: boolean;
+}
+
+export function loadStoredState(): StoredStateResult {
   try {
     const stored = JSON.parse(localStorage.getItem(APP_CONFIG.storageKey) || '{}') as StoredState;
-    if (stored.options && 'showAdvanced' in stored.options) {
-      // Older devtool snapshots persisted this removed option. Drop it so debug state
-      // only reflects the current typed option surface.
-      delete (stored.options as Record<string, unknown>).showAdvanced;
-    }
-    return stored;
+    const migrationSourceVersion = stored.version ? String(stored.version) : '';
+    return {
+      stored,
+      migrationNeeded: Boolean(migrationSourceVersion && migrationSourceVersion !== APP_CONFIG.version),
+      migrationSourceVersion,
+      corrupted: false,
+    };
   } catch {
-    return { version: APP_CONFIG.version };
+    return {
+      stored: {},
+      migrationNeeded: true,
+      migrationSourceVersion: 'unreadable',
+      corrupted: true,
+    };
   }
 }
 
 export function saveStoredState(state: AppState): void {
+  if (state.migrationNeeded) return;
   const stored: StoredState = {
     version: APP_CONFIG.version,
     options: state.options,
@@ -32,6 +46,10 @@ export function saveStoredState(state: AppState): void {
     customAssets: state.customAssets,
   };
   localStorage.setItem(APP_CONFIG.storageKey, JSON.stringify(stored));
+}
+
+export function clearStoredState(): void {
+  localStorage.removeItem(APP_CONFIG.storageKey);
 }
 
 export function readWalletReturn(): unknown {

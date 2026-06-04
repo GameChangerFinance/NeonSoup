@@ -20,14 +20,15 @@ import { safeError, short } from './domain/text';
 import { loadAssetInfo, loadOpenOffers, loadPortfolio } from './services/networkProvider';
 import { captureWalletReturn, consumeWalletReturn, openWallet } from './services/gcWallet';
 import { buildArgsForAction, loadIntentTemplates, fillAskAmount } from './services/intents';
-import { readWalletReturn } from './services/storage';
+import { clearStoredState, readWalletReturn } from './services/storage';
 import { APP_CONFIG } from './config/appConfig';
+import { createInitialState } from './state/reducer';
 import type { ActionMode, OpenOffer, ProtocolTransaction, WalletConnection } from './state/types';
 
 function pairMatches(stateOffer: OpenOffer, offerKey: string, askKey: string, assets: ReturnType<typeof assetMap>) {
   const offer = assets[offerKey];
   const ask = assets[askKey];
-  if (!offer || !ask) return true;
+  if (!offer || !ask) return false;
   return (
     stateOffer.offerPolicyId === offer.policyId &&
     stateOffer.offerAssetName === offer.assetNameHex &&
@@ -104,6 +105,12 @@ export default function App() {
   const portfolio = visiblePortfolio(state);
   const hiddenOffers = Math.max(0, state.openOffers.length - offers.length);
   const hiddenPortfolio = Math.max(0, state.portfolio.length - portfolio.length);
+
+  function updateStoredState() {
+    clearStoredState();
+    dispatch({ type: 'replace-state', state: createInitialState() });
+    window.location.reload();
+  }
 
   function offerToTransaction(item: OpenOffer): TransactionRow {
     const offeredAsset = resolveAsset(state, item.offerPolicyId, item.offerAssetName);
@@ -685,6 +692,27 @@ export default function App() {
 
   return (
     <AppShell>
+      {state.migrationNeeded ? (
+        <section className="app-card border-warning p-3 p-lg-4 mb-4">
+          <div className="d-flex flex-column flex-lg-row justify-content-between gap-3">
+            <div>
+              <h2 className="h5 mb-2 text-warning">Stored data update available</h2>
+              <p className="mb-1">
+                This devtool version differs from saved local state.
+              </p>
+              <p className="text-body-secondary mb-0">
+                Saved version: {state.migrationSourceVersion || 'none'}. Current version: {APP_CONFIG.version}.
+                Updating replaces incompatible local state with current defaults and reloads the app.
+              </p>
+            </div>
+            <div className="d-flex align-items-start">
+              <button type="button" className="btn btn-warning" onClick={updateStoredState}>
+                Update local state
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
       {state.notices.app ? <FormAlert tone={state.notices.app.tone}>{state.notices.app.message}</FormAlert> : null}
       {renderCurrentView()}
     </AppShell>

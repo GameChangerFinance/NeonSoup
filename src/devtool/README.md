@@ -32,10 +32,17 @@ VITE_NEONSOUP_MAINNET_BLOCKFROST_URL=
 VITE_NEONSOUP_MAINNET_BLOCKFROST_KEY=
 VITE_NEONSOUP_PREPROD_GRAPHQL_MK2_URL=
 VITE_NEONSOUP_MAINNET_GRAPHQL_MK2_URL=
+VITE_NEONSOUP_BUILD_TAG=
 ```
 
 The Options view can still override provider URL/API key at runtime in browser
 localStorage. Source defaults should stay secret-free.
+
+The persisted app-state version uses SemVer build metadata:
+`package.json` version + `VITE_NEONSOUP_BUILD_TAG` (for example
+`0.0.1+20260604010551`). When that string
+changes, the app shows an update banner and stops persisting old state until the
+user replaces incompatible local state with current defaults.
 
 ## Structure
 
@@ -75,9 +82,14 @@ debugging tool.
   then safe fallback identifiers.
 - Fetched token metadata is untrusted. Keep strings truncated and only render
   safe icon formats.
-- Configured assets may have friendly keys such as `usdm`, but asset identity is
-  `policyId` + `assetNameHex`. Use resolver helpers instead of assuming direct
-  map keys are canonical.
+- Configured assets and user overrides are keyed by canonical
+  `policyId.assetNameHex` strings. ADA is `ada.ada`; native assets with an empty
+  asset name use `policyId.`. Do not use friendly aliases as dataset keys.
+- Use `assetId` for provider/GC asset identifiers such as `lovelace` or
+  `policyId + assetNameHex`.
+- Do not add one-off migrations for old localStorage fields. Change the app
+  version/build tag and rely on the centralized update banner for incompatible
+  state shapes.
 
 ## Future Work Notes
 

@@ -2,12 +2,12 @@ import { APP_CONFIG } from '../config/appConfig';
 import type { AssetMetadata, NetworkTag, ResolvedAsset } from '../state/types';
 import { short, truncate } from './text';
 
-export function unitOf(policyId: string, assetNameHex: string): string {
+export function assetIdOf(policyId: string, assetNameHex: string): string {
   return policyId === 'ada' && assetNameHex === 'ada' ? 'lovelace' : `${policyId}${assetNameHex}`;
 }
 
 export function assetKeyOf(policyId: string, assetNameHex: string): string {
-  return policyId === 'ada' && assetNameHex === 'ada' ? 'ada' : `${policyId}.${assetNameHex}`;
+  return `${policyId}.${assetNameHex}`;
 }
 
 export function assetTitle(asset: Pick<AssetMetadata, 'ticker' | 'label'>): string {
@@ -39,16 +39,15 @@ export function normalizeLogo(value: unknown): string {
 }
 
 export function normalizeAssetMetadata(asset: AssetMetadata): ResolvedAsset {
-  const assetNameHex = asset.assetNameHex || asset.assetName || '';
   const policyId = asset.policyId || 'ada';
-  const unit = unitOf(policyId, assetNameHex);
+  const assetNameHex = asset.assetNameHex ?? asset.assetName ?? (policyId === 'ada' ? 'ada' : '');
+  const assetId = asset.assetId || assetIdOf(policyId, assetNameHex);
   return {
     ...asset,
     policyId,
     assetNameHex,
-    assetId: asset.assetId || unit,
+    assetId,
     assetKey: assetKeyOf(policyId, assetNameHex),
-    unit,
     label: assetLabel(asset),
     ticker: normalizeTicker(asset.ticker || asset.label),
     description: assetDescription(asset),
@@ -58,15 +57,35 @@ export function normalizeAssetMetadata(asset: AssetMetadata): ResolvedAsset {
   };
 }
 
+export function normalizeAssetRecord(assets: Record<string, AssetMetadata>): Record<string, ResolvedAsset> {
+  const normalizedAssets: Record<string, ResolvedAsset> = {};
+  for (const [sourceKey, asset] of Object.entries(assets)) {
+    const normalized = normalizeAssetMetadata({ ...asset, known: asset.known ?? true });
+    if (normalizedAssets[normalized.assetKey]) {
+      throw new Error(`Duplicate asset definition for ${normalized.assetKey} from ${sourceKey}.`);
+    }
+    normalizedAssets[normalized.assetKey] = normalized;
+  }
+  return normalizedAssets;
+}
+
+export function normalizeAssetMetadataRecord(assets: Record<string, AssetMetadata>): Record<string, AssetMetadata> {
+  return Object.fromEntries(
+    Object.values(assets).map((asset) => {
+      const normalized = normalizeAssetMetadata(asset);
+      const { assetKey: _assetKey, ...metadata } = normalized;
+      return [normalized.assetKey, metadata];
+    }),
+  );
+}
+
 export function configuredAssets(
   networkTag: NetworkTag,
   overrides: Partial<Record<NetworkTag, Record<string, AssetMetadata>>>,
 ): Record<string, ResolvedAsset> {
   const network = APP_CONFIG.networks[networkTag];
   const merged = { ...network.assets, ...(overrides[networkTag] || {}) };
-  return Object.fromEntries(
-    Object.entries(merged).map(([key, asset]) => [key, normalizeAssetMetadata({ ...asset, known: true })]),
-  );
+  return normalizeAssetRecord(merged);
 }
 
 export function hardAsset(
@@ -75,9 +94,7 @@ export function hardAsset(
   policyId: string,
   assetNameHex: string,
 ): ResolvedAsset {
-  const configured = Object.values(configuredAssets(networkTag, overrides)).find(
-    (asset) => asset.policyId === policyId && asset.assetNameHex === assetNameHex,
-  );
+  const configured = configuredAssets(networkTag, overrides)[assetKeyOf(policyId, assetNameHex)];
   if (configured) return configured;
   return normalizeAssetMetadata({
     policyId,

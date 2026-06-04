@@ -9,11 +9,14 @@ const AppDispatchContext = createContext<React.Dispatch<AppAction> | null>(null)
 
 export function AppStateProvider({ children }: PropsWithChildren) {
   const stored = useMemo(() => loadStoredState(), []);
+  const useStoredState = !stored.migrationNeeded && !stored.corrupted;
   const initialSeed = {
-    ...(stored.options ? { options: stored.options } : {}),
-    ...(stored.forms ? { forms: stored.forms } : {}),
-    wallet: stored.wallet || null,
-    customAssets: stored.customAssets || {},
+    migrationNeeded: stored.migrationNeeded,
+    migrationSourceVersion: stored.migrationSourceVersion,
+    ...(useStoredState && stored.stored.options ? { options: stored.stored.options } : {}),
+    ...(useStoredState && stored.stored.forms ? { forms: stored.stored.forms } : {}),
+    wallet: useStoredState ? stored.stored.wallet || null : null,
+    customAssets: useStoredState ? stored.stored.customAssets || {} : {},
   };
   const [state, dispatch] = useReducer(
     appReducer,

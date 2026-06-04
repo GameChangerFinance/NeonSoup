@@ -33,15 +33,15 @@ export function PortfolioTable({ assets, connected, onOffer }: PortfolioTablePro
         </thead>
         <tbody>
           {assets.map((asset) => (
-            <tr key={asset.unit}>
+            <tr key={asset.assetId}>
               <td>
                 <AssetBadge asset={asset} showDescription />
                 {assetDescription(asset) ? null : <div className="small text-body-secondary">No trusted description.</div>}
               </td>
               <td className="fw-semibold">{fromBase(asset.quantity, asset.decimals)}</td>
               <td className="small text-body-secondary hash-text">
-                {asset.unit === 'lovelace' ? 'lovelace' : short(asset.unit, 14, 10)}
-                <CopyIcon value={asset.unit} label="Copy AssetID" />
+                {asset.assetId === 'lovelace' ? 'lovelace' : short(asset.assetId, 14, 10)}
+                <CopyIcon value={asset.assetId} label="Copy AssetID" />
               </td>
               <td className="text-end">
                 <button

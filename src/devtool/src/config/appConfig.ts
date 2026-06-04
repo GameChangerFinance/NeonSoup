@@ -1,9 +1,12 @@
 import { MAINNET_ASSETS, PREPROD_ASSETS } from './assets';
+import packageJson from '../../../../package.json';
 
 const env = import.meta.env;
+const buildTag = env.VITE_NEONSOUP_BUILD_TAG || 'local';
+const appVersion = `${packageJson.version}+${buildTag}`;
 
 export const APP_CONFIG = {
-  version: 4,
+  version: appVersion,
   storageKey: 'neonsoup-devtool-v4',
   walletReturnKey: 'neonsoup-wallet-return-v4',
   encoding: 'gzip',

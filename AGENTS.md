@@ -50,8 +50,16 @@ that were produced with private provider URLs or API tokens.
   `VITE_NEONSOUP_MAINNET_BLOCKFROST_KEY`,
   `VITE_NEONSOUP_PREPROD_GRAPHQL_MK2_URL`, and
   `VITE_NEONSOUP_MAINNET_GRAPHQL_MK2_URL`.
+- The devtool app version uses legal SemVer build metadata:
+  `package.json` version + `VITE_NEONSOUP_BUILD_TAG`, for example
+  `0.0.1+local`. Use that build tag to intentionally force local-state update
+  prompts when persisted state is incompatible.
 - Preserve the intent argument interface unless the user asks for a coordinated
   migration across all intents and frontend code.
+- When relying on GameChanger Wallet/buildTx to show missing-balance or refill
+  dialogs, still emit every required GCScript argument. Undefined values in
+  earlier nodes such as `plutusData` fail before `buildTx` can provide friendly
+  wallet UX.
 - The old single-file frontend was ported to Vite React. Keep the devtool
   structure compact and Bootstrap-first unless explicitly requested otherwise.
 - Prefer warnings over input blocking in the devtool UI. Bad values are useful for
@@ -59,11 +67,14 @@ that were produced with private provider URLs or API tokens.
 - Multiple output asset rows with the same asset are acceptable in GCScript tx
   builder flows; the builder can sum them. Do not add app-side aggregation unless
   there is a concrete reason.
-- The app currently uses friendly asset config keys in some form state, but
-  runtime asset identity should be resolved by `policyId` + `assetNameHex` via
-  helpers such as `resolveAsset`. Do not assume a direct object lookup by
-  `policyId.assetNameHex` will always work until asset-key normalization is
-  intentionally refactored.
+- Asset dataset keys must be deterministic canonical identifiers in the form
+  `policyId.assetNameHex`. ADA is keyed as `ada.ada`; native assets with an
+  empty asset name are keyed as `policyId.`. Do not use friendly aliases such as
+  `usdm` as map keys.
+- Prefer `assetId` for provider/GC asset identifiers such as `lovelace` or
+  `policyId + assetNameHex`; do not use the older provider label in app code.
+- Do not add ad hoc localStorage migrations for old devtool state shapes. Use
+  the centralized version mismatch banner and update/reset flow.
 
 ## Devtool UI Notes
 

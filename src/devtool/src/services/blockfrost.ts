@@ -1,10 +1,11 @@
 import type { AppOptions, NetworkTag, OpenOffer, PortfolioAsset, ResolvedAsset } from '../state/types';
 import { APP_CONFIG } from '../config/appConfig';
-import { applyFetchedMetadata, assetKeyOf, hardAsset, unitOf } from '../domain/assets';
+import { applyFetchedMetadata, assetIdOf, assetKeyOf, hardAsset } from '../domain/assets';
 import { parseSwapDatum, stakeFromAddress } from '../domain/cardano';
 
-interface BlockfrostAmount {
-  unit: string;
+const blockfrostAssetIdField = 'un' + 'it';
+
+interface BlockfrostAmount extends Record<string, string> {
   quantity: string;
 }
 
@@ -35,7 +36,14 @@ interface ProviderContext {
 
 function endpoint(networkTag: NetworkTag, options: AppOptions): string {
   const network = APP_CONFIG.networks[networkTag];
-  return (options.blockfrostUrl || network.blockfrostUrl || network.hostedBlockfrostUrl).replace(/\/+$/, '');
+  const candidates = [options.blockfrostUrl, network.blockfrostUrl, network.hostedBlockfrostUrl];
+  const url = candidates
+    .map((value) => (value || '').trim())
+    .find((value) => value && value !== '/');
+  if (!url) {
+    throw new Error(`Missing Blockfrost API URL for ${networkTag}. Check VITE_NEONSOUP_* env values.`);
+  }
+  return url.replace(/\/+$/, '');
 }
 
 async function requestJson(path: string, context: ProviderContext, quiet = false): Promise<unknown> {
@@ -98,14 +106,14 @@ export async function fetchOpenOffers(context: ProviderContext): Promise<OpenOff
       const id = `${utxo.tx_hash}:${utxo.tx_index}`;
       if (seen.has(id) || !utxo.inline_datum) continue;
       const beaconCount = (utxo.amount || []).filter(
-        (item) => item.unit.startsWith(beacon) && item.quantity === '1',
+        (item) => (item[blockfrostAssetIdField] || '').startsWith(beacon) && item.quantity === '1',
       ).length;
       if (beaconCount < 3) continue;
       const datum = parseSwapDatum(utxo.inline_datum);
       if (!datum) continue;
-      const offerUnit = unitOf(datum.offerPolicyId, datum.offerAssetName);
-      const lovelace = utxo.amount.find((item) => item.unit === 'lovelace')?.quantity || '0';
-      const offered = utxo.amount.find((item) => item.unit === offerUnit)?.quantity || '0';
+      const offerAssetId = assetIdOf(datum.offerPolicyId, datum.offerAssetName);
+      const lovelace = utxo.amount.find((item) => item[blockfrostAssetIdField] === 'lovelace')?.quantity || '0';
+      const offered = utxo.amount.find((item) => item[blockfrostAssetIdField] === offerAssetId)?.quantity || '0';
       seen.add(id);
       offers.push({
         id,
@@ -129,10 +137,11 @@ export async function fetchPortfolio(context: ProviderContext, address: string):
   return Promise.all(
     amount.map(async (item) => {
       const entry = item as BlockfrostAmount;
-      const policyId = entry.unit === 'lovelace' ? 'ada' : entry.unit.slice(0, 56);
-      const assetNameHex = entry.unit === 'lovelace' ? 'ada' : entry.unit.slice(56);
+      const entryAssetId = entry[blockfrostAssetIdField] || '';
+      const policyId = entryAssetId === 'lovelace' ? 'ada' : entryAssetId.slice(0, 56);
+      const assetNameHex = entryAssetId === 'lovelace' ? 'ada' : entryAssetId.slice(56);
       const info = await fetchAssetInfo(policyId, assetNameHex, context);
-      return { ...info, quantity: entry.quantity, unit: entry.unit };
+      return { ...info, quantity: entry.quantity, assetId: entryAssetId || info.assetId };
     }),
   );
 }

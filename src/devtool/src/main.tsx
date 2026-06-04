@@ -6,11 +6,14 @@ import './styles/theme.css';
 import './styles/app.css';
 import App from './App';
 import { AppStateProvider } from './state/appState';
+import { StateRecoveryBoundary } from './components/common/StateRecoveryBoundary';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <AppStateProvider>
-      <App />
-    </AppStateProvider>
+    <StateRecoveryBoundary>
+      <AppStateProvider>
+        <App />
+      </AppStateProvider>
+    </StateRecoveryBoundary>
   </React.StrictMode>,
 );

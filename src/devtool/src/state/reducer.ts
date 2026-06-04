@@ -1,5 +1,6 @@
-import { configuredAssets, hardAsset } from '../domain/assets';
+import { configuredAssets, hardAsset, normalizeAssetMetadataRecord } from '../domain/assets';
 import { fromBase } from '../domain/quantities';
+import { APP_CONFIG } from '../config/appConfig';
 import type { AppAction, AppOptions, AppState, AssetMetadata, IntentBundle, NetworkTag } from './types';
 
 export const defaultOptions: AppOptions = {
@@ -21,7 +22,17 @@ function freshBundle(): IntentBundle {
   };
 }
 
+function defaultAssetKeys(network: NetworkTag, customAssets: InitialStateSeed['customAssets'] = {}) {
+  const keys = Object.keys(configuredAssets(network, customAssets));
+  return {
+    offer: keys[0] || 'ada.ada',
+    ask: keys[1] || keys[0] || 'ada.ada',
+  };
+}
+
 interface InitialStateSeed {
+  migrationNeeded?: boolean;
+  migrationSourceVersion?: string;
   options?: Partial<AppOptions>;
   forms?: Partial<AppState['forms']>;
   wallet?: AppState['wallet'];
@@ -43,15 +54,19 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
   const options = { ...defaultOptions, ...(seed?.options || {}) };
   const customAssets = seed?.customAssets || {};
   const assetInfo = configuredAssets(options.network, customAssets);
+  const assetKeys = defaultAssetKeys(options.network, customAssets);
   return {
+    appVersion: APP_CONFIG.version,
+    migrationNeeded: seed?.migrationNeeded || false,
+    migrationSourceVersion: seed?.migrationSourceVersion || '',
     view: seed?.view || 'trade',
     action: seed?.action || 'open',
     selectedOrderId: seed?.selectedOrderId || '',
     selectedPair: seed?.selectedPair || null,
     options,
     forms: {
-      openOfferAssetKey: 'ada',
-      openAskAssetKey: 'usdm',
+      openOfferAssetKey: assetKeys.offer,
+      openAskAssetKey: assetKeys.ask,
       openOfferAmount: '',
       openAskAmount: '',
       fillOfferAmount: '',
@@ -89,6 +104,8 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case 'replace-state':
+      return action.state;
     case 'set-view':
       return { ...state, view: action.view };
     case 'set-action':
@@ -96,12 +113,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'set-options': {
       const options = { ...state.options, ...action.options };
       const networkChanged = action.options.network && action.options.network !== state.options.network;
+      const assetKeys = defaultAssetKeys(options.network, state.customAssets);
       return {
         ...state,
         options,
         selectedOrderId: networkChanged ? '' : state.selectedOrderId,
         selectedPair: networkChanged ? null : state.selectedPair,
         assetInfo: networkChanged ? configuredAssets(options.network, state.customAssets) : state.assetInfo,
+        forms: networkChanged
+          ? {
+              ...state.forms,
+              openOfferAssetKey: assetKeys.offer,
+              openAskAssetKey: assetKeys.ask,
+            }
+          : state.forms,
       };
     }
     case 'set-forms':
@@ -139,11 +164,22 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'set-asset-info':
       return { ...state, assetInfo: { ...state.assetInfo, ...action.assets } };
     case 'set-custom-assets': {
-      const customAssets = { ...state.customAssets, [action.network]: action.assets };
+      const customAssets = {
+        ...state.customAssets,
+        [action.network]: normalizeAssetMetadataRecord(action.assets),
+      };
+      const assetKeys = defaultAssetKeys(state.options.network, customAssets);
+      const hasOfferKey = Boolean(configuredAssets(state.options.network, customAssets)[state.forms.openOfferAssetKey]);
+      const hasAskKey = Boolean(configuredAssets(state.options.network, customAssets)[state.forms.openAskAssetKey]);
       return {
         ...state,
         customAssets,
         assetInfo: configuredAssets(state.options.network, customAssets),
+        forms: {
+          ...state.forms,
+          openOfferAssetKey: hasOfferKey ? state.forms.openOfferAssetKey : assetKeys.offer,
+          openAskAssetKey: hasAskKey ? state.forms.openAskAssetKey : assetKeys.ask,
+        },
       };
     }
     case 'set-selected-order':

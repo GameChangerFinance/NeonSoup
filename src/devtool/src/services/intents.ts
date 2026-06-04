@@ -1,6 +1,6 @@
 import { APP_CONFIG } from '../config/appConfig';
 import type { AppState, IntentArgs, IntentName, IntentSelection, IntentTemplate, OpenOffer } from '../state/types';
-import { hardAsset } from '../domain/assets';
+import { assetKeyOf, hardAsset } from '../domain/assets';
 import { ceilDiv, fromBase, gcd, toBase } from '../domain/quantities';
 
 function clone<T>(value: T): T {
@@ -58,30 +58,28 @@ export function buildOpenArgs(state: AppState): IntentArgs {
   if (!offer || !ask) return {};
   const offerQuantity = toBase(state.forms.openOfferAmount, offer.decimals);
   const askQuantity = toBase(state.forms.openAskAmount, ask.decimals);
+  const priceFactor = offerQuantity > 0n && askQuantity > 0n ? gcd(askQuantity, offerQuantity) : 1n;
   const args: IntentArgs = {
     'offer-policy-id': offer.policyId,
     'offer-asset-name': offer.assetNameHex,
     'ask-policy-id': ask.policyId,
     'ask-asset-name': ask.assetNameHex,
     'offer-quantity': offerQuantity.toString(),
+    'price-numerator': (askQuantity / priceFactor).toString(),
+    'price-denominator': (offerQuantity > 0n ? offerQuantity / priceFactor : 1n).toString(),
     'owner-stake-keyhash': state.wallet?.stakeKeyHash || '',
     'intent-id': state.intentArgs.open['intent-id'] || newIntentId('open'),
   };
-  if (offerQuantity > 0n && askQuantity > 0n) {
-    const factor = gcd(askQuantity, offerQuantity);
-    args['price-numerator'] = (askQuantity / factor).toString();
-    args['price-denominator'] = (offerQuantity / factor).toString();
-  }
   return args;
 }
 
 export function buildFillArgs(state: AppState, offer: OpenOffer | null): IntentArgs {
   if (!offer) return {};
   const offeredAsset =
-    state.assetInfo[offer.offerPolicyId === 'ada' ? 'ada' : `${offer.offerPolicyId}.${offer.offerAssetName}`] ||
+    state.assetInfo[assetKeyOf(offer.offerPolicyId, offer.offerAssetName)] ||
     hardAsset(state.options.network, state.customAssets, offer.offerPolicyId, offer.offerAssetName);
   const askAsset =
-    state.assetInfo[offer.askPolicyId === 'ada' ? 'ada' : `${offer.askPolicyId}.${offer.askAssetName}`] ||
+    state.assetInfo[assetKeyOf(offer.askPolicyId, offer.askAssetName)] ||
     hardAsset(state.options.network, state.customAssets, offer.askPolicyId, offer.askAssetName);
   const offerQuantity = toBase(state.forms.fillOfferAmount, offeredAsset.decimals);
   const askQuantity =
@@ -161,10 +159,10 @@ export function fillAskAmount(state: AppState): string {
   const offer = selectedOffer(state);
   if (!offer) return '';
   const offeredAsset =
-    state.assetInfo[offer.offerPolicyId === 'ada' ? 'ada' : `${offer.offerPolicyId}.${offer.offerAssetName}`] ||
+    state.assetInfo[assetKeyOf(offer.offerPolicyId, offer.offerAssetName)] ||
     hardAsset(state.options.network, state.customAssets, offer.offerPolicyId, offer.offerAssetName);
   const askAsset =
-    state.assetInfo[offer.askPolicyId === 'ada' ? 'ada' : `${offer.askPolicyId}.${offer.askAssetName}`] ||
+    state.assetInfo[assetKeyOf(offer.askPolicyId, offer.askAssetName)] ||
     hardAsset(state.options.network, state.customAssets, offer.askPolicyId, offer.askAssetName);
   const offerQuantity = toBase(state.forms.fillOfferAmount, offeredAsset.decimals);
   const askQuantity =

@@ -3,6 +3,7 @@ import type { AppState, AssetMetadata, NoticeTone } from '../../state/types';
 import { useAppDispatch } from '../../state/appState';
 import { APP_CONFIG } from '../../config/appConfig';
 import { FormAlert } from '../common/FormAlert';
+import { assetKeyOf, normalizeAssetMetadataRecord } from '../../domain/assets';
 
 interface OptionsPanelProps {
   state: AppState;
@@ -18,15 +19,15 @@ const toggleOptions = [
 ] as const;
 
 function editableAssets(state: AppState): Record<string, AssetMetadata> {
-  return {
+  return normalizeAssetMetadataRecord({
     ...APP_CONFIG.networks[state.options.network].assets,
     ...(state.customAssets[state.options.network] || {}),
-  };
+  });
 }
 
 function validateAssetJson(value: unknown): Record<string, AssetMetadata> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Asset JSON must be an object keyed by asset name.');
+    throw new Error('Asset JSON must be an object keyed by policyId.assetNameHex.');
   }
   const assets = value as Record<string, AssetMetadata>;
   for (const [key, asset] of Object.entries(assets)) {
@@ -36,8 +37,12 @@ function validateAssetJson(value: unknown): Record<string, AssetMetadata> {
     if (typeof asset.policyId !== 'string' || !asset.policyId) {
       throw new Error(`${key}.policyId is required.`);
     }
-    if (typeof asset.assetNameHex !== 'string' || !asset.assetNameHex) {
-      throw new Error(`${key}.assetNameHex is required.`);
+    if (typeof asset.assetNameHex !== 'string') {
+      throw new Error(`${key}.assetNameHex must be a string. Empty string is allowed.`);
+    }
+    const expectedKey = assetKeyOf(asset.policyId, asset.assetNameHex);
+    if (key !== expectedKey) {
+      throw new Error(`${key} must be keyed as ${expectedKey}.`);
     }
     if (typeof asset.label !== 'string' || typeof asset.ticker !== 'string') {
       throw new Error(`${key}.label and ${key}.ticker are required.`);

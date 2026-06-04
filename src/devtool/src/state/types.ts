@@ -24,7 +24,7 @@ export interface AssetMetadata extends AssetRef {
 
 export interface ResolvedAsset extends AssetMetadata {
   assetKey: string;
-  unit: string;
+  assetId: string;
 }
 
 export interface AssetPair {
@@ -125,6 +125,9 @@ export interface Notice {
 }
 
 export interface AppState {
+  appVersion: string;
+  migrationNeeded: boolean;
+  migrationSourceVersion: string;
   view: ViewId;
   action: ActionMode;
   selectedOrderId: string;
@@ -154,6 +157,7 @@ export interface AppState {
 }
 
 export type AppAction =
+  | { type: 'replace-state'; state: AppState }
   | { type: 'set-view'; view: ViewId }
   | { type: 'set-action'; action: ActionMode }
   | { type: 'set-options'; options: Partial<AppOptions> }
