@@ -3,18 +3,23 @@ import type { AppState, IntentName, IntentTemplate, WalletConnection } from '../
 import { cleanReturnUrl, prepareIntent } from './intents';
 import { clearWalletReturn, writeWalletReturn } from './storage';
 import { text } from '../domain/text';
+import { getGcRuntime } from './gcRuntime';
 
-export async function walletUrl(state: AppState, intent: IntentName = state.action): Promise<string> {
-  if (!window.gc?.encode?.url) throw new Error('GameChanger library is not available on window.gc');
-  const code = intent === 'connect' ? prepareConnectIntent(state.intents.connect) : prepareIntent(state, intent);
-  if (!code) throw new Error(`Intent ${intent} is not loaded`);
-  return window.gc.encode.url({
+export async function walletUrlForCode(state: AppState, code: IntentTemplate['code']): Promise<string> {
+  const gc = getGcRuntime();
+  return gc.encode.url({
     input: JSON.stringify(code),
     apiVersion: '2',
     network: state.options.network,
-    encoding: APP_CONFIG.encoding,
+    encoding: APP_CONFIG.encoding as 'gzip',
     disableNetworkRouter: false,
   });
+}
+
+export async function walletUrl(state: AppState, intent: IntentName = state.action): Promise<string> {
+  const code = intent === 'connect' ? prepareConnectIntent(state.intents.connect) : prepareIntent(state, intent);
+  if (!code) throw new Error(`Intent ${intent} is not loaded`);
+  return walletUrlForCode(state, code);
 }
 
 function prepareConnectIntent(template?: IntentTemplate): IntentTemplate['code'] | null {
@@ -27,11 +32,19 @@ function prepareConnectIntent(template?: IntentTemplate): IntentTemplate['code']
 
 export async function openWallet(state: AppState, intent: IntentName = state.action): Promise<void> {
   const url = await walletUrl(state, intent);
+  openWalletUrl(state, url);
+}
+
+export function openWalletUrl(state: AppState, url: string): void {
   if (state.options.popupMode) {
     window.open(url, 'gc_udc_popup', APP_CONFIG.popupFeatures);
   } else {
     window.location.href = url;
   }
+}
+
+export async function openWalletCode(state: AppState, code: IntentTemplate['code']): Promise<void> {
+  openWalletUrl(state, await walletUrlForCode(state, code));
 }
 
 function walletFromDecoded(decoded: unknown): WalletConnection | null {
@@ -66,8 +79,8 @@ function walletFromDecoded(decoded: unknown): WalletConnection | null {
 export async function captureWalletReturn(): Promise<WalletConnection | null> {
   const url = new URL(window.location.href);
   const result = url.searchParams.get('result');
-  if (!result || !window.gc?.encodings?.msg?.decoder) return null;
-  const decoded = await window.gc.encodings.msg.decoder(result);
+  if (!result) return null;
+  const decoded = await getGcRuntime().encodings.msg.decoder(result);
   const wallet = walletFromDecoded(decoded);
   writeWalletReturn({ at: Date.now(), wallet, decoded });
   url.search = '';

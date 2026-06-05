@@ -1,7 +1,7 @@
 import { configuredAssets, hardAsset, normalizeAssetMetadataRecord } from '../domain/assets';
 import { fromBase } from '../domain/quantities';
 import { APP_CONFIG } from '../config/appConfig';
-import type { AppAction, AppOptions, AppState, AssetMetadata, IntentBundle, NetworkTag } from './types';
+import type { AppAction, AppOptions, AppState, AssetMetadata, CartState, IntentBundle, NetworkTag } from './types';
 
 export const defaultOptions: AppOptions = {
   network: 'preprod',
@@ -22,6 +22,47 @@ function freshBundle(): IntentBundle {
   };
 }
 
+function freshCart(): CartState {
+  return {
+    items: [],
+    mode: 'bundle',
+    maxIntentsPerTransaction: 20,
+    modalOpen: false,
+    showExecutedOnly: false,
+  };
+}
+
+function cartVisibleItems(cart: CartState) {
+  return cart.showExecutedOnly
+    ? cart.items.filter((item) => item.status === 'executed')
+    : cart.items.filter((item) => item.status !== 'executed');
+}
+
+function bundleFromCart(cart: CartState, previous: IntentBundle): IntentBundle {
+  return {
+    id: previous.id,
+    selections: cart.items
+      .filter((item) => item.selected)
+      .map((item) => {
+        const selection = {
+          id: item.id,
+          name: item.name,
+          args: item.args,
+          ...(item.sourceOfferId ? { sourceOfferId: item.sourceOfferId } : {}),
+        };
+        return selection;
+      }),
+  };
+}
+
+function withCart(state: AppState, cart: CartState): AppState {
+  return {
+    ...state,
+    cart,
+    intentBundle: bundleFromCart(cart, state.intentBundle),
+  };
+}
+
 function defaultAssetKeys(network: NetworkTag, customAssets: InitialStateSeed['customAssets'] = {}) {
   const keys = Object.keys(configuredAssets(network, customAssets));
   return {
@@ -39,10 +80,12 @@ interface InitialStateSeed {
   customAssets?: Partial<Record<NetworkTag, Record<string, AssetMetadata>>>;
   view?: AppState['view'];
   action?: AppState['action'];
+  tradeTab?: AppState['tradeTab'];
   selectedOrderId?: string;
   selectedPair?: AppState['selectedPair'];
   intents?: AppState['intents'];
   intentBundle?: AppState['intentBundle'];
+  cart?: AppState['cart'];
   openOffers?: AppState['openOffers'];
   portfolio?: AppState['portfolio'];
   transactions?: AppState['transactions'];
@@ -61,6 +104,7 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
     migrationSourceVersion: seed?.migrationSourceVersion || '',
     view: seed?.view || 'trade',
     action: seed?.action || 'open',
+    tradeTab: seed?.tradeTab || seed?.action || 'open',
     selectedOrderId: seed?.selectedOrderId || '',
     selectedPair: seed?.selectedPair || null,
     options,
@@ -69,6 +113,9 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
       openAskAssetKey: assetKeys.ask,
       openOfferAmount: '',
       openAskAmount: '',
+      bulkOpenCount: '3',
+      bulkOpenVariancePercent: '0',
+      bulkOpenOfferVariancePercent: '0',
       fillOfferAmount: '',
       fillAskAmount: '',
       ...(seed?.forms || {}),
@@ -81,6 +128,7 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
       close: {},
     },
     intentBundle: seed?.intentBundle || freshBundle(),
+    cart: seed?.cart || freshCart(),
     lastWalletReturn: null,
     openOffers: seed?.openOffers || [],
     portfolio: seed?.portfolio || [],
@@ -109,7 +157,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'set-view':
       return { ...state, view: action.view };
     case 'set-action':
-      return { ...state, action: action.action };
+      return { ...state, action: action.action, tradeTab: action.action };
+    case 'set-trade-tab':
+      return {
+        ...state,
+        tradeTab: action.tab,
+        action: action.tab === 'bulk-open' ? state.action : action.tab,
+      };
     case 'set-options': {
       const options = { ...state.options, ...action.options };
       const networkChanged = action.options.network && action.options.network !== state.options.network;
@@ -153,6 +207,99 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ],
         },
       };
+    case 'add-cart-item': {
+      const cart = {
+        ...state.cart,
+        items: [...state.cart.items, action.item],
+      };
+      return withCart(state, cart);
+    }
+    case 'add-cart-items': {
+      const cart = {
+        ...state.cart,
+        items: [...state.cart.items, ...action.items],
+      };
+      return withCart(state, cart);
+    }
+    case 'remove-cart-item': {
+      const cart = {
+        ...state.cart,
+        items: state.cart.items.filter((item) => item.id !== action.itemId),
+      };
+      return withCart(state, cart);
+    }
+    case 'remove-cart-items': {
+      const itemIds = new Set(action.itemIds);
+      const cart = {
+        ...state.cart,
+        items: state.cart.items.filter((item) => !itemIds.has(item.id)),
+      };
+      return withCart(state, cart);
+    }
+    case 'clear-cart':
+      return withCart(state, { ...state.cart, items: [] });
+    case 'purge-executed-cart-items':
+      return withCart(state, {
+        ...state.cart,
+        items: state.cart.items.filter((item) => item.status !== 'executed'),
+      });
+    case 'toggle-cart-item':
+      return withCart(state, {
+        ...state.cart,
+        items: state.cart.items.map((item) =>
+          item.id === action.itemId ? { ...item, selected: !item.selected } : item,
+        ),
+      });
+    case 'select-all-visible-cart-items': {
+      const visibleIds = new Set(cartVisibleItems(state.cart).map((item) => item.id));
+      return withCart(state, {
+        ...state.cart,
+        items: state.cart.items.map((item) => (visibleIds.has(item.id) ? { ...item, selected: true } : item)),
+      });
+    }
+    case 'deselect-all-cart-items':
+      return withCart(state, {
+        ...state.cart,
+        items: state.cart.items.map((item) => ({ ...item, selected: false })),
+      });
+    case 'set-cart-item-selected':
+      return withCart(state, {
+        ...state.cart,
+        items: state.cart.items.map((item) =>
+          item.id === action.itemId ? { ...item, selected: action.selected } : item,
+        ),
+      });
+    case 'set-cart-items-selected': {
+      const itemIds = new Set(action.itemIds);
+      return withCart(state, {
+        ...state.cart,
+        items: state.cart.items.map((item) =>
+          itemIds.has(item.id) ? { ...item, selected: action.selected } : item,
+        ),
+      });
+    }
+    case 'mark-cart-items-executed': {
+      const itemIds = new Set(action.itemIds);
+      return withCart(state, {
+        ...state.cart,
+        items: state.cart.items.map((item) =>
+          itemIds.has(item.id)
+            ? { ...item, status: 'executed', executedAt: action.executedAt, selected: false }
+            : item,
+        ),
+      });
+    }
+    case 'set-cart-mode':
+      return withCart(state, { ...state.cart, mode: action.mode });
+    case 'set-cart-max-intents-per-transaction':
+      return withCart(state, {
+        ...state.cart,
+        maxIntentsPerTransaction: Math.max(1, Math.floor(action.value) || 1),
+      });
+    case 'set-cart-modal-open':
+      return { ...state, cart: { ...state.cart, modalOpen: action.open } };
+    case 'set-cart-show-executed-only':
+      return { ...state, cart: { ...state.cart, showExecutedOnly: action.showExecutedOnly } };
     case 'set-open-offers':
       return {
         ...state,
@@ -205,6 +352,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         view: 'trade',
         action: 'fill',
+        tradeTab: 'fill',
         selectedOrderId: action.offer.id,
         selectedPair: {
           offer: {
@@ -230,6 +378,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         view: 'trade',
         action: 'close',
+        tradeTab: 'close',
         selectedOrderId: action.offer.id,
         selectedPair: {
           offer: {
@@ -248,6 +397,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         view: 'trade',
         action: 'open',
+        tradeTab: 'open',
         selectedPair: null,
         forms: { ...state.forms, openOfferAssetKey: action.assetKey },
       };

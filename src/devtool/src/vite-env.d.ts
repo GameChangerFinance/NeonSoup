@@ -13,22 +13,3 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
-
-interface Window {
-  gc?: {
-    encode?: {
-      url?: (params: {
-        input: string;
-        apiVersion: string;
-        network: string;
-        encoding: string;
-        disableNetworkRouter: boolean;
-      }) => Promise<string>;
-    };
-    encodings?: {
-      msg?: {
-        decoder?: (value: string) => Promise<unknown>;
-      };
-    };
-  };
-}

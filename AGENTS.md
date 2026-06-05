@@ -24,7 +24,7 @@ Production NeonSoup is expected to come later.
 - Install dependencies: `pnpm install`
 - Build intents and frontend: `pnpm build`
 - Serve devtool locally: `pnpm serve`
-- Typecheck devtool without producing a private-env bundle:
+- Typecheck devtool:
   `pnpm exec tsc -p ./src/devtool/tsconfig.json`
 - Build only one intent:
   - `pnpm run build:open`
@@ -33,9 +33,9 @@ Production NeonSoup is expected to come later.
 - Generate the GC auto-template demo: `pnpm run serve:autogen`
 
 After editing any source intent, rebuild the matching `dist/intents/*.gcscript.json`.
-After editing `src/devtool/`, run the narrowest useful check first. Be careful:
-Vite inlines `VITE_*` env values into `dist/assets/`. Do not commit built assets
-that were produced with private provider URLs or API tokens.
+After editing `src/devtool/`, run the narrowest useful check first, then
+`pnpm run build` when the change touches shared frontend behavior, bundling, or
+wallet-intent loading.
 
 ## Safety Rules
 
@@ -67,6 +67,12 @@ that were produced with private provider URLs or API tokens.
 - Multiple output asset rows with the same asset are acceptable in GCScript tx
   builder flows; the builder can sum them. Do not add app-side aggregation unless
   there is a concrete reason.
+- Blockchain asset quantities, lovelace, token amounts, price numerators, price
+  denominators, and UTxO value fields are BigNum-domain values. All arithmetic
+  on them must stay BigNum-based: use TypeScript `bigint` in the devtool and
+  GCScript/ISL `*BigNum` helpers in wallet scripts. Do not cast these values to
+  `number`/normal integers for math; only convert to `number` after bounding the
+  result to a small UI-only value such as a progress percentage.
 - Asset dataset keys must be deterministic canonical identifiers in the form
   `policyId.assetNameHex`. ADA is keyed as `ada.ada`; native assets with an
   empty asset name are keyed as `policyId.`. Do not use friendly aliases such as
@@ -95,6 +101,13 @@ that were produced with private provider URLs or API tokens.
   wallet return data, intent bundle data, and app state easy to inspect.
 - Theme updates should preserve the former single-file app feel: compact panels,
   dark-first palette, restrained Bootstrap surfaces, and readable JSON boxes.
+- Single Open/Fill/Close actions may remain simple user-facing flows, but the
+  long-term execution model should normalize around selected Cart items as the
+  source of truth. Bundle and parallel execution should compose selected intent
+  fragments mechanically; do not add special transaction-item handling unless a
+  real GC builder/language obstacle is observed and documented.
+- The Connect wallet intent is independent from the Cart/composability system and
+  should keep working as a direct wallet public-data flow.
 
 ## Protocol Notes
 

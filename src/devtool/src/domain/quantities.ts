@@ -36,5 +36,20 @@ export function gcd(a: bigint, b: bigint): bigint {
 
 export function percent(value: bigint, max: bigint): number {
   if (max <= 0n) return value > 0n ? 200 : 0;
-  return Math.max(0, Math.min(200, Number((value * 10000n) / max) / 100));
+  const scaled = (value * 10000n) / max;
+  if (scaled >= 20000n) return 200;
+  if (scaled <= 0n) return 0;
+  return Number(scaled) / 100;
+}
+
+export function ratioDecimal(numerator: string | bigint, denominator: string | bigint, maxDecimals = 8): string {
+  const n = typeof numerator === 'bigint' ? numerator : BigInt(text(numerator || '0'));
+  const d = typeof denominator === 'bigint' ? denominator : BigInt(text(denominator || '1'));
+  if (d <= 0n) return '?';
+  const whole = n / d;
+  const remainder = n % d;
+  if (remainder === 0n || maxDecimals <= 0) return whole.toString();
+  const scale = 10n ** BigInt(maxDecimals);
+  const fraction = ((remainder * scale) / d).toString().padStart(maxDecimals, '0').replace(/0+$/, '');
+  return fraction ? `${whole}.${fraction}` : whole.toString();
 }

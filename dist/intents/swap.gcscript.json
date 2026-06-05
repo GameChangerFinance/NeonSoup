@@ -472,7 +472,7 @@
     },
     "build": {
       "type": "buildTx",
-      "title": "Swapp Limit Order",
+      "title": "Swap Limit Order",
       "tx": "{get('cache.tx')}"
     },
     "sign": {

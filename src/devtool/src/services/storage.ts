@@ -1,5 +1,5 @@
 import { APP_CONFIG } from '../config/appConfig';
-import type { AppOptions, AppState, AssetMetadata, NetworkTag, WalletConnection } from '../state/types';
+import type { AppOptions, AppState, AssetMetadata, CartState, NetworkTag, WalletConnection } from '../state/types';
 
 export interface StoredState {
   version?: string;
@@ -7,6 +7,7 @@ export interface StoredState {
   forms?: Partial<AppState['forms']>;
   wallet?: WalletConnection | null;
   customAssets?: Partial<Record<NetworkTag, Record<string, AssetMetadata>>>;
+  cart?: CartState;
 }
 
 export interface StoredStateResult {
@@ -44,6 +45,7 @@ export function saveStoredState(state: AppState): void {
     forms: state.forms,
     wallet: state.wallet,
     customAssets: state.customAssets,
+    cart: state.cart,
   };
   localStorage.setItem(APP_CONFIG.storageKey, JSON.stringify(stored));
 }

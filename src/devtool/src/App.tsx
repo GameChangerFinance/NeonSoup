@@ -4,6 +4,7 @@ import { PageHeader } from './components/layout/PageHeader';
 import { AssetPairSelector } from './components/assets/AssetPairSelector';
 import { AmountInput } from './components/common/AmountInput';
 import { BalanceBar } from './components/common/BalanceBar';
+import { CartAddButton } from './components/common/CartAddButton';
 import { FormAlert } from './components/common/FormAlert';
 import { LoadingState } from './components/common/LoadingState';
 import { ReloadButton } from './components/common/ReloadButton';
@@ -12,14 +13,23 @@ import { PortfolioTable } from './components/portfolio/PortfolioTable';
 import { TransactionList, type TransactionRow } from './components/transactions/TransactionList';
 import { GeneratedIntentPanel } from './components/intents/GeneratedIntentPanel';
 import { OptionsPanel } from './components/options/OptionsPanel';
+import { CartModal } from './components/cart/CartModal';
+import { CartPanel } from './components/cart/CartPanel';
 import { useAppDispatch, useAppState } from './state/appState';
 import { assetMap, balanceOf, resolveAsset, selectedOffer, visibleOffers, visiblePortfolio } from './state/selectors';
 import { assetTitle, configuredAssets } from './domain/assets';
 import { fromBase, percent, toBase } from './domain/quantities';
 import { safeError, short } from './domain/text';
 import { loadAssetInfo, loadOpenOffers, loadPortfolio } from './services/networkProvider';
-import { captureWalletReturn, consumeWalletReturn, openWallet } from './services/gcWallet';
+import { captureWalletReturn, consumeWalletReturn, openWallet, openWalletCode } from './services/gcWallet';
 import { buildArgsForAction, loadIntentTemplates, fillAskAmount } from './services/intents';
+import {
+  createBulkOpenCartItems,
+  createCartItemFromCurrentIntent,
+  selectedCartItems,
+  validateCartItemsCanBeAdded,
+} from './services/cartIntents';
+import { buildBundledGcscriptIntent, buildParallelGcscriptIntent } from './services/intentExecution';
 import { clearStoredState, readWalletReturn } from './services/storage';
 import { APP_CONFIG } from './config/appConfig';
 import { createInitialState } from './state/reducer';
@@ -351,11 +361,100 @@ export default function App() {
     dispatch({ type: 'select-offer-for-close', offer: item });
   }
 
+  function addItemsToCart(items: ReturnType<typeof createBulkOpenCartItems>, openModal = false) {
+    if (!items.length) {
+      dispatch({
+        type: 'set-notice',
+        key: 'app',
+        notice: { tone: 'warning', message: 'No intents were created for the Cart.' },
+      });
+      return;
+    }
+    const validation = validateCartItemsCanBeAdded(state.cart, items);
+    if (!validation.ok) {
+      dispatch({
+        type: 'set-notice',
+        key: 'app',
+        notice: { tone: 'warning', message: validation.message || 'Intent cannot be added to Cart.' },
+      });
+      return;
+    }
+    const [singleItem] = items;
+    dispatch(items.length === 1 && singleItem ? { type: 'add-cart-item', item: singleItem } : { type: 'add-cart-items', items });
+    dispatch({
+      type: 'set-notice',
+      key: 'app',
+      notice: {
+        tone: 'success',
+        message: `${items.length} intent${items.length === 1 ? '' : 's'} added to Cart.`,
+      },
+    });
+    if (openModal) dispatch({ type: 'set-cart-modal-open', open: true });
+  }
+
+  function addCurrentIntentToCart() {
+    addItemsToCart([createCartItemFromCurrentIntent(state, { freshIntentId: state.action === 'open' })]);
+  }
+
+  function addBulkOpenToCart() {
+    const count = Number(state.forms.bulkOpenCount || '0');
+    const priceVariance = Number(state.forms.bulkOpenVariancePercent || '0');
+    const offerVariance = Number(state.forms.bulkOpenOfferVariancePercent || '0');
+    addItemsToCart(createBulkOpenCartItems(state, count, priceVariance, offerVariance), true);
+  }
+
   async function runAction() {
     try {
+      createCartItemFromCurrentIntent(state);
       await openWallet(state);
     } catch (error) {
       dispatch({ type: 'set-notice', key: 'app', notice: { tone: 'danger', message: safeError(error) } });
+    }
+  }
+
+  async function runCartSelected() {
+    const items = selectedCartItems(state.cart).filter((item) => item.status === 'draft');
+    if (!items.length) {
+      dispatch({
+        type: 'set-notice',
+        key: 'app',
+        notice: { tone: 'warning', message: 'Select at least one draft Cart item to run.' },
+      });
+      return;
+    }
+    try {
+      const code =
+        state.cart.mode === 'bundle'
+          ? await buildBundledGcscriptIntent({
+              state,
+              items,
+              maxIntentsPerTransaction: state.cart.maxIntentsPerTransaction,
+            })
+          : await buildParallelGcscriptIntent({ state, items });
+      await openWalletCode(state, code);
+      dispatch({ type: 'mark-cart-items-executed', itemIds: items.map((item) => item.id), executedAt: Date.now() });
+      if (state.cart.mode === 'bundle') {
+        dispatch({
+          type: 'set-notice',
+          key: 'app',
+          notice: { tone: 'success', message: `${items.length} Cart intent${items.length === 1 ? '' : 's'} bundled for wallet execution.` },
+        });
+      } else {
+        dispatch({
+          type: 'set-notice',
+          key: 'app',
+          notice: { tone: 'success', message: `${items.length} Cart intent${items.length === 1 ? '' : 's'} prepared as parallel wallet transactions.` },
+        });
+      }
+    } catch (error) {
+      dispatch({
+        type: 'set-notice',
+        key: 'app',
+        notice: {
+          tone: 'danger',
+          message: `Could not build Cart execution intent: ${safeError(error)}`,
+        },
+      });
     }
   }
 
@@ -390,6 +489,8 @@ export default function App() {
       : null;
     const fillQuantity = selectedOfferedAsset ? toBase(state.forms.fillOfferAmount, selectedOfferedAsset.decimals) : 0n;
     const available = BigInt(currentOffer?.utxoOfferQuantity || '0');
+    const bulkOpenCount = Math.max(0, Math.floor(Number(state.forms.bulkOpenCount || '0')) || 0);
+    const bulkOpenLabel = `Open ${bulkOpenCount} offer${bulkOpenCount === 1 ? '' : 's'}`;
 
     return (
       <>
@@ -408,20 +509,22 @@ export default function App() {
         </section>
 
         <section className="app-card p-3 p-lg-4 mb-4">
-          <div className="btn-group mb-4" role="group" aria-label="Trade action">
-            {(['open', 'fill', 'close'] as const).map((mode) => (
+          <ul className="nav nav-tabs action-tabs mb-4" role="tablist" aria-label="Trade action">
+            {(['open', 'fill', 'close', 'bulk-open'] as const).map((mode) => (
+              <li key={mode} className="nav-item" role="presentation">
               <button
-                key={mode}
                 type="button"
-                className={`btn ${state.action === mode ? 'btn-primary' : 'btn-outline-primary'}`}
-                onClick={() => dispatch({ type: 'set-action', action: mode })}
+                role="tab"
+                className={`nav-link ${state.tradeTab === mode ? 'active' : ''}`}
+                onClick={() => dispatch({ type: 'set-trade-tab', tab: mode })}
               >
-                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                {mode === 'bulk-open' ? 'Bulk-Open' : mode.charAt(0).toUpperCase() + mode.slice(1)}
               </button>
+              </li>
             ))}
-          </div>
+          </ul>
 
-          {state.action === 'open' && offer && ask ? (
+          {state.tradeTab === 'open' && offer && ask ? (
             <div className="row g-4">
               <div className="col-12 col-lg-6">
                 <AmountInput
@@ -448,15 +551,78 @@ export default function App() {
                   <FormAlert tone="warning">{openWarnings.join(' ')}</FormAlert>
                 </div>
               ) : null}
-              <div className="col-12 d-flex justify-content-end">
+              <div className="col-12 d-flex flex-wrap justify-content-end gap-2">
                 <button type="button" className="btn btn-primary" onClick={runAction}>
                   Open offer
                 </button>
+                <CartAddButton onClick={addCurrentIntentToCart} />
               </div>
             </div>
           ) : null}
 
-          {state.action === 'fill' ? (
+          {state.tradeTab === 'bulk-open' && offer && ask ? (
+            <div className="row g-4">
+              <div className="col-12 col-lg-6">
+                <AmountInput
+                  id="bulk-open-offer-amount"
+                  label={`Offer ${assetTitle(offer)}`}
+                  value={state.forms.openOfferAmount}
+                  onChange={(value) => dispatch({ type: 'set-forms', forms: { openOfferAmount: value } })}
+                  help={`Balance ${fromBase(offerBalance, offer.decimals)} ${assetTitle(offer)}`}
+                />
+              </div>
+              <div className="col-12 col-lg-6">
+                <AmountInput
+                  id="bulk-open-ask-amount"
+                  label={`Ask ${assetTitle(ask)}`}
+                  value={state.forms.openAskAmount}
+                  onChange={(value) => dispatch({ type: 'set-forms', forms: { openAskAmount: value } })}
+                />
+              </div>
+              <div className="col-12 col-lg-6">
+                <AmountInput
+                  id="bulk-open-offer-variance"
+                  label="Random offer variance %"
+                  value={state.forms.bulkOpenOfferVariancePercent}
+                  onChange={(value) => dispatch({ type: 'set-forms', forms: { bulkOpenOfferVariancePercent: value } })}
+                />
+              </div>              
+              <div className="col-12 col-lg-6">
+                <AmountInput
+                  id="bulk-open-variance"
+                  label="Random price variance %"
+                  value={state.forms.bulkOpenVariancePercent}
+                  onChange={(value) => dispatch({ type: 'set-forms', forms: { bulkOpenVariancePercent: value } })}
+                />
+              </div>
+              <div className="col-12 col-lg-6">
+                <AmountInput
+                  id="bulk-open-count"
+                  label="Number of offers"
+                  value={state.forms.bulkOpenCount}
+                  onChange={(value) => dispatch({ type: 'set-forms', forms: { bulkOpenCount: value } })}
+                />
+              </div>
+              <div className="col-12">
+                <BalanceBar value={percent(offerQuantity, offerBalance)} label="Offered versus current balance per offer" />
+              </div>
+              <div className="col-12">
+                <FormAlert tone="info">
+                  Bulk-Open adds generated open-offer intents to the Cart. Wallet execution is handled later from Cart.
+                </FormAlert>
+              </div>
+              {openWarnings.length ? (
+                <div className="col-12">
+                  <FormAlert tone="warning">{openWarnings.join(' ')}</FormAlert>
+                </div>
+              ) : null}
+              <div className="col-12 d-flex justify-content-end">
+                <CartAddButton onClick={addBulkOpenToCart} label={bulkOpenLabel} />
+              </div>
+            </div>
+          ) : null}
+
+          {state.tradeTab === 'fill' ? (
             <div className="row g-4">
               <div className="col-12">
                 <FormAlert tone={currentOffer ? 'info' : 'warning'}>
@@ -490,25 +656,27 @@ export default function App() {
                   <FormAlert tone="warning">{fillWarnings.join(' ')}</FormAlert>
                 </div>
               ) : null}
-              <div className="col-12 d-flex justify-content-end">
+              <div className="col-12 d-flex flex-wrap justify-content-end gap-2">
                 <button type="button" className="btn btn-primary" onClick={runAction}>
                   Fill offer
                 </button>
+                <CartAddButton onClick={addCurrentIntentToCart} />
               </div>
             </div>
           ) : null}
 
-          {state.action === 'close' ? (
+          {state.tradeTab === 'close' ? (
             <div className="vstack gap-3">
               <FormAlert tone={currentOffer ? 'warning' : 'info'}>
                 {currentOffer
                   ? `Close selected offer ${short(currentOffer.txHash)}#${currentOffer.txIndex}. Verify owner stake credential before signing.`
                   : 'Select one of your offers to close.'}
               </FormAlert>
-              <div className="d-flex justify-content-end">
+              <div className="d-flex flex-wrap justify-content-end gap-2">
                 <button type="button" className="btn btn-outline-danger" onClick={runAction}>
                   Close offer
                 </button>
+                <CartAddButton onClick={addCurrentIntentToCart} />
               </div>
             </div>
           ) : null}
@@ -651,7 +819,19 @@ export default function App() {
             ))}
           </div>
         </section>
-        <GeneratedIntentPanel state={state} onRun={runAction} />
+        <GeneratedIntentPanel state={state} onRun={runAction} onAddToCart={addCurrentIntentToCart} />
+        <section className="app-card p-3 p-lg-4 mt-4">
+          <h2 className="h5 mb-3">Selected Cart Items</h2>
+          <pre className="bg-body-tertiary border rounded p-3 small json-scroll mb-0">
+            {JSON.stringify(selectedCartItems(state.cart), null, 2)}
+          </pre>
+        </section>
+        <section className="app-card p-3 p-lg-4 mt-4">
+          <h2 className="h5 mb-3">Cart State</h2>
+          <pre className="bg-body-tertiary border rounded p-3 small json-scroll mb-0">
+            {JSON.stringify(state.cart, null, 2)}
+          </pre>
+        </section>
         <section className="app-card p-3 p-lg-4 mt-4">
           <h2 className="h5 mb-3">Intent Bundle</h2>
           <pre className="bg-body-tertiary border rounded p-3 small json-scroll mb-0">
@@ -674,11 +854,21 @@ export default function App() {
     );
   }
 
+  function renderCart() {
+    return (
+      <>
+        <PageHeader title="Cart" eyebrow="Composable intents" />
+        <CartPanel state={state} dispatch={dispatch} onRunSelected={runCartSelected} />
+      </>
+    );
+  }
+
   function renderCurrentView() {
     if (state.view === 'trade') return renderTrade();
     if (state.view === 'orders') return renderOrders();
     if (state.view === 'activity') return renderActivity();
     if (state.view === 'user') return renderUser();
+    if (state.view === 'cart') return renderCart();
     if (state.view === 'options') {
       return (
         <>
@@ -715,6 +905,7 @@ export default function App() {
       ) : null}
       {state.notices.app ? <FormAlert tone={state.notices.app.tone}>{state.notices.app.message}</FormAlert> : null}
       {renderCurrentView()}
+      <CartModal state={state} dispatch={dispatch} onRunSelected={runCartSelected} />
     </AppShell>
   );
 }

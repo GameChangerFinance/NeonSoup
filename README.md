@@ -30,8 +30,7 @@ and UI notes.
 
 Provider defaults are configured through Vite env variables. Copy
 [`.env.example`](.env.example) to `.env` for local development and keep private
-provider URLs/API tokens out of commits. Vite inlines `VITE_*` values into built
-assets, so do not commit `dist/assets/` produced with private `.env` values.
+provider URLs/API tokens out of commits.
 The devtool app version uses SemVer build metadata:
 `package.json` version + `VITE_NEONSOUP_BUILD_TAG`, for example
 `0.0.1+local`. Changing the build tag intentionally prompts users to

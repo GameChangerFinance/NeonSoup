@@ -15,9 +15,7 @@ pnpm exec tsc -p ./src/devtool/tsconfig.json
 ```
 
 The build writes the Vite app to `dist/` and keeps built protocol intents under
-`dist/intents/`. Vite inlines `VITE_*` environment variables into
-`dist/assets/`; do not commit built assets produced with private provider URLs or
-API tokens.
+`dist/intents/`.
 
 ## Environment
 

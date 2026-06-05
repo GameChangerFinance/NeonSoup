@@ -1,8 +1,11 @@
 export type NetworkTag = 'preprod' | 'mainnet';
-export type ViewId = 'trade' | 'orders' | 'activity' | 'user' | 'options' | 'developer';
+export type ViewId = 'trade' | 'orders' | 'activity' | 'user' | 'options' | 'developer' | 'cart';
 export type ActionMode = 'open' | 'fill' | 'close';
+export type TradeTab = ActionMode | 'bulk-open';
 export type NetworkProviderKind = 'blockfrost' | 'graphqlMk2';
 export type NoticeTone = 'info' | 'success' | 'warning' | 'danger';
+export type CartExecutionMode = 'bundle' | 'parallel';
+export type CartItemStatus = 'draft' | 'executed' | 'failed';
 
 export interface AssetRef {
   policyId: string;
@@ -92,6 +95,27 @@ export interface IntentBundle {
   selections: IntentSelection[];
 }
 
+export interface CartItem {
+  id: string;
+  name: Exclude<IntentName, 'connect'>;
+  args: IntentArgs;
+  selected: boolean;
+  status: CartItemStatus;
+  createdAt: number;
+  executedAt?: number;
+  sourceOfferId?: string;
+  sourceLabel?: string;
+  pair?: AssetPair;
+}
+
+export interface CartState {
+  items: CartItem[];
+  mode: CartExecutionMode;
+  maxIntentsPerTransaction: number;
+  modalOpen: boolean;
+  showExecutedOnly: boolean;
+}
+
 export interface WalletConnection {
   name: string;
   address: string;
@@ -115,6 +139,9 @@ export interface FormState {
   openAskAssetKey: string;
   openOfferAmount: string;
   openAskAmount: string;
+  bulkOpenCount: string;
+  bulkOpenVariancePercent: string;
+  bulkOpenOfferVariancePercent: string;
   fillOfferAmount: string;
   fillAskAmount: string;
 }
@@ -130,6 +157,7 @@ export interface AppState {
   migrationSourceVersion: string;
   view: ViewId;
   action: ActionMode;
+  tradeTab: TradeTab;
   selectedOrderId: string;
   selectedPair: AssetPair | null;
   options: AppOptions;
@@ -138,6 +166,7 @@ export interface AppState {
   intents: Partial<Record<IntentName, IntentTemplate>>;
   intentArgs: Record<ActionMode, IntentArgs>;
   intentBundle: IntentBundle;
+  cart: CartState;
   lastWalletReturn: unknown;
   openOffers: OpenOffer[];
   portfolio: PortfolioAsset[];
@@ -160,12 +189,29 @@ export type AppAction =
   | { type: 'replace-state'; state: AppState }
   | { type: 'set-view'; view: ViewId }
   | { type: 'set-action'; action: ActionMode }
+  | { type: 'set-trade-tab'; tab: TradeTab }
   | { type: 'set-options'; options: Partial<AppOptions> }
   | { type: 'set-forms'; forms: Partial<FormState> }
   | { type: 'set-wallet'; wallet: WalletConnection | null }
   | { type: 'set-wallet-return'; payload: unknown }
   | { type: 'set-intents'; intents: Partial<Record<IntentName, IntentTemplate>> }
   | { type: 'set-intent-args'; action: ActionMode; args: IntentArgs }
+  | { type: 'add-cart-item'; item: CartItem }
+  | { type: 'add-cart-items'; items: CartItem[] }
+  | { type: 'remove-cart-item'; itemId: string }
+  | { type: 'remove-cart-items'; itemIds: string[] }
+  | { type: 'clear-cart' }
+  | { type: 'purge-executed-cart-items' }
+  | { type: 'toggle-cart-item'; itemId: string }
+  | { type: 'select-all-visible-cart-items' }
+  | { type: 'deselect-all-cart-items' }
+  | { type: 'set-cart-item-selected'; itemId: string; selected: boolean }
+  | { type: 'set-cart-items-selected'; itemIds: string[]; selected: boolean }
+  | { type: 'mark-cart-items-executed'; itemIds: string[]; executedAt: number }
+  | { type: 'set-cart-mode'; mode: CartExecutionMode }
+  | { type: 'set-cart-max-intents-per-transaction'; value: number }
+  | { type: 'set-cart-modal-open'; open: boolean }
+  | { type: 'set-cart-show-executed-only'; showExecutedOnly: boolean }
   | { type: 'set-open-offers'; offers: OpenOffer[] }
   | { type: 'set-portfolio'; portfolio: PortfolioAsset[] }
   | { type: 'set-asset-info'; assets: Record<string, ResolvedAsset> }

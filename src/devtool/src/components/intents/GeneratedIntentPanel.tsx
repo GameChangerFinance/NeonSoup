@@ -3,14 +3,16 @@ import type { AppState, IntentArgs } from '../../state/types';
 import { prepareIntent } from '../../services/intents';
 import { walletUrl } from '../../services/gcWallet';
 import { safeError } from '../../domain/text';
+import { CartAddButton } from '../common/CartAddButton';
 import { FormAlert } from '../common/FormAlert';
 
 interface GeneratedIntentPanelProps {
   state: AppState;
   onRun: () => void;
+  onAddToCart: () => void;
 }
 
-export function GeneratedIntentPanel({ state, onRun }: GeneratedIntentPanelProps) {
+export function GeneratedIntentPanel({ state, onRun, onAddToCart }: GeneratedIntentPanelProps) {
   const preview = useMemo(() => {
     try {
       const intent = prepareIntent(state);
@@ -51,6 +53,7 @@ export function GeneratedIntentPanel({ state, onRun }: GeneratedIntentPanelProps
           <button type="button" className="btn btn-primary btn-sm" onClick={onRun}>
             Run
           </button>
+          <CartAddButton onClick={onAddToCart} size="sm" />
         </div>
       </div>
       {!preview.ok ? <FormAlert tone="danger">{preview.text}</FormAlert> : null}

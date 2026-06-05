@@ -17,6 +17,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     ...(useStoredState && stored.stored.forms ? { forms: stored.stored.forms } : {}),
     wallet: useStoredState ? stored.stored.wallet || null : null,
     customAssets: useStoredState ? stored.stored.customAssets || {} : {},
+    ...(useStoredState && stored.stored.cart ? { cart: stored.stored.cart } : {}),
   };
   const [state, dispatch] = useReducer(
     appReducer,

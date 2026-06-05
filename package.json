@@ -8,6 +8,7 @@
     "build:devtool":"tsc -p ./src/devtool/tsconfig.json && vite build --config ./src/devtool/vite.config.ts",
     "test:devtool-assets":"node ./scripts/verify-devtool-assets.mjs",
     "dev": "nodemon --watch src/ --ext gcscript,json,jsonc,hl,txt --ignore examples/ --exec \"pnpm run build && pnpm run serve\"",
+    "dev:devtool": "vite --config ./src/devtool/vite.config.ts",
     "serve":"python3 -m http.server 8081 -d ./dist",
 
     "build:open": "gamechanger-cli build -f ./src/intents/open.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/open.gcscript.json",

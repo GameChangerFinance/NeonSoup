@@ -484,6 +484,81 @@ textarea.form-control {
   color: var(--ns-red) !important;
 }
 
+.cart-toggle {
+  position: relative;
+}
+
+.cart-add-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 12px;
+  justify-content: center;
+  min-width: 80px;
+}
+
+.cart-add-button svg {
+  height: 16px;
+  width: 16px;
+}
+
+.cart-add-plus {
+  height: 14px !important;
+  width: 14px !important;
+}
+
+.cart-count-badge {
+  align-items: center;
+  background: var(--ns-green);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  color: #04100a;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  height: 17px;
+  justify-content: center;
+  min-width: 17px;
+  padding: 0 4px;
+  position: absolute;
+  right: -4px;
+  top: -4px;
+}
+
+.cart-number-input {
+  max-width: 82px;
+}
+
+.cart-select-cell {
+  width: 42px;
+}
+
+.cart-row-executed {
+  opacity: 0.66;
+}
+
+.cart-modal {
+  background: rgba(3, 7, 15, 0.62);
+  z-index: 1060;
+}
+
+.cart-modal .modal-content {
+  background: var(--ns-surface);
+  border: 1px solid var(--ns-border-strong);
+  box-shadow: var(--ns-shadow);
+  color: var(--ns-fg);
+}
+
+.cart-modal-backdrop {
+  border: 0;
+  height: 100%;
+  left: 0;
+  padding: 0;
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: -1;
+}
+
 .transaction-table .table td {
   padding-bottom: 12px;
   padding-top: 12px;

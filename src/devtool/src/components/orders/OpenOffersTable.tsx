@@ -1,6 +1,6 @@
 import type { AppState, OpenOffer } from '../../state/types';
 import { assetTitle } from '../../domain/assets';
-import { fromBase } from '../../domain/quantities';
+import { fromBase, ratioDecimal } from '../../domain/quantities';
 import { short } from '../../domain/text';
 import { resolveAsset } from '../../state/selectors';
 import { AssetBadge } from '../assets/AssetBadge';
@@ -39,8 +39,7 @@ export function OpenOffersTable({ state, offers, onFill, onClose }: OpenOffersTa
             const owner = Boolean(
               state.wallet?.stakeKeyHash && state.wallet.stakeKeyHash === offer.ownerStakeKeyHash,
             );
-            const rate = Number(offer.priceNumerator) / Number(offer.priceDenominator || '1');
-            const formattedRate = Number.isFinite(rate) ? rate.toLocaleString(undefined, { maximumFractionDigits: 8 }) : '?';
+            const formattedRate = ratioDecimal(offer.priceNumerator, offer.priceDenominator || '1');
             const utxoRef = `${offer.txHash}#${offer.txIndex}`;
             return (
               <tr key={offer.id} className={offer.id === state.selectedOrderId ? 'table-active' : undefined}>
