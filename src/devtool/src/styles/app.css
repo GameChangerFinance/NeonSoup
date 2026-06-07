@@ -285,6 +285,22 @@ pre.json-scroll {
   color: var(--ns-json-fg);
 }
 
+.json-viewer {
+  position: relative;
+}
+
+.json-viewer pre {
+  padding-top: 2.75rem !important;
+  padding-right: 3.25rem !important;
+}
+
+.json-viewer-copy {
+  position: absolute;
+  top: 0.75rem;
+  right: 1.25rem;
+  z-index: 1;
+}
+
 .mobile-primary {
   position: sticky;
   top: 0;
@@ -532,7 +548,7 @@ textarea.form-control {
   width: 42px;
 }
 
-.cart-row-executed {
+.cart-row-confirmed {
   opacity: 0.66;
 }
 

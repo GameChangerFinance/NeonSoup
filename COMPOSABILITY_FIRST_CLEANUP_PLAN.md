@@ -433,8 +433,8 @@ Illustrative generated shape:
     "execution-id": "full-execution-id",
     "item-count": 1,
     "group-count": 1,
-    "groups": {
-      "0": {
+    "groups": [
+      {
         "group-id": "full-group-id",
         "group-index": 0,
         "group-count": 1,
@@ -449,7 +449,7 @@ Illustrative generated shape:
           }
         }
       }
-    }
+    ]
   },
   "exportAs": "neonsoupExecution",
   "return": { "mode": "last" },

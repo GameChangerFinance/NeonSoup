@@ -60,6 +60,12 @@ wallet-intent loading.
   dialogs, still emit every required GCScript argument. Undefined values in
   earlier nodes such as `plutusData` fail before `buildTx` can provide friendly
   wallet UX.
+- Keep generated GCScript reusable and data-driven. Do not hardcode
+  execution-specific parameter values such as modes, IDs, item data, source
+  references, roles, counts, or indexes inside reusable `run`, `macro`, or
+  `finally` structures. Pass those values through GCScript `args`, propagate
+  args explicitly into nested scripts, and resolve them with ISL
+  `get('args...')`; use `get('cache...')` for wallet-runtime results.
 - The old single-file frontend was ported to Vite React. Keep the devtool
   structure compact and Bootstrap-first unless explicitly requested otherwise.
 - Prefer warnings over input blocking in the devtool UI. Bad values are useful for
@@ -97,15 +103,13 @@ wallet-intent loading.
   `<txHash>#<index>`, not just the transaction hash.
 - Transaction/activity rows should expose useful explorer links, currently
   Cardanoscan by current network.
-- The Developer view should keep generated intent JSON, protocol intent links,
-  wallet return data, intent bundle data, and app state easy to inspect.
+- The Developer view should keep captured wallet return data and app state easy
+  to inspect through the reusable JSON viewer.
 - Theme updates should preserve the former single-file app feel: compact panels,
   dark-first palette, restrained Bootstrap surfaces, and readable JSON boxes.
-- Single Open/Fill/Close actions may remain simple user-facing flows, but the
-  long-term execution model should normalize around selected Cart items as the
-  source of truth. Bundle and parallel execution should compose selected intent
-  fragments mechanically; do not add special transaction-item handling unless a
-  real GC builder/language obstacle is observed and documented.
+- Every Open/Fill/Close execution uses the Cart-item composition pipeline.
+  Direct actions are transient one-item compositions; persisted Cart runs use
+  the same bundle/parallel builders.
 - The Connect wallet intent is independent from the Cart/composability system and
   should keep working as a direct wallet public-data flow.
 

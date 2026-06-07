@@ -145,3 +145,17 @@ export async function fetchPortfolio(context: ProviderContext, address: string):
     }),
   );
 }
+
+export async function fetchConfirmedTransactionHashes(
+  context: ProviderContext,
+  txHashes: string[],
+): Promise<string[]> {
+  const unique = [...new Set(txHashes.filter(Boolean))];
+  const results = await Promise.all(
+    unique.map(async (txHash) => {
+      const tx = await requestJson(`/txs/${txHash}`, context, true);
+      return tx && typeof tx === 'object' ? txHash : '';
+    }),
+  );
+  return results.filter(Boolean);
+}

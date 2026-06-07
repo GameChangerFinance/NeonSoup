@@ -1,7 +1,8 @@
 import type { ViewId } from '../../state/types';
 import { WalletWidget } from './WalletWidget';
 import { useAppDispatch, useAppState } from '../../state/appState';
-import { openWallet } from '../../services/gcWallet';
+import { openWalletCode } from '../../services/gcWallet';
+import { connectIntent } from '../../services/intents';
 import { selectedCartItems } from '../../services/cartIntents';
 
 interface AppShellProps {
@@ -25,7 +26,7 @@ export function AppShell({ children }: AppShellProps) {
 
   async function connect() {
     try {
-      await openWallet(state, 'connect');
+      await openWalletCode(state, connectIntent());
     } catch (error) {
       dispatch({
         type: 'set-notice',

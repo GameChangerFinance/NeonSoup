@@ -5,7 +5,7 @@ export type TradeTab = ActionMode | 'bulk-open';
 export type NetworkProviderKind = 'blockfrost' | 'graphqlMk2';
 export type NoticeTone = 'info' | 'success' | 'warning' | 'danger';
 export type CartExecutionMode = 'bundle' | 'parallel';
-export type CartItemStatus = 'draft' | 'executed' | 'failed';
+export type CartItemStatus = 'draft' | 'pending' | 'confirmed' | 'failed';
 
 export interface AssetRef {
   policyId: string;
@@ -62,14 +62,16 @@ export interface ProtocolTransaction {
   id: string;
   txHash: string;
   action: ActionMode | 'swap';
-  status: 'draft' | 'submitted' | 'confirmed' | 'failed';
+  status: 'submitted' | 'confirmed' | 'failed';
   at: number;
   pair?: AssetPair;
   summary: string;
+  groupId?: string;
+  itemIds?: string[];
 }
 
-export type IntentName = 'open' | 'fill' | 'close' | 'connect';
 export type IntentArgs = Record<string, string>;
+export type GcscriptArgs = Record<string, unknown>;
 
 export interface IntentTemplate {
   code: {
@@ -77,35 +79,65 @@ export interface IntentTemplate {
     title?: string;
     description?: string;
     exportAs?: string;
-    args?: IntentArgs;
+    args?: GcscriptArgs;
     returnURLPattern?: string;
     [key: string]: unknown;
   };
 }
 
-export interface IntentSelection {
-  id: string;
-  name: Exclude<IntentName, 'connect'>;
-  args: IntentArgs;
-  sourceOfferId?: string;
-}
-
-export interface IntentBundle {
-  id: string;
-  selections: IntentSelection[];
-}
-
 export interface CartItem {
   id: string;
-  name: Exclude<IntentName, 'connect'>;
+  name: ActionMode;
   args: IntentArgs;
   selected: boolean;
   status: CartItemStatus;
   createdAt: number;
-  executedAt?: number;
+  pendingAt?: number;
+  confirmedAt?: number;
+  txHash?: string;
+  groupId?: string;
+  groupIndex?: number;
+  expectedOutputs?: ExecutionOutputRef[];
   sourceOfferId?: string;
   sourceLabel?: string;
   pair?: AssetPair;
+}
+
+export interface ExecutionOutputRef {
+  role: 'openedOffer' | 'remainingOffer' | 'filledOffer' | 'closedFunds';
+  index: string | number;
+}
+
+export interface ExecutionReceiptItem {
+  itemId: string;
+  intentId: string;
+  type: ActionMode;
+  itemIndex: number;
+  groupId: string;
+  groupIndex: number;
+  groupItemIndex: number;
+  txHash: string;
+  sourceOfferId?: string;
+  sourceUtxo?: {
+    txHash: string;
+    index: string;
+  };
+  outputs: ExecutionOutputRef[];
+}
+
+export interface ExecutionReceiptGroup {
+  groupId: string;
+  groupIndex: number;
+  groupCount: number;
+  txHash: string;
+  items: ExecutionReceiptItem[];
+}
+
+export interface NeonSoupExecutionReceipt {
+  executionId: string;
+  itemCount: number;
+  groupCount: number;
+  items: ExecutionReceiptItem[];
 }
 
 export interface CartState {
@@ -113,7 +145,7 @@ export interface CartState {
   mode: CartExecutionMode;
   maxIntentsPerTransaction: number;
   modalOpen: boolean;
-  showExecutedOnly: boolean;
+  showConfirmedOnly: boolean;
 }
 
 export interface WalletConnection {
@@ -163,9 +195,6 @@ export interface AppState {
   options: AppOptions;
   forms: FormState;
   wallet: WalletConnection | null;
-  intents: Partial<Record<IntentName, IntentTemplate>>;
-  intentArgs: Record<ActionMode, IntentArgs>;
-  intentBundle: IntentBundle;
   cart: CartState;
   lastWalletReturn: unknown;
   openOffers: OpenOffer[];
@@ -181,45 +210,41 @@ export interface AppState {
   loading: {
     offers: boolean;
     portfolio: boolean;
-    intents: boolean;
   };
 }
 
 export type AppAction =
   | { type: 'replace-state'; state: AppState }
   | { type: 'set-view'; view: ViewId }
-  | { type: 'set-action'; action: ActionMode }
   | { type: 'set-trade-tab'; tab: TradeTab }
   | { type: 'set-options'; options: Partial<AppOptions> }
   | { type: 'set-forms'; forms: Partial<FormState> }
   | { type: 'set-wallet'; wallet: WalletConnection | null }
   | { type: 'set-wallet-return'; payload: unknown }
-  | { type: 'set-intents'; intents: Partial<Record<IntentName, IntentTemplate>> }
-  | { type: 'set-intent-args'; action: ActionMode; args: IntentArgs }
   | { type: 'add-cart-item'; item: CartItem }
   | { type: 'add-cart-items'; items: CartItem[] }
   | { type: 'remove-cart-item'; itemId: string }
   | { type: 'remove-cart-items'; itemIds: string[] }
-  | { type: 'clear-cart' }
-  | { type: 'purge-executed-cart-items' }
-  | { type: 'toggle-cart-item'; itemId: string }
+  | { type: 'purge-confirmed-cart-items' }
   | { type: 'select-all-visible-cart-items' }
   | { type: 'deselect-all-cart-items' }
   | { type: 'set-cart-item-selected'; itemId: string; selected: boolean }
   | { type: 'set-cart-items-selected'; itemIds: string[]; selected: boolean }
-  | { type: 'mark-cart-items-executed'; itemIds: string[]; executedAt: number }
+  | { type: 'apply-execution-receipt'; receipt: NeonSoupExecutionReceipt; at: number }
+  | { type: 'confirm-cart-items'; itemIds: string[]; confirmedAt: number }
+  | { type: 'requeue-cart-item'; itemId: string }
   | { type: 'set-cart-mode'; mode: CartExecutionMode }
   | { type: 'set-cart-max-intents-per-transaction'; value: number }
   | { type: 'set-cart-modal-open'; open: boolean }
-  | { type: 'set-cart-show-executed-only'; showExecutedOnly: boolean }
+  | { type: 'set-cart-show-confirmed-only'; showConfirmedOnly: boolean }
   | { type: 'set-open-offers'; offers: OpenOffer[] }
   | { type: 'set-portfolio'; portfolio: PortfolioAsset[] }
   | { type: 'set-asset-info'; assets: Record<string, ResolvedAsset> }
   | { type: 'set-custom-assets'; network: NetworkTag; assets: Record<string, AssetMetadata> }
   | { type: 'set-selected-order'; orderId: string }
   | { type: 'set-selected-pair'; pair: AssetPair | null }
-  | { type: 'set-intent-bundle'; bundle: IntentBundle }
   | { type: 'add-transaction'; tx: ProtocolTransaction }
+  | { type: 'confirm-transactions'; txHashes: string[] }
   | { type: 'set-notice'; key: keyof AppState['notices']; notice: Notice | null }
   | { type: 'set-loading'; key: keyof AppState['loading']; value: boolean }
   | { type: 'select-offer-for-fill'; offer: OpenOffer; amount: string }

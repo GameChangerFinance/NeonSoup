@@ -5,7 +5,6 @@ import { resolveAsset } from '../../state/selectors';
 import { selectedCartItems, visibleCartItems } from '../../services/cartIntents';
 import { CopyIcon } from '../common/CopyIcon';
 import { EmptyState } from '../common/EmptyState';
-import { FormAlert } from '../common/FormAlert';
 
 interface CartPanelProps {
   state: AppState;
@@ -42,7 +41,8 @@ function sourceRef(item: CartItem): string {
 }
 
 function statusClass(status: CartItem['status']): string {
-  if (status === 'executed') return 'text-bg-success';
+  if (status === 'confirmed') return 'text-bg-success';
+  if (status === 'pending') return 'text-bg-info';
   if (status === 'failed') return 'text-bg-danger';
   return 'text-bg-secondary';
 }
@@ -52,7 +52,17 @@ export function CartPanel({ state, dispatch, onRunSelected, embedded = false }: 
   const selectedItems = selectedCartItems(state.cart);
   const selectedVisibleIds = visibleItems.filter((item) => item.selected).map((item) => item.id);
   const allVisibleSelected = visibleItems.length > 0 && visibleItems.every((item) => item.selected);
-  const executedCount = state.cart.items.filter((item) => item.status === 'executed').length;
+  const confirmedCount = state.cart.items.filter((item) => item.status === 'confirmed').length;
+
+  function requeue(item: CartItem) {
+    if (
+      item.status === 'pending' &&
+      !window.confirm('This intent already has a submitted transaction. Requeueing may create a duplicate or double-spend attempt. Continue?')
+    ) {
+      return;
+    }
+    dispatch({ type: 'requeue-cart-item', itemId: item.id });
+  }
 
   return (
     <section className={embedded ? '' : 'app-card p-3 p-lg-4'}>
@@ -118,32 +128,26 @@ export function CartPanel({ state, dispatch, onRunSelected, embedded = false }: 
         <button
           type="button"
           className="btn btn-outline-danger btn-sm"
-          disabled={!executedCount}
-          onClick={() => dispatch({ type: 'purge-executed-cart-items' })}
+          disabled={!confirmedCount}
+          onClick={() => dispatch({ type: 'purge-confirmed-cart-items' })}
         >
-          Purge executed
+          Purge confirmed
         </button>
         <div className="form-check form-switch d-flex align-items-center gap-2 mb-0 ms-lg-auto">
           <input
-            id="cart-show-executed-only"
+            id="cart-show-confirmed-only"
             className="form-check-input"
             type="checkbox"
-            checked={state.cart.showExecutedOnly}
+            checked={state.cart.showConfirmedOnly}
             onChange={(event) =>
-              dispatch({ type: 'set-cart-show-executed-only', showExecutedOnly: event.target.checked })
+              dispatch({ type: 'set-cart-show-confirmed-only', showConfirmedOnly: event.target.checked })
             }
           />
-          <label className="form-check-label small" htmlFor="cart-show-executed-only">
-            Show executed only
+          <label className="form-check-label small" htmlFor="cart-show-confirmed-only">
+            Show confirmed only
           </label>
         </div>
       </div>
-
-      {state.cart.mode === 'bundle' ? (
-        <FormAlert tone="info">Bundling is scaffolded. Final composable GCScript generation is intentionally pending.</FormAlert>
-      ) : (
-        <FormAlert tone="info">Parallel execution is scaffolded. Final composable GCScript generation is intentionally pending.</FormAlert>
-      )}
 
       {visibleItems.length ? (
         <div className="table-responsive scroll-panel">
@@ -176,7 +180,7 @@ export function CartPanel({ state, dispatch, onRunSelected, embedded = false }: 
               {visibleItems.map((item) => {
                 const ref = sourceRef(item);
                 return (
-                  <tr key={item.id} className={item.status === 'executed' ? 'cart-row-executed' : undefined}>
+                  <tr key={item.id} className={item.status === 'confirmed' ? 'cart-row-confirmed' : undefined}>
                     <td>
                       <input
                         className="form-check-input"
@@ -213,13 +217,26 @@ export function CartPanel({ state, dispatch, onRunSelected, embedded = false }: 
                     </td>
                     <td>
                       <span className={`badge rounded-pill ${statusClass(item.status)}`}>{item.status}</span>
-                      {item.executedAt ? (
-                        <div className="small text-body-secondary mt-1">{new Date(item.executedAt).toLocaleString()}</div>
+                      {item.pendingAt ? (
+                        <div className="small text-body-secondary mt-1">Submitted {new Date(item.pendingAt).toLocaleString()}</div>
+                      ) : null}
+                      {item.confirmedAt ? (
+                        <div className="small text-body-secondary mt-1">Confirmed {new Date(item.confirmedAt).toLocaleString()}</div>
                       ) : null}
                     </td>
                     <td className="small text-body-secondary">{new Date(item.createdAt).toLocaleString()}</td>
                     <td>
-                      <div className="d-flex justify-content-end">
+                      <div className="d-flex justify-content-end gap-2">
+                        {item.status === 'pending' || item.status === 'failed' ? (
+                          <button
+                            type="button"
+                            className="btn btn-outline-warning btn-sm"
+                            title={item.status === 'pending' ? 'Requeueing may duplicate a submitted transaction' : 'Requeue intent'}
+                            onClick={() => requeue(item)}
+                          >
+                            Requeue
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="btn btn-outline-danger btn-sm"
@@ -238,7 +255,7 @@ export function CartPanel({ state, dispatch, onRunSelected, embedded = false }: 
       ) : (
         <EmptyState
           title={state.cart.items.length ? 'No Cart items match this filter.' : 'Cart is empty.'}
-          detail={state.cart.items.length ? 'Toggle Show executed only to switch between pending and executed items.' : 'Add Open, Fill, Close, or Bulk-Open intents.'}
+          detail={state.cart.items.length ? 'Toggle Show confirmed only to switch between active and confirmed items.' : 'Add Open, Fill, Close, or Bulk-Open intents.'}
         />
       )}
     </section>

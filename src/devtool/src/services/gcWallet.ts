@@ -1,6 +1,5 @@
 import { APP_CONFIG } from '../config/appConfig';
-import type { AppState, IntentName, IntentTemplate, WalletConnection } from '../state/types';
-import { cleanReturnUrl, prepareIntent } from './intents';
+import type { AppState, IntentTemplate, WalletConnection } from '../state/types';
 import { clearWalletReturn, writeWalletReturn } from './storage';
 import { text } from '../domain/text';
 import { getGcRuntime } from './gcRuntime';
@@ -14,25 +13,6 @@ export async function walletUrlForCode(state: AppState, code: IntentTemplate['co
     encoding: APP_CONFIG.encoding as 'gzip',
     disableNetworkRouter: false,
   });
-}
-
-export async function walletUrl(state: AppState, intent: IntentName = state.action): Promise<string> {
-  const code = intent === 'connect' ? prepareConnectIntent(state.intents.connect) : prepareIntent(state, intent);
-  if (!code) throw new Error(`Intent ${intent} is not loaded`);
-  return walletUrlForCode(state, code);
-}
-
-function prepareConnectIntent(template?: IntentTemplate): IntentTemplate['code'] | null {
-  if (!template?.code) return null;
-  return {
-    ...JSON.parse(JSON.stringify(template.code)),
-    returnURLPattern: cleanReturnUrl(),
-  };
-}
-
-export async function openWallet(state: AppState, intent: IntentName = state.action): Promise<void> {
-  const url = await walletUrl(state, intent);
-  openWalletUrl(state, url);
 }
 
 export function openWalletUrl(state: AppState, url: string): void {

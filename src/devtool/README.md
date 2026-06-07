@@ -31,10 +31,14 @@ VITE_NEONSOUP_MAINNET_BLOCKFROST_KEY=
 VITE_NEONSOUP_PREPROD_GRAPHQL_MK2_URL=
 VITE_NEONSOUP_MAINNET_GRAPHQL_MK2_URL=
 VITE_NEONSOUP_BUILD_TAG=
+NEONSOUP_GOOGLE_ANALYTICS_ID=
 ```
 
 The Options view can still override provider URL/API key at runtime in browser
 localStorage. Source defaults should stay secret-free.
+
+Google Analytics is omitted from generated HTML unless
+`NEONSOUP_GOOGLE_ANALYTICS_ID` is set at build or dev-server startup.
 
 The persisted app-state version uses SemVer build metadata:
 `package.json` version + `VITE_NEONSOUP_BUILD_TAG` (for example
@@ -46,7 +50,7 @@ user replaces incompatible local state with current defaults.
 
 - `src/config/`: app, network, and trusted asset defaults
 - `src/state/`: serializable reducer/context app state
-- `src/services/`: wallet, intent loading, storage, and network providers
+- `src/services/`: wallet, composable intent execution, storage, and network providers
 - `src/domain/`: Cardano, asset, text, and quantity helpers
 - `src/components/`: Bootstrap 5 UI components
 
@@ -57,15 +61,14 @@ debugging tool.
 
 ## Views
 
-- `Trade`: pair selector, Open/Fill/Close forms, generated action state, and pair
-  offers.
+- `Trade`: pair selector, Open/Fill/Close forms, direct one-item composition,
+  and pair offers.
 - `Orders`: open offer table with Fill/Close actions.
 - `Activity`: protocol UTxO activity and wallet-return transactions, with
   current-network Cardanoscan links.
 - `User`: portfolio, user's open offers, and protocol transaction history.
 - `Options`: network/provider settings, UI flags, and custom asset definitions.
-- `Developer`: protocol intent links, generated intent preview, captured wallet
-  return data, intent bundle, and app state.
+- `Developer`: captured wallet return data and app state.
 
 ## UI And Data Rules
 
@@ -89,12 +92,22 @@ debugging tool.
   version/build tag and rely on the centralized update banner for incompatible
   state shapes.
 
+## Composable Execution
+
+- Every Open, Fill, and Close run uses the same Cart-item composition pipeline.
+  Direct actions are transient one-item compositions; Cart runs execute
+  persisted selected items in bundle or parallel mode.
+- Connect Wallet remains outside protocol composition and launches explicit
+  GCScript through the same generic wallet-code transport.
+- Opening or closing the wallet does not change Cart lifecycle state. A compact
+  returned `neonsoupExecution` receipt moves matching items to pending; positive
+  network observations move them to confirmed.
+- Generated protocol GCScripts keep signed transaction CBOR internal to wallet
+  sign/submit steps. Return receipts are composed with GCScript macro/ISL from
+  explicit args and wallet-runtime build results.
+
 ## Future Work Notes
 
 - Cardano GraphQL MKII is scaffolded as a provider option and is expected to
   become the default network provider later; Blockfrost remains the current
   working provider.
-- State is shaped for future intent composability. The current UI edits one
-  selected action at a time, but intent bundles should remain first-class so
-  future multi-fill swaps and bulk order creation can compose several protocol
-  intents.

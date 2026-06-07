@@ -1,7 +1,7 @@
 import type { AppState, CartItem, CartState, IntentArgs } from '../state/types';
 import { assetTitle } from '../domain/assets';
 import { fromBase, gcd } from '../domain/quantities';
-import { selectedOffer } from '../state/selectors';
+import { resolveAsset, selectedOffer } from '../state/selectors';
 import { buildArgsForAction, buildOpenArgs, newIntentId } from './intents';
 
 export interface CartValidationResult {
@@ -15,14 +15,25 @@ function sourceRef(item: CartItem): string {
   return txHash && txIndex ? `${txHash}#${txIndex}` : '';
 }
 
-function sourceLabelForCurrentAction(state: AppState): string {
-  if (state.action === 'open') return 'Open offer';
+function sourceLabelForCurrentAction(state: AppState, args: IntentArgs): string {
+  const offered = state.assetInfo[state.forms.openOfferAssetKey];
+  const asked = state.assetInfo[state.forms.openAskAssetKey];
   const offer = selectedOffer(state);
-  return offer ? `${state.action === 'fill' ? 'Fill' : 'Close'} ${offer.txHash}#${offer.txIndex}` : state.action;
+  const offerAsset = offer ? resolveAsset(state, offer.offerPolicyId, offer.offerAssetName) : offered;
+  const askAsset = offer ? resolveAsset(state, offer.askPolicyId, offer.askAssetName) : asked;
+  const action = state.action === 'open' ? 'Open' : state.action === 'fill' ? 'Fill' : 'Close';
+  const offerAmount =
+    offerAsset && args['offer-quantity'] ? `${fromBase(args['offer-quantity'], offerAsset.decimals)} ${assetTitle(offerAsset)}` : '';
+  const askAmount =
+    askAsset && args['ask-quantity'] ? `${fromBase(args['ask-quantity'], askAsset.decimals)} ${assetTitle(askAsset)}` : '';
+  const pair = offerAsset && askAsset ? `${assetTitle(offerAsset)} → ${assetTitle(askAsset)}` : 'offer';
+  if (state.action === 'open' && offerAmount && askAsset && state.forms.openAskAmount) {
+    return `${action} ${offerAmount} → ${state.forms.openAskAmount} ${assetTitle(askAsset)}`;
+  }
+  return `${action} ${offerAmount || pair}${askAmount ? ` → ${askAmount}` : ''}`;
 }
 
-function pairForCurrentAction(state: AppState): CartItem['pair'] {
-  const args = buildArgsForAction(state);
+function pairForArgs(args: IntentArgs): CartItem['pair'] {
   const offerPolicyId = args['offer-policy-id'];
   const offerAssetName = args['offer-asset-name'];
   const askPolicyId = args['ask-policy-id'];
@@ -34,19 +45,13 @@ function pairForCurrentAction(state: AppState): CartItem['pair'] {
   };
 }
 
-interface CreateCartItemOptions {
-  freshIntentId?: boolean;
-}
-
-export function createCartItemFromCurrentIntent(state: AppState, options: CreateCartItemOptions = {}): CartItem {
+export function createCartItemFromCurrentIntent(state: AppState): CartItem {
   const args = {
     ...buildArgsForAction(state),
   };
-  if (options.freshIntentId) {
-    args['intent-id'] = `${newIntentId(state.action)}-${Math.floor(Math.random() * 1_000_000)}`;
-  }
   const intentId = args['intent-id'] || newIntentId(state.action);
-  const pair = pairForCurrentAction(state);
+  args['intent-id'] = intentId;
+  const pair = pairForArgs(args);
   const item = {
     id: `${state.action}-${intentId}`,
     name: state.action,
@@ -55,7 +60,7 @@ export function createCartItemFromCurrentIntent(state: AppState, options: Create
     status: 'draft',
     createdAt: Date.now(),
     ...(state.selectedOrderId ? { sourceOfferId: state.selectedOrderId } : {}),
-    sourceLabel: sourceLabelForCurrentAction(state),
+    sourceLabel: sourceLabelForCurrentAction(state, args),
     ...(pair ? { pair } : {}),
   } satisfies CartItem;
   return item;
@@ -103,10 +108,6 @@ export function createBulkOpenCartItems(
   const baseArgs = buildOpenArgs(state);
   const offerAsset = state.assetInfo[state.forms.openOfferAssetKey];
   const askAsset = state.assetInfo[state.forms.openAskAssetKey];
-  const label =
-    offerAsset && askAsset
-      ? `Open ${assetTitle(offerAsset)} asking ${assetTitle(askAsset)}`
-      : 'Open offer';
   const pair =
     baseArgs['offer-policy-id'] && baseArgs['ask-policy-id']
       ? {
@@ -135,6 +136,11 @@ export function createBulkOpenCartItems(
       'price-numerator': price.numerator,
       'price-denominator': price.denominator,
     };
+    const askQuantity =
+      args['offer-quantity'] && BigInt(args['price-denominator'] || '0') > 0n
+        ? (BigInt(args['offer-quantity']) * BigInt(args['price-numerator'] || '0')) /
+          BigInt(args['price-denominator'] || '1')
+        : 0n;
     return {
       id: `open-${intentId}`,
       name: 'open',
@@ -143,9 +149,9 @@ export function createBulkOpenCartItems(
       status: 'draft',
       createdAt: Date.now(),
       sourceLabel:
-        offerAsset && args['offer-quantity']
-          ? `${label} ${fromBase(args['offer-quantity'], offerAsset.decimals)}`
-          : label,
+        offerAsset && askAsset && args['offer-quantity']
+          ? `Open ${fromBase(args['offer-quantity'], offerAsset.decimals)} ${assetTitle(offerAsset)} → ${fromBase(askQuantity, askAsset.decimals)} ${assetTitle(askAsset)}`
+          : 'Open offer',
       ...(pair ? { pair } : {}),
     } satisfies CartItem;
   });
@@ -156,14 +162,9 @@ export function selectedCartItems(cart: CartState): CartItem[] {
 }
 
 export function visibleCartItems(cart: CartState): CartItem[] {
-  return cart.showExecutedOnly
-    ? cart.items.filter((item) => item.status === 'executed')
-    : cart.items.filter((item) => item.status !== 'executed');
-}
-
-export function selectedSingleCartItem(cart: CartState): CartItem | null {
-  const selected = cart.items.filter((item) => item.selected && item.status === 'draft');
-  return selected.length === 1 ? selected[0] || null : null;
+  return cart.showConfirmedOnly
+    ? cart.items.filter((item) => item.status === 'confirmed')
+    : cart.items.filter((item) => item.status !== 'confirmed');
 }
 
 export function validateCartItemsCanBeAdded(cart: CartState, items: CartItem[]): CartValidationResult {

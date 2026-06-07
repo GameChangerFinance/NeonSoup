@@ -1,5 +1,5 @@
 import type { AppState, OpenOffer, PortfolioAsset, ResolvedAsset } from '../state/types';
-import { fetchAssetInfo, fetchOpenOffers, fetchPortfolio } from './blockfrost';
+import { fetchAssetInfo, fetchConfirmedTransactionHashes, fetchOpenOffers, fetchPortfolio } from './blockfrost';
 import { fetchGraphqlMk2OpenOffers, fetchGraphqlMk2Portfolio } from './graphqlMk2';
 
 function context(state: AppState) {
@@ -27,4 +27,9 @@ export async function loadOpenOffers(state: AppState): Promise<OpenOffer[]> {
 export async function loadPortfolio(state: AppState, address: string): Promise<PortfolioAsset[]> {
   if (state.options.provider === 'graphqlMk2') return fetchGraphqlMk2Portfolio();
   return fetchPortfolio(context(state), address);
+}
+
+export async function loadConfirmedTransactionHashes(state: AppState, txHashes: string[]): Promise<string[]> {
+  if (state.options.provider === 'graphqlMk2') return [];
+  return fetchConfirmedTransactionHashes(context(state), txHashes);
 }

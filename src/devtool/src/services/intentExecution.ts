@@ -2,7 +2,14 @@ import commonLibSource from '../../../intents/lib/common.gcscript.jsonc?raw';
 import openLibSource from '../../../intents/lib/open.gcscript.jsonc?raw';
 import closeLibSource from '../../../intents/lib/close.gcscript.jsonc?raw';
 import swapLibSource from '../../../intents/lib/swap.gcscript.jsonc?raw';
-import type { AppState, CartItem, IntentTemplate } from '../state/types';
+import type {
+  AppState,
+  CartItem,
+  ExecutionReceiptItem,
+  GcscriptArgs,
+  IntentTemplate,
+  NeonSoupExecutionReceipt,
+} from '../state/types';
 import { getGcRuntime } from './gcRuntime';
 import { cleanReturnUrl } from './intents';
 
@@ -26,7 +33,10 @@ interface ComposeGroup {
 
 interface ComposeEntry {
   item: CartItem;
-  step: string;
+  itemIndex: number;
+  groupIndex: number;
+  groupItemIndex: number;
+  stepKey: string;
   cachePath: string;
 }
 
@@ -55,15 +65,11 @@ function chunkItems(items: CartItem[], maxSize: number): ComposeGroup[] {
   const groups: ComposeGroup[] = [];
   for (let index = 0; index < items.length; index += size) {
     groups.push({
-      id: rootId,
+      id: `${rootId}-${index + 1}`,
       items: items.slice(index, index + size),
     });
   }
   return groups;
-}
-
-function cartItemStepName(item: CartItem, index: number): string {
-  return `${item.name}${index}`;
 }
 
 function libImportFor(item: CartItem): { key: string; uri: string } {
@@ -72,28 +78,19 @@ function libImportFor(item: CartItem): { key: string; uri: string } {
   return { key: 'close', uri: 'app://lib/close.gcscript.jsonc' };
 }
 
-function importArgsFor(item: CartItem): unknown {
-  if (item.name === 'open') return item.args;
-  if (item.name === 'fill') {
-    return {
-      ...item.args,
-      'offer-address': "{get('cache.myAddress')}",
-    };
-  }
-  if (item.name === 'close') {
-    return {
-      ...item.args,
-      'offer-address': item.args['offer-address'] || "{get('cache.myAddress')}",
-    };
-  }
-  return item.args;
+function argRefsFor(item: CartItem, itemIndex: number): GcNode {
+  const args = Object.fromEntries(
+    Object.keys(item.args).map((key) => [key, `{get('args.items.${itemIndex}.protocol-args.${key}')}`]),
+  );
+  if (item.name === 'fill' || item.name === 'close') args['offer-address'] = "{get('cache.myAddress')}";
+  return args;
 }
 
-function importStepFor(entries: Array<{ item: CartItem; step: string }>): GcNode {
+function importStepFor(entries: ComposeEntry[]): GcNode {
   return {
     type: '$importAsScript',
-    argsByKey: Object.fromEntries(entries.map(({ item, step }) => [step, importArgsFor(item)])),
-    from: Object.fromEntries(entries.map(({ item, step }) => [step, libImportFor(item).uri])),
+    argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex)])),
+    from: Object.fromEntries(entries.map((entry) => [entry.stepKey, libImportFor(entry.item).uri])),
   };
 }
 
@@ -103,49 +100,67 @@ function txFeatureReturnUrl(): string {
   return url.toString().replace('%7BtxHash%7D', '{txHash}');
 }
 
-function metadataMsgFor(group: ComposeGroup): string[] {
+function compactId(value: string): string {
+  return value.length > 11 ? `${value.slice(0, 4)}...${value.slice(-4)}` : value;
+}
+
+function rootTitle(items: CartItem[]): string {
+  if (items.length !== 1) return '🍲 NeonSoup Cart';
+  const [item] = items;
+  if (!item) return '🍲 NeonSoup Cart';
+  const action = actionLabel(item);
+  return `🍲 NeonSoup ${action} Offer`;
+}
+
+function transactionTitle(group: ComposeGroup, totalItems: number): string {
+  const first = group.items[0];
+  if (group.items.length === 1 && first) return `🍲 NeonSoup ${first.sourceLabel || `${actionLabel(first)} Offer`}`;
+  return `🍲 NeonSoup Cart · ${group.items.length}/${totalItems}`;
+}
+
+function groupSummary(group: ComposeGroup, totalItems: number): string {
+  const first = group.items[0];
+  const sameAction = first && group.items.every((item) => item.name === first.name);
+  if (!sameAction) return `Executing ${group.items.length}/${totalItems} Cart intents`;
+  const verb = first.name === 'open' ? 'Opening' : first.name === 'fill' ? 'Filling' : 'Closing';
+  return `${verb} ${group.items.length}/${totalItems} offers`;
+}
+
+function metadataMsgFor(group: ComposeGroup, totalItems: number, allItems: CartItem[]): string[] {
   const items = group.items.slice(0, 8);
   const lines = items.flatMap((item, index) => {
     const ref = item.args['utxo-tx-hash']
-      ? ` ${item.args['utxo-tx-hash'].slice(0, 8)}#${item.args['utxo-tx-index'] || '0'}`
+      ? ` · ${compactId(item.args['utxo-tx-hash'])}#${item.args['utxo-tx-index'] || '0'}`
       : '';
-    return [`${index + 1}. ${actionLabel(item)}${ref}\n`];
+    return [
+      `${index + 1}. ${(item.sourceLabel || actionLabel(item)).slice(0, 38)}${ref}\n`,
+      `Item ${compactId(item.id)}\n`,
+    ];
   });
   if (group.items.length > items.length) lines.push(`+${group.items.length - items.length} more\n`);
-  return ['🍲 NeonSoup composed tx\n', `Group ${group.id}\n`, ...lines];
+  return [rootTitle(allItems) + '\n', groupSummary(group, totalItems) + '\n', `Group ${compactId(group.id)}\n`, ...lines];
 }
 
-function buildFeaturesFor(group: ComposeGroup, index: number, total: number): GcNode {
-  const tags = ['p2p-defi-kernel', 'neonsoup', ...new Set(group.items.map((item) => item.name))];
-  const first = group.items[0];
-  const action = first && group.items.every((item) => item.name === first.name) ? first.name : 'compose';
-  const title =
-    action === 'open'
-      ? `🟢 Open ${group.items.length}`
-      : action === 'fill'
-        ? `🔁 Fill ${group.items.length}`
-        : action === 'close'
-          ? `🔴 Close ${group.items.length}`
-          : `🍲 Compose ${group.items.length}`;
+function buildFeaturesFor(argsPath: string): GcNode {
   return {
-    title,
-    id: `${group.id}-${index + 1}of${total}`,
-    tags,
-    group: group.id,
-    indexOf: index + 1,
+    title: `{get('${argsPath}.build-title')}`,
+    id: `{get('${argsPath}.build-id')}`,
+    tags: `{get('${argsPath}.tags')}`,
+    group: `{get('${argsPath}.group-id')}`,
+    indexOf: `{get('${argsPath}.index-of')}`,
     returnURLPattern: txFeatureReturnUrl(),
   };
 }
 
-function auxiliaryDataFor(group: ComposeGroup): GcNode {
+function auxiliaryDataFor(argsPath: string): GcNode {
   return {
     '674': {
-      msg: metadataMsgFor(group),
+      msg: `{get('${argsPath}.metadata-msg')}`,
     },
   };
 }
 
-function mechanicalTxFor(entries: ComposeEntry[], group: ComposeGroup): GcNode {
+function mechanicalTxFor(entries: ComposeEntry[], argsPath: string): GcNode {
   const mints = entries
     .filter(({ item }) => item.name === 'open' || item.name === 'close')
     .map(({ cachePath }) => `{get('cache.${cachePath}.tx.mints.beacons')}`);
@@ -184,72 +199,157 @@ function mechanicalTxFor(entries: ComposeEntry[], group: ComposeGroup): GcNode {
     .filter(({ item }) => item.name === 'close')
     .map(({ cachePath }) => `{get('cache.${cachePath}.tx.requiredSigners.0')}`);
 
+  const run: GcNode = {
+    outputs,
+    options: {
+      collateralCoinSelection: 'LASLAD',
+    },
+    auxiliaryData: auxiliaryDataFor(argsPath),
+  };
+  const tx: GcNode = {
+    type: 'macro',
+    run,
+  };
+  if (inputs.length) run.inputs = inputs;
+  if (mints.length) run.mints = mints;
+  if (scripts.length || consumers.length) {
+    const plutus: GcNode = {};
+    if (scripts.length) plutus.scripts = scripts;
+    if (consumers.length) plutus.consumers = consumers;
+    run.witnesses = { plutus };
+  }
+  if (requiredSigners.length) run.requiredSigners = requiredSigners;
+  return tx;
+}
+
+function groupEntries(group: ComposeGroup, groupIndex: number, globalOffset: number): ComposeEntry[] {
+  return group.items.map((item, groupItemIndex) => ({
+    item,
+    itemIndex: globalOffset + groupItemIndex,
+    groupIndex,
+    groupItemIndex,
+    stepKey: String(globalOffset + groupItemIndex),
+    cachePath: `intents.${globalOffset + groupItemIndex}`,
+  }));
+}
+
+interface ReceiptGroupSource {
+  group: ComposeGroup;
+  buildCachePath: string;
+  entries: ComposeEntry[];
+}
+
+function intentTag(item: CartItem): string {
+  const action = item.name === 'fill' ? 'swap' : item.name;
+  return `P2PDeFiKernel-OWS-${action}-${item.args['intent-id']}`;
+}
+
+function outputArgs(item: CartItem): Array<{ role: ExecutionReceiptItem['outputs'][number]['role']; idPattern: string }> {
+  const tag = intentTag(item);
+  if (item.name === 'open') return [{ role: 'openedOffer', idPattern: `${tag}-offerWithBeacons` }];
+  if (item.name === 'fill') {
+    return [
+      { role: 'filledOffer', idPattern: `${tag}-filledOffer` },
+      { role: 'remainingOffer', idPattern: `${tag}-remainingOfferWithBeacons` },
+    ];
+  }
+  return [{ role: 'closedFunds', idPattern: `${tag}-unfilledOffer` }];
+}
+
+function receiptArgs(mode: 'bundle' | 'parallel', executionId: string, sources: ReceiptGroupSource[]): GcscriptArgs {
+  const items = sources.flatMap(({ group }) => group.items);
+  return {
+    mode,
+    'execution-id': executionId,
+    'item-count': items.length,
+    'group-count': sources.length,
+    groups: sources.map(({ group }, groupIndex) => ({
+      'group-id': group.id,
+      'group-index': groupIndex,
+      'group-count': sources.length,
+      'build-title': transactionTitle(group, items.length),
+      'build-id': `${group.id}-${groupIndex + 1}of${sources.length}`,
+      tags: ['p2p-defi-kernel', 'neonsoup', ...new Set(group.items.map((item) => item.name))],
+      'index-of': groupIndex + 1,
+      'metadata-msg': metadataMsgFor(group, items.length, items),
+    })),
+    items: sources.flatMap(({ entries }) =>
+      entries.map((entry) => ({
+        'item-id': entry.item.id,
+        'intent-id': entry.item.args['intent-id'],
+        type: entry.item.name,
+        'item-index': entry.itemIndex,
+        'group-index': entry.groupIndex,
+        'group-item-index': entry.groupItemIndex,
+        'protocol-args': entry.item.args,
+        ...(entry.item.sourceOfferId ? { 'source-offer-id': entry.item.sourceOfferId } : {}),
+        ...(entry.item.args['utxo-tx-hash']
+          ? {
+              'source-utxo': {
+                'tx-hash': entry.item.args['utxo-tx-hash'],
+                index: entry.item.args['utxo-tx-index'] || '0',
+              },
+            }
+          : {}),
+        outputs: outputArgs(entry.item),
+      })),
+    ),
+  };
+}
+
+function receiptMacro(sources: ReceiptGroupSource[]): GcNode {
+  const entries = sources.flatMap((source) =>
+    source.entries.map((entry) => ({
+      ...entry,
+      group: source.group,
+      buildCachePath: source.buildCachePath,
+    })),
+  );
   return {
     type: 'macro',
     run: {
-      inputs,
-      mints,
-      outputs,
-      witnesses: {
-        plutus: {
-          scripts,
-          consumers,
-        },
-      },
-      requiredSigners,
-      options: {
-        collateralCoinSelection: 'LASLAD',
-      },
-      auxiliaryData: auxiliaryDataFor(group),
+      executionId: "{get('args.execution-id')}",
+      itemCount: "{get('args.item-count')}",
+      groupCount: "{get('args.group-count')}",
+      items: entries.map((entry) => ({
+        itemId: `{get('args.items.${entry.itemIndex}.item-id')}`,
+        intentId: `{get('args.items.${entry.itemIndex}.intent-id')}`,
+        type: `{get('args.items.${entry.itemIndex}.type')}`,
+        itemIndex: `{get('args.items.${entry.itemIndex}.item-index')}`,
+        groupId: `{get('args.groups.${entry.groupIndex}.group-id')}`,
+        groupIndex: `{get('args.items.${entry.itemIndex}.group-index')}`,
+        groupItemIndex: `{get('args.items.${entry.itemIndex}.group-item-index')}`,
+        txHash: `{get('cache.${entry.buildCachePath}.txHash')}`,
+        ...(entry.item.sourceOfferId ? { sourceOfferId: `{get('args.items.${entry.itemIndex}.source-offer-id')}` } : {}),
+        ...(entry.item.args['utxo-tx-hash']
+          ? {
+              sourceUtxo: {
+                txHash: `{get('args.items.${entry.itemIndex}.source-utxo.tx-hash')}`,
+                index: `{get('args.items.${entry.itemIndex}.source-utxo.index')}`,
+              },
+            }
+          : {}),
+        outputs: outputArgs(entry.item).map((_, outputIndex) => ({
+          role: `{get('args.items.${entry.itemIndex}.outputs.${outputIndex}.role')}`,
+          index: `{get(join('.','cache','${entry.buildCachePath}','indexMap','output',get('args.items.${entry.itemIndex}.outputs.${outputIndex}.idPattern')))}`,
+        })),
+      })),
     },
   };
 }
 
-function bundledGroupScript(group: ComposeGroup, groupStep: string, index: number, total: number): GcNode {
-  const importEntries = group.items.map((item, itemIndex) => ({ item, step: cartItemStepName(item, itemIndex) }));
-  const entries = importEntries.map(({ item, step }) => ({
-    item,
-    step,
-    cachePath: `${groupStep}.intents.${step}`,
-  }));
-  return {
-    myAddress: { type: 'getCurrentAddress' },
-    intents: importStepFor(importEntries),
-    tx: mechanicalTxFor(entries, group),
-    build: {
-      type: 'buildTx',
-      ...buildFeaturesFor(group, index, total),
-      tx: `{get('cache.${groupStep}.tx')}`,
-    },
-  };
-}
-
-function parallelGroupScript(group: ComposeGroup, index: number, total: number): GcNode {
-  const importEntries = group.items.map((item, itemIndex) => ({ item, step: cartItemStepName(item, itemIndex) }));
-  const run: GcNode = {
-    myAddress: { type: 'getCurrentAddress' },
-    intents: importStepFor(importEntries),
-  };
-  group.items.forEach((item, itemIndex) => {
-    const step = cartItemStepName(item, itemIndex);
-    const txStep = `${step}Tx`;
-    const buildStep = `${step}Build`;
-    const singleGroup = { id: group.id, items: [item] };
-    run[txStep] = mechanicalTxFor([{ item, step, cachePath: `intents.${step}` }], singleGroup);
-    run[buildStep] = {
-      type: 'buildTx',
-      ...buildFeaturesFor(singleGroup, index + itemIndex, total),
-      tx: `{get('cache.${txStep}')}`,
-    };
-  });
-  return run;
-}
-
-function baseScript(title: string, run: GcNode, buildRefs: string[]): IntentTemplate['code'] {
+function baseScript(
+  title: string,
+  args: GcscriptArgs,
+  run: GcNode,
+  buildRefs: string[],
+  receiptSources: ReceiptGroupSource[],
+): IntentTemplate['code'] {
   return {
     type: 'script',
     title,
-    exportAs: 'neonsoupCart',
+    args,
+    exportAs: 'neonsoupExecution',
     return: { mode: 'last' },
     returnURLPattern: cleanReturnUrl(),
     run: {
@@ -264,12 +364,7 @@ function baseScript(title: string, run: GcNode, buildRefs: string[]): IntentTemp
         mode: 'noWait',
         txs: "{get('cache.sign')}",
       },
-      finally: {
-        type: 'macro',
-        run: {
-          txs: "{get('cache.sign')}",
-        },
-      },
+      finally: receiptMacro(receiptSources),
     },
   };
 }
@@ -308,26 +403,125 @@ export async function buildBundledGcscriptIntent({
   maxIntentsPerTransaction,
 }: BundledIntentArgs): Promise<IntentTemplate['code']> {
   const groups = chunkItems(items, maxIntentsPerTransaction);
-  const run: GcNode = {};
+  const executionId = shortId('execution');
+  const txRun: GcNode = {};
   const buildRefs: string[] = [];
+  const receiptSources: ReceiptGroupSource[] = [];
+  let globalOffset = 0;
   groups.forEach((group, index) => {
-    const groupStep = `group${index}`;
-    run[groupStep] = {
-      type: 'script',
-      return: {
-        mode: 'macro',
-        exec: `{get('cache.${groupStep}.build')}`,
-      },
-      run: bundledGroupScript(group, groupStep, index, groups.length),
+    const entries = groupEntries(group, index, globalOffset);
+    const txStep = `tx${index}`;
+    const buildStep = `build${index}`;
+    txRun[txStep] = mechanicalTxFor(entries, `args.groups.${index}`);
+    txRun[buildStep] = {
+      type: 'buildTx',
+      ...buildFeaturesFor(`args.groups.${index}`),
+      tx: `{get('cache.${txStep}')}`,
     };
-    buildRefs.push(`{get('cache.${groupStep}.txHex')}`);
+    buildRefs.push(`{get('cache.${buildStep}.txHex')}`);
+    receiptSources.push({
+      group,
+      buildCachePath: buildStep,
+      entries,
+    });
+    globalOffset += group.items.length;
   });
-  return buildRuntimeGcscript(baseScript('🍲 NeonSoup Bundle', run, buildRefs));
+  const entries = receiptSources.flatMap((source) => source.entries);
+  const run: GcNode = {
+    myAddress: { type: 'getCurrentAddress' },
+    intents: importStepFor(entries),
+    ...txRun,
+  };
+  return buildRuntimeGcscript(
+    baseScript(rootTitle(items), receiptArgs('bundle', executionId, receiptSources), run, buildRefs, receiptSources),
+  );
 }
 
 export async function buildParallelGcscriptIntent({ items }: ParallelIntentArgs): Promise<IntentTemplate['code']> {
-  const group: ComposeGroup = { id: shortId(`parallel-${items.length}`), items };
-  const run = parallelGroupScript(group, 0, items.length);
-  const buildRefs = items.map((item, index) => `{get('cache.${cartItemStepName(item, index)}Build.txHex')}`);
-  return buildRuntimeGcscript(baseScript('🍲 NeonSoup Parallel', run, buildRefs));
+  const executionId = shortId('execution');
+  const groups = items.map((item, index) => ({ id: `${executionId}-${index + 1}`, items: [item] }));
+  const entries = groups.map((group, index) => ({
+    item: group.items[0] as CartItem,
+    itemIndex: index,
+    groupIndex: index,
+    groupItemIndex: 0,
+    stepKey: String(index),
+    cachePath: `intents.${index}`,
+  }));
+  const run: GcNode = {
+    myAddress: { type: 'getCurrentAddress' },
+    intents: importStepFor(entries),
+  };
+  entries.forEach((entry) => {
+    const txStep = `tx${entry.itemIndex}`;
+    const buildStep = `build${entry.itemIndex}`;
+    const argsPath = `args.groups.${entry.groupIndex}`;
+    run[txStep] = mechanicalTxFor([entry], argsPath);
+    run[buildStep] = {
+      type: 'buildTx',
+      ...buildFeaturesFor(argsPath),
+      tx: `{get('cache.${txStep}')}`,
+    };
+  });
+  const buildRefs = entries.map((entry) => `{get('cache.build${entry.itemIndex}.txHex')}`);
+  const receiptSources = entries.map((entry) => ({
+    group: groups[entry.groupIndex] as ComposeGroup,
+    buildCachePath: `build${entry.itemIndex}`,
+    entries: [entry],
+  }));
+  return buildRuntimeGcscript(
+    baseScript(rootTitle(items), receiptArgs('parallel', executionId, receiptSources), run, buildRefs, receiptSources),
+  );
+}
+
+export function executionReceiptFromWalletReturn(raw: unknown): NeonSoupExecutionReceipt | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const decoded = (raw as Record<string, unknown>).decoded;
+  if (!decoded || typeof decoded !== 'object') return null;
+  const exports = (decoded as Record<string, unknown>).exports;
+  if (!exports || typeof exports !== 'object') return null;
+  const receipt = (exports as Record<string, unknown>).neonsoupExecution;
+  if (!receipt || typeof receipt !== 'object') return null;
+  const candidate = receipt as Partial<NeonSoupExecutionReceipt>;
+  if (
+    typeof candidate.executionId !== 'string' ||
+    typeof candidate.itemCount !== 'number' ||
+    typeof candidate.groupCount !== 'number' ||
+    !Array.isArray(candidate.items)
+  ) {
+    return null;
+  }
+  const itemIds = new Set<string>();
+  const groupIds = new Set<string>();
+  const valid = candidate.items.every((item) => {
+    if (
+      !item ||
+      typeof item.itemId !== 'string' ||
+      itemIds.has(item.itemId) ||
+      typeof item.intentId !== 'string' ||
+      (item.type !== 'open' && item.type !== 'fill' && item.type !== 'close') ||
+      typeof item.itemIndex !== 'number' ||
+      typeof item.groupId !== 'string' ||
+      typeof item.groupIndex !== 'number' ||
+      typeof item.groupItemIndex !== 'number' ||
+      typeof item.txHash !== 'string' ||
+      !Array.isArray(item.outputs) ||
+      !item.outputs.every(
+        (output) =>
+          (output.role === 'openedOffer' ||
+            output.role === 'remainingOffer' ||
+            output.role === 'filledOffer' ||
+            output.role === 'closedFunds') &&
+          (typeof output.index === 'string' || typeof output.index === 'number'),
+      )
+    ) {
+      return false;
+    }
+    itemIds.add(item.itemId);
+    groupIds.add(item.groupId);
+    return true;
+  });
+  return valid && itemIds.size === candidate.itemCount && groupIds.size === candidate.groupCount
+    ? (candidate as NeonSoupExecutionReceipt)
+    : null;
 }

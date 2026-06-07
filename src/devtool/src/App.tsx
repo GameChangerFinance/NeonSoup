@@ -11,7 +11,7 @@ import { ReloadButton } from './components/common/ReloadButton';
 import { OpenOffersTable } from './components/orders/OpenOffersTable';
 import { PortfolioTable } from './components/portfolio/PortfolioTable';
 import { TransactionList, type TransactionRow } from './components/transactions/TransactionList';
-import { GeneratedIntentPanel } from './components/intents/GeneratedIntentPanel';
+import { JsonViewer } from './components/common/JsonViewer';
 import { OptionsPanel } from './components/options/OptionsPanel';
 import { CartModal } from './components/cart/CartModal';
 import { CartPanel } from './components/cart/CartPanel';
@@ -20,20 +20,24 @@ import { assetMap, balanceOf, resolveAsset, selectedOffer, visibleOffers, visibl
 import { assetTitle, configuredAssets } from './domain/assets';
 import { fromBase, percent, toBase } from './domain/quantities';
 import { safeError, short } from './domain/text';
-import { loadAssetInfo, loadOpenOffers, loadPortfolio } from './services/networkProvider';
-import { captureWalletReturn, consumeWalletReturn, openWallet, openWalletCode } from './services/gcWallet';
-import { buildArgsForAction, loadIntentTemplates, fillAskAmount } from './services/intents';
+import { loadAssetInfo, loadConfirmedTransactionHashes, loadOpenOffers, loadPortfolio } from './services/networkProvider';
+import { captureWalletReturn, consumeWalletReturn, openWalletCode } from './services/gcWallet';
+import { fillAskAmount } from './services/intents';
 import {
   createBulkOpenCartItems,
   createCartItemFromCurrentIntent,
   selectedCartItems,
   validateCartItemsCanBeAdded,
 } from './services/cartIntents';
-import { buildBundledGcscriptIntent, buildParallelGcscriptIntent } from './services/intentExecution';
+import {
+  buildBundledGcscriptIntent,
+  buildParallelGcscriptIntent,
+  executionReceiptFromWalletReturn,
+} from './services/intentExecution';
 import { clearStoredState, readWalletReturn } from './services/storage';
 import { APP_CONFIG } from './config/appConfig';
 import { createInitialState } from './state/reducer';
-import type { ActionMode, OpenOffer, ProtocolTransaction, WalletConnection } from './state/types';
+import type { CartItem, NeonSoupExecutionReceipt, OpenOffer, ProtocolTransaction, WalletConnection } from './state/types';
 
 function pairMatches(stateOffer: OpenOffer, offerKey: string, askKey: string, assets: ReturnType<typeof assetMap>) {
   const offer = assets[offerKey];
@@ -53,51 +57,39 @@ function walletFromReturn(raw: unknown): WalletConnection | null {
   return wallet && typeof wallet === 'object' ? (wallet as WalletConnection) : null;
 }
 
-function findStringField(value: unknown, field: string, depth = 0): string {
-  if (!value || typeof value !== 'object' || depth > 8) return '';
-  const record = value as Record<string, unknown>;
-  if (typeof record[field] === 'string' && record[field]) return record[field];
-  for (const child of Object.values(record)) {
-    if (Array.isArray(child)) {
-      for (const item of child) {
-        const found = findStringField(item, field, depth + 1);
-        if (found) return found;
-      }
-    } else if (child && typeof child === 'object') {
-      const found = findStringField(child, field, depth + 1);
-      if (found) return found;
-    }
-  }
-  return '';
-}
-
-function actionFromReturn(raw: unknown, fallback: ActionMode): ActionMode {
-  if (!raw || typeof raw !== 'object') return fallback;
+function hasExecutionExport(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false;
   const decoded = (raw as Record<string, unknown>).decoded;
-  const exports =
-    decoded && typeof decoded === 'object' && (decoded as Record<string, unknown>).exports
-      ? ((decoded as Record<string, unknown>).exports as Record<string, unknown>)
-      : {};
-  if ('openLimitOrder' in exports) return 'open';
-  if ('swapLimitOrder' in exports) return 'fill';
-  if ('closeLimitOrder' in exports) return 'close';
-  return fallback;
+  if (!decoded || typeof decoded !== 'object') return false;
+  const exports = (decoded as Record<string, unknown>).exports;
+  return Boolean(exports && typeof exports === 'object' && 'neonsoupExecution' in exports);
 }
 
-function transactionFromReturn(raw: unknown, fallbackAction: ActionMode): ProtocolTransaction | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const at = Number((raw as Record<string, unknown>).at) || Date.now();
-  const txHash = findStringField(raw, 'txHash');
-  if (!txHash) return null;
-  const action = actionFromReturn(raw, fallbackAction);
-  return {
-    id: `${action}-${txHash}-${at}`,
-    txHash,
-    action,
-    status: 'submitted',
-    at,
-    summary: `${action.charAt(0).toUpperCase() + action.slice(1)} wallet result captured.`,
-  };
+function transactionsFromReceipt(receipt: NeonSoupExecutionReceipt, at: number): ProtocolTransaction[] {
+  const groups = new Map<string, typeof receipt.items>();
+  receipt.items.forEach((item) => {
+    const groupItems = groups.get(item.groupId) || [];
+    groupItems.push(item);
+    groups.set(item.groupId, groupItems);
+  });
+  return [...groups.entries()].map(([groupId, items]) => {
+    const actions = [...new Set(items.map((item) => item.type))];
+    const action = actions.length === 1 ? actions[0] || 'open' : 'swap';
+    const txHash = items[0]?.txHash || '';
+    return {
+      id: `${receipt.executionId}-${groupId}`,
+      txHash,
+      action,
+      status: 'submitted',
+      at,
+      groupId,
+      itemIds: items.map((item) => item.itemId),
+      summary:
+        actions.length === 1
+          ? `${actions[0] === 'open' ? 'Opening' : actions[0] === 'fill' ? 'Filling' : 'Closing'} ${items.length} offer${items.length === 1 ? '' : 's'}.`
+          : `Executing ${items.length} Cart intents.`,
+    };
+  });
 }
 
 export default function App() {
@@ -156,28 +148,31 @@ export default function App() {
   function applyWalletReturn(raw: unknown, shouldConsume: boolean) {
     if (!raw) return;
     const wallet = shouldConsume ? consumeWalletReturn(raw) || walletFromReturn(raw) : walletFromReturn(raw);
-    const transaction = transactionFromReturn(raw, state.action);
+    const receipt = executionReceiptFromWalletReturn(raw);
+    const at = typeof raw === 'object' ? Number((raw as Record<string, unknown>).at) || Date.now() : Date.now();
 
     dispatch({ type: 'set-wallet-return', payload: raw });
     if (wallet) dispatch({ type: 'set-wallet', wallet });
-    if (transaction) dispatch({ type: 'add-transaction', tx: transaction });
+    if (receipt) {
+      dispatch({ type: 'apply-execution-receipt', receipt, at });
+      transactionsFromReceipt(receipt, at).forEach((tx) => dispatch({ type: 'add-transaction', tx }));
+    }
     dispatch({
       type: 'set-notice',
       key: 'app',
-      notice: { tone: 'success', message: 'Wallet response captured.' },
+      notice: {
+        tone: receipt || !hasExecutionExport(raw) ? 'success' : 'warning',
+        message: receipt
+          ? `${receipt.itemCount} submitted intent${receipt.itemCount === 1 ? '' : 's'} captured.`
+          : hasExecutionExport(raw)
+            ? 'Wallet returned a malformed NeonSoup execution receipt. No Cart items were updated.'
+            : 'Wallet response captured.',
+      },
     });
 
-    void refreshOffers();
+    void refreshOffers(receipt ? [...new Set(receipt.items.map((item) => item.txHash))] : []);
     if (state.wallet?.address || wallet?.address) void refreshPortfolio();
   }
-
-  useEffect(() => {
-    loadIntentTemplates()
-      .then((intents) => dispatch({ type: 'set-intents', intents }))
-      .catch((error) =>
-        dispatch({ type: 'set-notice', key: 'app', notice: { tone: 'danger', message: safeError(error) } }),
-      );
-  }, [dispatch]);
 
   useEffect(() => {
     captureWalletReturn()
@@ -246,22 +241,6 @@ export default function App() {
   }, [state.forms.fillOfferAmount, state.selectedOrderId, state.openOffers, state.assetInfo]);
 
   useEffect(() => {
-    const args = buildArgsForAction(state);
-    if (JSON.stringify(args) !== JSON.stringify(state.intentArgs[state.action])) {
-      dispatch({ type: 'set-intent-args', action: state.action, args });
-    }
-  }, [
-    state.action,
-    state.forms,
-    state.wallet?.address,
-    state.wallet?.stakeKeyHash,
-    state.selectedOrderId,
-    state.openOffers,
-    state.assetInfo,
-    dispatch,
-  ]);
-
-  useEffect(() => {
     if (!offer || !ask || state.action !== 'open') return;
     const pair = {
       offer: { policyId: offer.policyId, assetNameHex: offer.assetNameHex },
@@ -289,7 +268,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.options.network, state.options.provider, state.wallet?.address]);
 
-  async function refreshOffers() {
+  async function refreshOffers(extraPendingHashes: string[] = []) {
     dispatch({ type: 'set-loading', key: 'offers', value: true });
     dispatch({ type: 'set-notice', key: 'offers', notice: { tone: 'warning', message: 'Loading open offers...' } });
     try {
@@ -303,6 +282,20 @@ export default function App() {
       }
       dispatch({ type: 'set-asset-info', assets: info });
       dispatch({ type: 'set-open-offers', offers: loaded });
+      const pendingHashes = [
+        ...state.transactions.filter((tx) => tx.status === 'submitted').map((tx) => tx.txHash),
+        ...extraPendingHashes,
+      ];
+      const confirmedHashes = new Set(await loadConfirmedTransactionHashes(state, pendingHashes));
+      const confirmedItemIds = state.cart.items
+        .filter((item) => item.status === 'pending' && item.txHash && confirmedHashes.has(item.txHash))
+        .map((item) => item.id);
+      if (confirmedItemIds.length) {
+        dispatch({ type: 'confirm-cart-items', itemIds: confirmedItemIds, confirmedAt: Date.now() });
+      }
+      if (confirmedHashes.size) {
+        dispatch({ type: 'confirm-transactions', txHashes: [...confirmedHashes] });
+      }
       dispatch({
         type: 'set-notice',
         key: 'offers',
@@ -393,7 +386,7 @@ export default function App() {
   }
 
   function addCurrentIntentToCart() {
-    addItemsToCart([createCartItemFromCurrentIntent(state, { freshIntentId: state.action === 'open' })]);
+    addItemsToCart([createCartItemFromCurrentIntent(state)]);
   }
 
   function addBulkOpenToCart() {
@@ -403,22 +396,12 @@ export default function App() {
     addItemsToCart(createBulkOpenCartItems(state, count, priceVariance, offerVariance), true);
   }
 
-  async function runAction() {
-    try {
-      createCartItemFromCurrentIntent(state);
-      await openWallet(state);
-    } catch (error) {
-      dispatch({ type: 'set-notice', key: 'app', notice: { tone: 'danger', message: safeError(error) } });
-    }
-  }
-
-  async function runCartSelected() {
-    const items = selectedCartItems(state.cart).filter((item) => item.status === 'draft');
+  async function runIntentItems(items: CartItem[]) {
     if (!items.length) {
       dispatch({
         type: 'set-notice',
         key: 'app',
-        notice: { tone: 'warning', message: 'Select at least one draft Cart item to run.' },
+        notice: { tone: 'warning', message: 'Select at least one draft or failed intent to run.' },
       });
       return;
     }
@@ -432,20 +415,11 @@ export default function App() {
             })
           : await buildParallelGcscriptIntent({ state, items });
       await openWalletCode(state, code);
-      dispatch({ type: 'mark-cart-items-executed', itemIds: items.map((item) => item.id), executedAt: Date.now() });
-      if (state.cart.mode === 'bundle') {
-        dispatch({
-          type: 'set-notice',
-          key: 'app',
-          notice: { tone: 'success', message: `${items.length} Cart intent${items.length === 1 ? '' : 's'} bundled for wallet execution.` },
-        });
-      } else {
-        dispatch({
-          type: 'set-notice',
-          key: 'app',
-          notice: { tone: 'success', message: `${items.length} Cart intent${items.length === 1 ? '' : 's'} prepared as parallel wallet transactions.` },
-        });
-      }
+      dispatch({
+        type: 'set-notice',
+        key: 'app',
+        notice: { tone: 'info', message: 'Wallet opened. Intents remain relaunchable until a submission receipt returns.' },
+      });
     } catch (error) {
       dispatch({
         type: 'set-notice',
@@ -456,6 +430,14 @@ export default function App() {
         },
       });
     }
+  }
+
+  async function runAction() {
+    await runIntentItems([createCartItemFromCurrentIntent(state)]);
+  }
+
+  async function runCartSelected() {
+    await runIntentItems(selectedCartItems(state.cart).filter((item) => item.status === 'draft' || item.status === 'failed'));
   }
 
   const openWarnings = useMemo(() => {
@@ -804,51 +786,12 @@ export default function App() {
       <>
         <PageHeader title="Developer" eyebrow="Debug" />
         <section className="app-card p-3 p-lg-4 mt-4">
-          <h2 className="h5 mb-3">Protocol Intents</h2>
-          <div className="d-flex flex-wrap gap-2">
-            {Object.entries(APP_CONFIG.intentFiles).map(([name, path]) => (
-              <a
-                key={name}
-                className="btn btn-outline-primary btn-sm"
-                href={path}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {name}.gcscript.json
-              </a>
-            ))}
-          </div>
-        </section>
-        <GeneratedIntentPanel state={state} onRun={runAction} onAddToCart={addCurrentIntentToCart} />
-        <section className="app-card p-3 p-lg-4 mt-4">
-          <h2 className="h5 mb-3">Selected Cart Items</h2>
-          <pre className="bg-body-tertiary border rounded p-3 small json-scroll mb-0">
-            {JSON.stringify(selectedCartItems(state.cart), null, 2)}
-          </pre>
-        </section>
-        <section className="app-card p-3 p-lg-4 mt-4">
-          <h2 className="h5 mb-3">Cart State</h2>
-          <pre className="bg-body-tertiary border rounded p-3 small json-scroll mb-0">
-            {JSON.stringify(state.cart, null, 2)}
-          </pre>
-        </section>
-        <section className="app-card p-3 p-lg-4 mt-4">
-          <h2 className="h5 mb-3">Intent Bundle</h2>
-          <pre className="bg-body-tertiary border rounded p-3 small json-scroll mb-0">
-            {JSON.stringify(state.intentBundle, null, 2)}
-          </pre>
-        </section>
-        <section className="app-card p-3 p-lg-4 mt-4">
           <h2 className="h5 mb-3">Captured Wallet Return</h2>
-          <pre className="bg-body-tertiary border rounded p-3 small json-scroll mb-0">
-            {JSON.stringify(state.lastWalletReturn || null, null, 2)}
-          </pre>
+          <JsonViewer value={state.lastWalletReturn || null} label="Copy captured wallet return" />
         </section>
         <section className="app-card p-3 p-lg-4 mt-4">
           <h2 className="h5 mb-3">App State</h2>
-          <pre className="bg-body-tertiary border rounded p-3 small json-scroll mb-0">
-            {JSON.stringify(state, null, 2)}
-          </pre>
+          <JsonViewer value={state} label="Copy app state" />
         </section>
       </>
     );

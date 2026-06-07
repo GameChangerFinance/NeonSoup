@@ -13,9 +13,10 @@
 
     "build:open": "gamechanger-cli build -f ./src/intents/open.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/open.gcscript.json",
     "build:close": "gamechanger-cli build -f ./src/intents/close.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/close.gcscript.json",
-    "build:swap": "gamechanger-cli build -f ./src/intents/swap.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/swap.gcscript.json",        
-    
-    "serve:autogen": "pnpm run prepare:autogen && gamechanger-cli preprod snippet react -v 2 -S -o ./dist/autogen.html -f ./dist/intents/open.gcscript.json --snippetArgsFile ./config/snippet-args.json",    
+    "build:swap": "gamechanger-cli build -f ./src/intents/swap.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/swap.gcscript.json",
+    "build:cart": "gamechanger-cli build -f ./src/intents/cart.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/cart.gcscript.json",
+
+    "serve:autogen": "pnpm run prepare:autogen && gamechanger-cli preprod snippet react -v 2 -S -o ./dist/autogen.html -f ./dist/intents/open.gcscript.json --snippetArgsFile ./config/snippet-args.json",
     "prepare:autogen": "node ./scripts/generate-snippet-args.mjs ./config/snippet-args.json ./dist/intents/*.gcscript.json"
   },
   "devDependencies": {
