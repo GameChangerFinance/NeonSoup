@@ -85,6 +85,18 @@
                 }
             }
         },
+        "beaconRedeemer": {
+            "type": "plutusData",
+            "data": {
+                "fromJSON": {
+                    "schema": 1,
+                    "obj": {
+                        "constructor": 1,
+                        "fields": []
+                    }
+                }
+            }
+        },
         "tx": {
             "type": "macro",
             "run": {
@@ -139,7 +151,7 @@
                             "beaconsMint":{
                                 "scriptHashHex": "{get('cache.dependencies.beaconsPolicy.scriptHashHex')}",
                                 "redeemer": {
-                                    "dataHex": "{get('cache.emptyRedeemer.dataHex')}",
+                                    "dataHex": "{get('cache.beaconRedeemer.dataHex')}",
                                     "type": "mint",                                    
                                     "itemIdPattern": "{join('-',get('cache.intentTag'),'beacons')}"
                                 }

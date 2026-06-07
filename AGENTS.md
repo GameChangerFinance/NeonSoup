@@ -66,6 +66,18 @@ wallet-intent loading.
   `finally` structures. Pass those values through GCScript `args`, propagate
   args explicitly into nested scripts, and resolve them with ISL
   `get('args...')`; use `get('cache...')` for wallet-runtime results.
+- Keep the cart/composer layer flat unless a nested scope is required by the
+  protocol fragment itself. `isolateCache` is fine inside protocol fragments,
+  but adding another isolation wrapper around the cart composer/import layer can
+  shift outputs into group-local cache paths and break root references like
+  `cache.myAddress` or `cache.intents.<index>...`. Example: the cart bundling bug
+  came from wrapping each group in its own `script`, which moved the wallet
+  address out of the expected root cache.
+- Fetch `getCurrentAddress` once at the cart root and pass it through as a
+  shared root value. Do not re-fetch it inside per-group wrappers. Example: the
+  `myAddress` issue in cart execution was not that `getCurrentAddress` was
+  missing, but that it was introduced at the wrong scope, so imported intents
+  could not reliably resolve `offer-address` against `cache.myAddress`.
 - The old single-file frontend was ported to Vite React. Keep the devtool
   structure compact and Bootstrap-first unless explicitly requested otherwise.
 - Prefer warnings over input blocking in the devtool UI. Bad values are useful for
@@ -112,6 +124,23 @@ wallet-intent loading.
   the same bundle/parallel builders.
 - The Connect wallet intent is independent from the Cart/composability system and
   should keep working as a direct wallet public-data flow.
+- The current app design is composability-first. Direct Open, Fill, and Close
+  actions should be treated as transient one-item Cart compositions, while
+  Cart runs remain the persisted multi-item composition path. Reuse the same
+  builders, wallet launcher, and receipt flow for both.
+- Do not reintroduce a legacy single-intent execution path, separate single-run
+  state, or a second argument snapshot model. The form state is preparation
+  state only; `CartItem.args` is the immutable execution snapshot.
+- Keep wallet-launch helpers purpose-agnostic. Any explicit GCScript code
+  should be launchable through the generic wallet transport, including Connect
+  Wallet and future special intents. Do not create purpose-specific wallet
+  launch helpers.
+- When composing GCScript for wallet execution, keep root-scoped values flat
+  and stable. Fetch root wallet values once, pass them through explicitly, and
+  avoid adding extra cache isolation around composition wrappers unless the
+  protocol fragment itself requires it. Example: the cart bundling bug came
+  from group-local wrapper scripts changing cache shape instead of the fragment
+  code itself.
 
 ## Protocol Notes
 
@@ -122,6 +151,18 @@ wallet-intent loading.
   misinterpreted stake credential being used for the operation. Investigate the
   exact signer hash, owner stake hash, selected offer owner, and generated
   `requiredSigners` before changing shared protocol code.
+- Close intent debugging needs to treat mint and spend witnesses separately. In
+  this repo the close fragment needs both `beaconRedeemer` for the mint witness
+  and `emptyRedeemer` for the spend witness; removing either breaks the
+  generated close script even if the other redeemer is correct. A beacon-policy
+  trace like `This redeemer can only be used to register the beacon script`
+  usually means the mint redeemer branch is wrong, not that the spending
+  validator or address scope is wrong. Inspect the built JSON and generated
+  cache paths when one witness fails, because the runtime error surface does not
+  always identify which node is missing.
+- A missing `cache.myAddress` usually means the address was introduced at the
+  wrong scope, not that `getCurrentAddress` was omitted. Fetch it once at the
+  root and pass it into imported intents as a shared root value.
 - ADA uses GameChanger's coin convention: `policyId: "ada"` and either
   `assetName: "ada"` or `assetNameHex: "ada"`.
 - GCScript/ISL does not have normal imperative conditionals. Existing

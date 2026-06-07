@@ -92,6 +92,13 @@ function transactionsFromReceipt(receipt: NeonSoupExecutionReceipt, at: number):
   });
 }
 
+function cartPendingTxHashes(items: CartItem[]): string[] {
+  return items
+    .filter((item) => item.status === 'pending' && item.txHash)
+    .map((item) => item.txHash || '')
+    .filter(Boolean);
+}
+
 export default function App() {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -284,6 +291,7 @@ export default function App() {
       dispatch({ type: 'set-open-offers', offers: loaded });
       const pendingHashes = [
         ...state.transactions.filter((tx) => tx.status === 'submitted').map((tx) => tx.txHash),
+        ...cartPendingTxHashes(state.cart.items),
         ...extraPendingHashes,
       ];
       const confirmedHashes = new Set(await loadConfirmedTransactionHashes(state, pendingHashes));
