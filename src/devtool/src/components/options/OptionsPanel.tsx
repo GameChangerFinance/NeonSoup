@@ -67,7 +67,7 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
   const providerHelp = useMemo(
     () =>
       state.options.provider === 'graphqlMk2'
-        ? 'GraphQL MKII is scaffolded for the next migration and may not serve all devtool queries yet.'
+        ? 'GraphQL MKII uses bounded nested queries for offers, portfolio, metadata, and confirmations.'
         : 'Blockfrost-compatible provider. Leave URL empty to use the GameChanger-hosted endpoint.',
     [state.options.provider],
   );

@@ -1,11 +1,13 @@
-import { configuredAssets, hardAsset, normalizeAssetMetadataRecord } from '../domain/assets';
+import { configuredAssets, hardAsset, normalizeAssetMetadataRecord, normalizePortfolioAssets } from '../domain/assets';
+import { normalizeOpenOffers } from '../domain/orders';
 import { fromBase } from '../domain/quantities';
 import { APP_CONFIG } from '../config/appConfig';
+import { mergeProtocolTransactions } from '../domain/transactions';
 import type { AppAction, AppOptions, AppState, AssetMetadata, CartState, NetworkTag } from './types';
 
 export const defaultOptions: AppOptions = {
   network: 'preprod',
-  provider: 'blockfrost',
+  provider: APP_CONFIG.defaultProvider,
   blockfrostUrl: '',
   blockfrostKey: '',
   popupMode: true,
@@ -93,9 +95,9 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
     wallet: seed?.wallet || null,
     cart: seed?.cart || freshCart(),
     lastWalletReturn: null,
-    openOffers: seed?.openOffers || [],
-    portfolio: seed?.portfolio || [],
-    transactions: seed?.transactions || [],
+    openOffers: normalizeOpenOffers(seed?.openOffers || []),
+    portfolio: normalizePortfolioAssets(seed?.portfolio || []),
+    transactions: mergeProtocolTransactions([], seed?.transactions || []),
     assetInfo,
     customAssets,
     notices: {
@@ -233,17 +235,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         }),
       });
     }
-    case 'confirm-cart-items': {
-      const itemIds = new Set(action.itemIds);
-      return withCart(state, {
-        ...state.cart,
-        items: state.cart.items.map((item) =>
-          itemIds.has(item.id)
-            ? { ...item, status: 'confirmed', confirmedAt: action.confirmedAt, selected: false }
-            : item,
-        ),
-      });
-    }
     case 'requeue-cart-item':
       return withCart(state, {
         ...state.cart,
@@ -274,11 +265,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'set-open-offers':
       return {
         ...state,
-        openOffers: action.offers,
+        openOffers: normalizeOpenOffers(action.offers),
         selectedOrderId: state.selectedOrderId || action.offers[0]?.id || '',
       };
     case 'set-portfolio':
-      return { ...state, portfolio: action.portfolio };
+      return { ...state, portfolio: normalizePortfolioAssets(action.portfolio) };
     case 'set-asset-info':
       return { ...state, assetInfo: { ...state.assetInfo, ...action.assets } };
     case 'set-custom-assets': {
@@ -305,13 +296,30 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'set-selected-pair':
       return { ...state, selectedPair: action.pair };
     case 'add-transaction':
-      return { ...state, transactions: [action.tx, ...state.transactions].slice(0, 100) };
-    case 'confirm-transactions': {
+      return { ...state, transactions: mergeProtocolTransactions(state.transactions, [action.tx]) };
+    case 'merge-transactions':
+      return { ...state, transactions: mergeProtocolTransactions(state.transactions, action.transactions) };
+    case 'reconcile-confirmed-transactions': {
       const txHashes = new Set(action.txHashes);
+      const failedTxHashes = new Set(action.failedTxHashes || []);
       return {
         ...state,
+        cart: {
+          ...state.cart,
+          items: state.cart.items.map((item) =>
+            item.status === 'pending' && item.txHash && failedTxHashes.has(item.txHash)
+              ? { ...item, status: 'failed', selected: false }
+              : item.status === 'pending' && item.txHash && txHashes.has(item.txHash)
+                ? { ...item, status: 'confirmed', confirmedAt: action.confirmedAt, selected: false }
+                : item,
+          ),
+        },
         transactions: state.transactions.map((tx) =>
-          txHashes.has(tx.txHash) ? { ...tx, status: 'confirmed' } : tx,
+          tx.status === 'submitted' && failedTxHashes.has(tx.txHash)
+            ? { ...tx, status: 'failed' }
+            : tx.status === 'submitted' && txHashes.has(tx.txHash)
+              ? { ...tx, status: 'confirmed' }
+              : tx,
         ),
       };
     }

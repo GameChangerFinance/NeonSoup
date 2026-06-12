@@ -1,6 +1,5 @@
 import type { AppState, OpenOffer } from '../../state/types';
-import { assetTitle } from '../../domain/assets';
-import { fromBase, ratioDecimal } from '../../domain/quantities';
+import { composeOpenOfferRows } from '../../domain/orders';
 import { short } from '../../domain/text';
 import { resolveAsset } from '../../state/selectors';
 import { AssetBadge } from '../assets/AssetBadge';
@@ -33,25 +32,23 @@ export function OpenOffersTable({ state, offers, onFill, onClose }: OpenOffersTa
           </tr>
         </thead>
         <tbody>
-          {offers.map((offer) => {
-            const offeredAsset = resolveAsset(state, offer.offerPolicyId, offer.offerAssetName);
-            const askAsset = resolveAsset(state, offer.askPolicyId, offer.askAssetName);
-            const owner = Boolean(
-              state.wallet?.stakeKeyHash && state.wallet.stakeKeyHash === offer.ownerStakeKeyHash,
-            );
-            const formattedRate = ratioDecimal(offer.priceNumerator, offer.priceDenominator || '1');
-            const utxoRef = `${offer.txHash}#${offer.txIndex}`;
+          {composeOpenOfferRows(
+            offers,
+            state.wallet?.stakeKeyHash,
+            (policyId, assetNameHex) => resolveAsset(state, policyId, assetNameHex),
+          ).map((row) => {
+            const { offer, offeredAsset, askAsset, ownerBadge } = row;
             return (
-              <tr key={offer.id} className={offer.id === state.selectedOrderId ? 'table-active' : undefined}>
+              <tr key={row.key} className={offer.id === state.selectedOrderId ? 'table-active' : undefined}>
                 <td>
                   <div className="d-flex flex-column gap-2">
                     <AssetBadge asset={offeredAsset} />
                     <div className="fw-semibold">
-                      {fromBase(offer.utxoOfferQuantity, offeredAsset.decimals)} {assetTitle(offeredAsset)}
+                      {row.offeredAmount} {row.offeredTitle}
                     </div>
                     <div className="small text-body-secondary hash-text">
                       {short(offer.txHash)}#{offer.txIndex}
-                      <CopyIcon value={utxoRef} label="Copy UTxO reference" />
+                      <CopyIcon value={row.utxoRef} label="Copy UTxO reference" />
                     </div>
                   </div>
                 </td>
@@ -67,7 +64,7 @@ export function OpenOffersTable({ state, offers, onFill, onClose }: OpenOffersTa
                       </span>
                       <span className="price-separator">/</span>
                       <span className="price-leg">
-                        <span>{formattedRate}</span>
+                        <span>{row.formattedRate}</span>
                         <AssetBadge asset={askAsset} />
                       </span>
                       <span className="text-body-secondary price-fraction">
@@ -77,8 +74,11 @@ export function OpenOffersTable({ state, offers, onFill, onClose }: OpenOffersTa
                   </div>
                 </td>
                 <td>
-                  <span className={`badge rounded-pill ${owner ? 'text-bg-success' : 'text-bg-secondary'}`}>
-                    {owner ? 'You' : short(offer.ownerStakeKeyHash)}
+                  <span
+                    className={`badge rounded-pill ${ownerBadge ? 'text-bg-success' : 'text-bg-secondary'}`}
+                    title={ownerBadge?.title}
+                  >
+                    {ownerBadge?.label || short(offer.ownerStakeKeyHash)}
                   </span>
                   <CopyIcon value={offer.ownerStakeKeyHash} label="Copy owner stake key hash" />
                 </td>
@@ -87,7 +87,7 @@ export function OpenOffersTable({ state, offers, onFill, onClose }: OpenOffersTa
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => onFill(offer)}>
                       Fill
                     </button>
-                    {owner ? (
+                    {ownerBadge ? (
                       <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => onClose(offer)}>
                         Close
                       </button>

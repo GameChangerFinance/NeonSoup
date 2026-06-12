@@ -7,11 +7,13 @@ const appVersion = `${packageJson.version}+${buildTag}`;
 
 export const APP_CONFIG = {
   version: appVersion,
+  defaultProvider: 'graphqlMk2',
   storageKey: 'neonsoup-devtool-v5',
   walletReturnKey: 'neonsoup-wallet-return-v5',
   encoding: 'gzip',
   popupFeatures: 'noopener,width=480,height=720',
   pollingIntervalMs: 10 * 60 * 1000,
+  confirmationPollingIntervalMs: 15 * 1000,
   beaconPolicy: 'c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209',
   networks: {
     preprod: {

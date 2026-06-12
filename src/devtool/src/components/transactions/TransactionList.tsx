@@ -1,12 +1,9 @@
+import type { TransactionRow } from '../../domain/transactions';
 import type { NetworkTag, ProtocolTransaction } from '../../state/types';
 import { short } from '../../domain/text';
 import { cardanoscanTxUrl, openExternalUrl } from '../../services/explorers';
 import { CopyIcon } from '../common/CopyIcon';
 import { EmptyState } from '../common/EmptyState';
-
-export interface TransactionRow extends ProtocolTransaction {
-  userOwned?: boolean;
-}
 
 interface TransactionListProps {
   transactions: TransactionRow[];
@@ -21,7 +18,7 @@ function statusClass(status: ProtocolTransaction['status']): string {
 }
 
 function formatTime(at: number): string {
-  if (!at) return 'Live UTxO';
+  if (!at) return 'Chain time unavailable';
   return new Date(at).toLocaleString();
 }
 
@@ -48,7 +45,11 @@ export function TransactionList({ transactions, network }: TransactionListProps)
               <td>
                 <div className="d-flex align-items-center gap-2">
                   <span className="badge text-bg-secondary text-uppercase">{tx.action}</span>
-                  {tx.userOwned ? <span className="badge text-bg-success">You</span> : null}
+                  {tx.ownershipBadge ? (
+                    <span className="badge text-bg-success" title={tx.ownershipBadge.title}>
+                      {tx.ownershipBadge.label}
+                    </span>
+                  ) : null}
                 </div>
               </td>
               <td>

@@ -1,5 +1,5 @@
 import { APP_CONFIG } from '../config/appConfig';
-import type { AssetMetadata, NetworkTag, ResolvedAsset } from '../state/types';
+import type { AssetMetadata, NetworkTag, PortfolioAsset, ResolvedAsset } from '../state/types';
 import { short, truncate } from './text';
 
 export function assetIdOf(policyId: string, assetNameHex: string): string {
@@ -111,7 +111,8 @@ export function applyFetchedMetadata(base: ResolvedAsset, fetched: unknown): Res
   const record = fetched as Record<string, unknown>;
   const metadata =
     (record.metadata && typeof record.metadata === 'object' ? record.metadata : undefined) ||
-    (record.onchain_metadata && typeof record.onchain_metadata === 'object' ? record.onchain_metadata : undefined);
+    (record.onchain_metadata && typeof record.onchain_metadata === 'object' ? record.onchain_metadata : undefined) ||
+    record;
   if (!metadata || typeof metadata !== 'object') {
     return {
       ...base,
@@ -139,4 +140,17 @@ export function applyFetchedMetadata(base: ResolvedAsset, fetched: unknown): Res
     decimals: base.known ? base.decimals : Number.isFinite(decimals) ? Math.max(0, Math.trunc(decimals)) : base.decimals,
     logo: base.logo || normalizeLogo(m.logo || m.image),
   };
+}
+
+export function normalizePortfolioAssets(assets: readonly PortfolioAsset[]): PortfolioAsset[] {
+  const quantities = new Map<string, bigint>();
+  const normalized = new Map<string, PortfolioAsset>();
+  assets.forEach((asset) => {
+    const item = normalizeAssetMetadata(asset);
+    quantities.set(item.assetKey, (quantities.get(item.assetKey) || 0n) + BigInt(asset.quantity || '0'));
+    normalized.set(item.assetKey, { ...item, quantity: '0' });
+  });
+  return [...normalized.values()]
+    .map((asset) => ({ ...asset, quantity: (quantities.get(asset.assetKey) || 0n).toString() }))
+    .sort((a, b) => a.assetKey.localeCompare(b.assetKey));
 }

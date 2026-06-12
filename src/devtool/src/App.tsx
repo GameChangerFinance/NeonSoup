@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { AppShell } from './components/layout/AppShell';
 import { PageHeader } from './components/layout/PageHeader';
 import { AssetPairSelector } from './components/assets/AssetPairSelector';
@@ -10,7 +10,7 @@ import { LoadingState } from './components/common/LoadingState';
 import { ReloadButton } from './components/common/ReloadButton';
 import { OpenOffersTable } from './components/orders/OpenOffersTable';
 import { PortfolioTable } from './components/portfolio/PortfolioTable';
-import { TransactionList, type TransactionRow } from './components/transactions/TransactionList';
+import { TransactionList } from './components/transactions/TransactionList';
 import { JsonViewer } from './components/common/JsonViewer';
 import { OptionsPanel } from './components/options/OptionsPanel';
 import { CartModal } from './components/cart/CartModal';
@@ -18,9 +18,15 @@ import { CartPanel } from './components/cart/CartPanel';
 import { useAppDispatch, useAppState } from './state/appState';
 import { assetMap, balanceOf, resolveAsset, selectedOffer, visibleOffers, visiblePortfolio } from './state/selectors';
 import { assetTitle, configuredAssets } from './domain/assets';
+import {
+  composeTransactionRows,
+  protocolTransactionFromChain,
+  transactionsFromReceipt,
+} from './domain/transactions';
+import { isCurrentOutputOwner } from './domain/ownership';
 import { fromBase, percent, toBase } from './domain/quantities';
 import { safeError, short } from './domain/text';
-import { loadAssetInfo, loadConfirmedTransactionHashes, loadOpenOffers, loadPortfolio } from './services/networkProvider';
+import { loadOpenOffers, loadPortfolio, loadTransactions } from './services/networkProvider';
 import { captureWalletReturn, consumeWalletReturn, openWalletCode } from './services/gcWallet';
 import { fillAskAmount } from './services/intents';
 import {
@@ -37,7 +43,7 @@ import {
 import { clearStoredState, readWalletReturn } from './services/storage';
 import { APP_CONFIG } from './config/appConfig';
 import { createInitialState } from './state/reducer';
-import type { CartItem, NeonSoupExecutionReceipt, OpenOffer, ProtocolTransaction, WalletConnection } from './state/types';
+import type { AppState, CartItem, OpenOffer, WalletConnection } from './state/types';
 
 function pairMatches(stateOffer: OpenOffer, offerKey: string, askKey: string, assets: ReturnType<typeof assetMap>) {
   const offer = assets[offerKey];
@@ -65,38 +71,18 @@ function hasExecutionExport(raw: unknown): boolean {
   return Boolean(exports && typeof exports === 'object' && 'neonsoupExecution' in exports);
 }
 
-function transactionsFromReceipt(receipt: NeonSoupExecutionReceipt, at: number): ProtocolTransaction[] {
-  const groups = new Map<string, typeof receipt.items>();
-  receipt.items.forEach((item) => {
-    const groupItems = groups.get(item.groupId) || [];
-    groupItems.push(item);
-    groups.set(item.groupId, groupItems);
-  });
-  return [...groups.entries()].map(([groupId, items]) => {
-    const actions = [...new Set(items.map((item) => item.type))];
-    const action = actions.length === 1 ? actions[0] || 'open' : 'swap';
-    const txHash = items[0]?.txHash || '';
-    return {
-      id: `${receipt.executionId}-${groupId}`,
-      txHash,
-      action,
-      status: 'submitted',
-      at,
-      groupId,
-      itemIds: items.map((item) => item.itemId),
-      summary:
-        actions.length === 1
-          ? `${actions[0] === 'open' ? 'Opening' : actions[0] === 'fill' ? 'Filling' : 'Closing'} ${items.length} offer${items.length === 1 ? '' : 's'}.`
-          : `Executing ${items.length} Cart intents.`,
-    };
-  });
-}
-
 function cartPendingTxHashes(items: CartItem[]): string[] {
   return items
     .filter((item) => item.status === 'pending' && item.txHash)
     .map((item) => item.txHash || '')
     .filter(Boolean);
+}
+
+function pendingTransactionHashes(state: AppState): string[] {
+  return [
+    ...state.transactions.filter((tx) => tx.status === 'submitted').map((tx) => tx.txHash),
+    ...cartPendingTxHashes(state.cart.items),
+  ];
 }
 
 export default function App() {
@@ -114,42 +100,13 @@ export default function App() {
   const portfolio = visiblePortfolio(state);
   const hiddenOffers = Math.max(0, state.openOffers.length - offers.length);
   const hiddenPortfolio = Math.max(0, state.portfolio.length - portfolio.length);
+  const offersRefreshId = useRef(0);
+  const portfolioRefreshId = useRef(0);
 
   function updateStoredState() {
     clearStoredState();
     dispatch({ type: 'replace-state', state: createInitialState() });
     window.location.reload();
-  }
-
-  function offerToTransaction(item: OpenOffer): TransactionRow {
-    const offeredAsset = resolveAsset(state, item.offerPolicyId, item.offerAssetName);
-    const askAsset = resolveAsset(state, item.askPolicyId, item.askAssetName);
-    const userOwned = Boolean(state.wallet?.stakeKeyHash && item.ownerStakeKeyHash === state.wallet.stakeKeyHash);
-    return {
-      id: `active-offer-${item.id}`,
-      txHash: item.txHash,
-      action: 'open',
-      status: 'confirmed',
-      at: 0,
-      userOwned,
-      summary: `${fromBase(item.utxoOfferQuantity, offeredAsset.decimals)} ${assetTitle(
-        offeredAsset,
-      )} asking ${assetTitle(askAsset)}`,
-    };
-  }
-
-  function protocolTransactions(items: OpenOffer[] = state.openOffers): TransactionRow[] {
-    const openOfferTransactions = items.map(offerToTransaction);
-    const confirmedHashes = new Set(openOfferTransactions.map((tx) => tx.txHash));
-    return [
-      ...state.transactions
-        .filter((tx) => !confirmedHashes.has(tx.txHash))
-        .map((tx) => ({
-          ...tx,
-          userOwned: Boolean(state.wallet?.stakeKeyHash && tx.pair),
-        })),
-      ...openOfferTransactions,
-    ];
   }
 
   function applyWalletReturn(raw: unknown, shouldConsume: boolean) {
@@ -162,7 +119,7 @@ export default function App() {
     if (wallet) dispatch({ type: 'set-wallet', wallet });
     if (receipt) {
       dispatch({ type: 'apply-execution-receipt', receipt, at });
-      transactionsFromReceipt(receipt, at).forEach((tx) => dispatch({ type: 'add-transaction', tx }));
+      dispatch({ type: 'merge-transactions', transactions: transactionsFromReceipt(receipt, at) });
     }
     dispatch({
       type: 'set-notice',
@@ -233,12 +190,14 @@ export default function App() {
   useEffect(() => {
     void refreshOffers();
     if (state.wallet?.address) void refreshPortfolio();
+    else portfolioRefreshId.current += 1;
     // Network/provider changes should refresh data; avoid depending on all state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.options.network, state.options.provider]);
 
   useEffect(() => {
     if (state.wallet?.address) void refreshPortfolio();
+    else portfolioRefreshId.current += 1;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.wallet?.address]);
 
@@ -275,41 +234,76 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.options.network, state.options.provider, state.wallet?.address]);
 
+  const pendingHashesKey = [...new Set(pendingTransactionHashes(state))].sort().join(',');
+
+  useEffect(() => {
+    if (!pendingHashesKey) return;
+    void refreshTransactionStatuses(pendingHashesKey.split(','));
+    const id = window.setInterval(() => {
+      void refreshTransactionStatuses(pendingHashesKey.split(','));
+    }, APP_CONFIG.confirmationPollingIntervalMs);
+    return () => window.clearInterval(id);
+    // Pending hashes define the confirmation subscription.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.options.network, state.options.provider, pendingHashesKey]);
+
+  async function refreshTransactionStatuses(txHashes: string[]): Promise<void> {
+    await reconcileChainTransactions(txHashes);
+  }
+
+  async function reconcileChainTransactions(
+    txHashes: readonly string[],
+    isCurrent: () => boolean = () => true,
+  ): Promise<void> {
+    try {
+      const chainTransactions = await loadTransactions(state, txHashes);
+      if (!isCurrent() || !chainTransactions.length) return;
+      dispatch({
+        type: 'merge-transactions',
+        transactions: chainTransactions.map((transaction) =>
+          protocolTransactionFromChain(
+            transaction,
+            APP_CONFIG.networks[state.options.network].beaconPolicy || APP_CONFIG.beaconPolicy,
+          ),
+        ),
+      });
+      dispatch({
+        type: 'reconcile-confirmed-transactions',
+        txHashes: chainTransactions
+          .filter((transaction) => transaction.validContract !== false)
+          .map((transaction) => transaction.hash),
+        failedTxHashes: chainTransactions
+          .filter((transaction) => transaction.validContract === false)
+          .map((transaction) => transaction.hash),
+        confirmedAt: Date.now(),
+      });
+    } catch {
+      // Transaction enrichment is retried independently and must not discard valid offer/portfolio data.
+    }
+  }
+
   async function refreshOffers(extraPendingHashes: string[] = []) {
+    const refreshId = ++offersRefreshId.current;
     dispatch({ type: 'set-loading', key: 'offers', value: true });
     dispatch({ type: 'set-notice', key: 'offers', notice: { tone: 'warning', message: 'Loading open offers...' } });
     try {
       const loaded = await loadOpenOffers(state);
-      const info = { ...state.assetInfo };
-      for (const item of loaded) {
-        const offered = await loadAssetInfo(state, item.offerPolicyId, item.offerAssetName);
-        const asked = await loadAssetInfo(state, item.askPolicyId, item.askAssetName);
-        info[offered.assetKey] = offered;
-        info[asked.assetKey] = asked;
-      }
-      dispatch({ type: 'set-asset-info', assets: info });
-      dispatch({ type: 'set-open-offers', offers: loaded });
-      const pendingHashes = [
-        ...state.transactions.filter((tx) => tx.status === 'submitted').map((tx) => tx.txHash),
-        ...cartPendingTxHashes(state.cart.items),
+      if (refreshId !== offersRefreshId.current) return;
+      dispatch({ type: 'set-asset-info', assets: loaded.assets });
+      dispatch({ type: 'set-open-offers', offers: loaded.data });
+      const transactionHashes = [
+        ...loaded.data.map((offer) => offer.txHash),
+        ...pendingTransactionHashes(state),
         ...extraPendingHashes,
       ];
-      const confirmedHashes = new Set(await loadConfirmedTransactionHashes(state, pendingHashes));
-      const confirmedItemIds = state.cart.items
-        .filter((item) => item.status === 'pending' && item.txHash && confirmedHashes.has(item.txHash))
-        .map((item) => item.id);
-      if (confirmedItemIds.length) {
-        dispatch({ type: 'confirm-cart-items', itemIds: confirmedItemIds, confirmedAt: Date.now() });
-      }
-      if (confirmedHashes.size) {
-        dispatch({ type: 'confirm-transactions', txHashes: [...confirmedHashes] });
-      }
+      await reconcileChainTransactions(transactionHashes, () => refreshId === offersRefreshId.current);
+      if (refreshId !== offersRefreshId.current) return;
       dispatch({
         type: 'set-notice',
         key: 'offers',
         notice: {
-          tone: loaded.length ? 'success' : 'warning',
-          message: `${loaded.length} open offer${loaded.length === 1 ? '' : 's'} loaded.`,
+          tone: loaded.data.length ? 'success' : 'warning',
+          message: `${loaded.data.length} open offer${loaded.data.length === 1 ? '' : 's'} loaded.`,
         },
       });
     } catch (error) {
@@ -319,7 +313,9 @@ export default function App() {
         notice: { tone: 'danger', message: `Could not load open offers: ${safeError(error)}` },
       });
     } finally {
-      dispatch({ type: 'set-loading', key: 'offers', value: false });
+      if (refreshId === offersRefreshId.current) {
+        dispatch({ type: 'set-loading', key: 'offers', value: false });
+      }
     }
   }
 
@@ -332,16 +328,20 @@ export default function App() {
       });
       return;
     }
+    const refreshId = ++portfolioRefreshId.current;
     dispatch({ type: 'set-loading', key: 'portfolio', value: true });
     try {
       const loaded = await loadPortfolio(state, state.wallet.address);
-      const info = Object.fromEntries(loaded.map((asset) => [asset.assetKey, asset]));
-      dispatch({ type: 'set-asset-info', assets: info });
-      dispatch({ type: 'set-portfolio', portfolio: loaded });
+      if (refreshId !== portfolioRefreshId.current) return;
+      dispatch({ type: 'set-asset-info', assets: loaded.assets });
+      dispatch({ type: 'set-portfolio', portfolio: loaded.data });
       dispatch({
         type: 'set-notice',
         key: 'portfolio',
-        notice: { tone: loaded.length ? 'success' : 'warning', message: `${loaded.length} assets at current address.` },
+        notice: {
+          tone: loaded.data.length ? 'success' : 'warning',
+          message: `${loaded.data.length} assets at current address.`,
+        },
       });
     } catch (error) {
       dispatch({
@@ -350,7 +350,9 @@ export default function App() {
         notice: { tone: 'danger', message: `Could not load portfolio: ${safeError(error)}` },
       });
     } finally {
-      dispatch({ type: 'set-loading', key: 'portfolio', value: false });
+      if (refreshId === portfolioRefreshId.current) {
+        dispatch({ type: 'set-loading', key: 'portfolio', value: false });
+      }
     }
   }
 
@@ -680,7 +682,7 @@ export default function App() {
                 {pairOffers.length}/{state.openOffers.length} offers for the selected pair. {hiddenOffers} hidden.
               </p>
             </div>
-            <ReloadButton label="Refresh pair offers" onClick={refreshOffers} disabled={state.loading.offers} />
+            <ReloadButton label="Refresh pair offers" onClick={() => void refreshOffers()} disabled={state.loading.offers} />
           </div>
           {state.loading.offers ? <LoadingState label="Loading offers" /> : null}
           <OpenOffersTable state={state} offers={pairOffers} onFill={selectFill} onClose={selectClose} />
@@ -698,7 +700,7 @@ export default function App() {
         </FormAlert>
         <section className="app-card p-3 p-lg-4">
           <div className="d-flex justify-content-end mb-3">
-            <ReloadButton label="Refresh open offers" onClick={refreshOffers} disabled={state.loading.offers} />
+            <ReloadButton label="Refresh open offers" onClick={() => void refreshOffers()} disabled={state.loading.offers} />
           </div>
           {state.loading.offers ? <LoadingState label="Loading offers" /> : null}
           <OpenOffersTable state={state} offers={offers} onFill={selectFill} onClose={selectClose} />
@@ -708,12 +710,10 @@ export default function App() {
   }
 
   function renderUser() {
-    const ownedOffers = offers.filter((item) => state.wallet?.stakeKeyHash && item.ownerStakeKeyHash === state.wallet.stakeKeyHash);
-    const confirmedHashes = new Set(ownedOffers.map((offer) => offer.txHash));
-    const userTransactions = [
-      ...state.transactions.filter((tx) => !confirmedHashes.has(tx.txHash)).map((tx) => ({ ...tx, userOwned: true })),
-      ...ownedOffers.map(offerToTransaction),
-    ];
+    const ownedOffers = offers.filter((item) => isCurrentOutputOwner(item, state.wallet?.stakeKeyHash));
+    const userTransactions = composeTransactionRows(state.transactions, state.wallet?.stakeKeyHash).filter(
+      (transaction) => transaction.ownershipBadge,
+    );
     return (
       <>
         <PageHeader title="User" eyebrow="Wallet scope" />
@@ -742,7 +742,7 @@ export default function App() {
             <div className="app-card p-3 p-lg-4">
               <div className="d-flex justify-content-between gap-3 mb-3">
                 <h2 className="h5 mb-0">My Open Offers</h2>
-                <ReloadButton label="Refresh my open offers" onClick={refreshOffers} disabled={state.loading.offers} />
+                <ReloadButton label="Refresh my open offers" onClick={() => void refreshOffers()} disabled={state.loading.offers} />
               </div>
               <OpenOffersTable state={state} offers={ownedOffers} onFill={selectFill} onClose={selectClose} />
             </div>
@@ -777,13 +777,13 @@ export default function App() {
             <div>
               <h2 className="h5 mb-1">Protocol Transactions</h2>
               <p className="text-body-secondary mb-0">
-                Open protocol UTxOs and wallet-return transactions for the current network.
+                Chain-verified protocol transactions and pending wallet receipts for the current network.
               </p>
             </div>
-            <ReloadButton label="Refresh protocol activity" onClick={refreshOffers} disabled={state.loading.offers} />
+            <ReloadButton label="Refresh protocol activity" onClick={() => void refreshOffers()} disabled={state.loading.offers} />
           </div>
           {state.loading.offers ? <LoadingState label="Loading activity" /> : null}
-          <TransactionList transactions={protocolTransactions()} network={state.options.network} />
+          <TransactionList transactions={composeTransactionRows(state.transactions, state.wallet?.stakeKeyHash)} network={state.options.network} />
         </section>
       </>
     );
@@ -824,7 +824,7 @@ export default function App() {
       return (
         <>
           <PageHeader title="Options" eyebrow="Configuration" />
-          <OptionsPanel state={state} onRefreshOffers={refreshOffers} onRefreshPortfolio={refreshPortfolio} />
+          <OptionsPanel state={state} onRefreshOffers={() => void refreshOffers()} onRefreshPortfolio={refreshPortfolio} />
         </>
       );
     }

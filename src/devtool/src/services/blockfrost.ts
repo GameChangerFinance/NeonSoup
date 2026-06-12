@@ -1,7 +1,8 @@
-import type { AppOptions, NetworkTag, OpenOffer, PortfolioAsset, ResolvedAsset } from '../state/types';
+import type { AppOptions, AssetRef, NetworkTag, OpenOffer, PortfolioAsset, ResolvedAsset } from '../state/types';
 import { APP_CONFIG } from '../config/appConfig';
 import { applyFetchedMetadata, assetIdOf, assetKeyOf, hardAsset } from '../domain/assets';
 import { parseSwapDatum, stakeFromAddress } from '../domain/cardano';
+import type { ChainTransaction, ChainTransactionOutput, NetworkProvider, ProviderContext } from './providers/types';
 
 const blockfrostAssetIdField = 'un' + 'it';
 
@@ -27,11 +28,25 @@ interface BlockfrostUtxo {
   inline_datum?: string;
 }
 
-interface ProviderContext {
-  networkTag: NetworkTag;
-  options: AppOptions;
-  assetInfo: Record<string, ResolvedAsset>;
-  customAssets: Parameters<typeof hardAsset>[1];
+interface BlockfrostTransaction {
+  hash?: string;
+  block_time?: number;
+  valid_contract?: boolean;
+}
+
+interface BlockfrostTransactionIo {
+  address?: string;
+  amount?: BlockfrostAmount[];
+  tx_hash?: string;
+  output_index?: number;
+  data_hash?: string | null;
+  inline_datum?: string | null;
+}
+
+interface BlockfrostTransactionUtxos {
+  hash?: string;
+  inputs?: BlockfrostTransactionIo[];
+  outputs?: BlockfrostTransactionIo[];
 }
 
 function endpoint(networkTag: NetworkTag, options: AppOptions): string {
@@ -148,7 +163,7 @@ export async function fetchPortfolio(context: ProviderContext, address: string):
 
 export async function fetchConfirmedTransactionHashes(
   context: ProviderContext,
-  txHashes: string[],
+  txHashes: readonly string[],
 ): Promise<string[]> {
   const unique = [...new Set(txHashes.filter(Boolean))];
   const results = await Promise.all(
@@ -159,3 +174,84 @@ export async function fetchConfirmedTransactionHashes(
   );
   return results.filter(Boolean);
 }
+
+function mapTransactionIo(io: BlockfrostTransactionIo): ChainTransactionOutput {
+  const amounts = io.amount || [];
+  const lovelace = amounts.find((amount) => amount[blockfrostAssetIdField] === 'lovelace')?.quantity || '0';
+  return {
+    address: io.address || '',
+    ownerStakeKeyHash: stakeFromAddress(io.address || ''),
+    txHash: io.tx_hash || '',
+    index: String(io.output_index ?? ''),
+    value: lovelace,
+    datumHex: io.inline_datum || '',
+    tokens: amounts
+      .filter((amount) => amount[blockfrostAssetIdField] !== 'lovelace')
+      .map((amount) => {
+        const assetId = amount[blockfrostAssetIdField] || '';
+        return {
+          policyId: assetId.slice(0, 56),
+          assetNameHex: assetId.slice(56),
+          quantity: amount.quantity,
+        };
+      }),
+  };
+}
+
+async function fetchTransactions(context: ProviderContext, txHashes: readonly string[]): Promise<ChainTransaction[]> {
+  const unique = [...new Set(txHashes.filter(Boolean))];
+  const transactions = await Promise.all(
+    unique.map(async (txHash) => {
+      const [tx, utxos] = await Promise.all([
+        requestJson(`/txs/${txHash}`, context, true),
+        requestJson(`/txs/${txHash}/utxos`, context, true),
+      ]);
+      if (!tx || typeof tx !== 'object' || !utxos || typeof utxos !== 'object') return null;
+      const transaction = tx as BlockfrostTransaction;
+      const io = utxos as BlockfrostTransactionUtxos;
+      return {
+        hash: transaction.hash || io.hash || txHash,
+        includedAt: (transaction.block_time || 0) * 1000,
+        ...(typeof transaction.valid_contract === 'boolean' ? { validContract: transaction.valid_contract } : {}),
+        inputs: (io.inputs || []).map(mapTransactionIo),
+        outputs: (io.outputs || []).map(mapTransactionIo),
+      } satisfies ChainTransaction;
+    }),
+  );
+  return transactions.filter((transaction): transaction is ChainTransaction => Boolean(transaction));
+}
+
+async function fetchAssetsInfo(
+  context: ProviderContext,
+  assets: readonly AssetRef[],
+): Promise<Record<string, ResolvedAsset>> {
+  const unique = new Map(assets.map((asset) => [assetKeyOf(asset.policyId, asset.assetNameHex), asset]));
+  const resolved: Record<string, ResolvedAsset> = {};
+  for (const asset of unique.values()) {
+    const info = await fetchAssetInfo(asset.policyId, asset.assetNameHex, context);
+    resolved[info.assetKey] = info;
+  }
+  return resolved;
+}
+
+export const blockfrostProvider: NetworkProvider = {
+  getAssetInfo: (context, policyId, assetNameHex) => fetchAssetInfo(policyId, assetNameHex, context),
+  getAssetsInfo: fetchAssetsInfo,
+  async getOpenOffers(context) {
+    const data = await fetchOpenOffers(context);
+    const assets = await fetchAssetsInfo(
+      context,
+      data.flatMap((offer) => [
+        { policyId: offer.offerPolicyId, assetNameHex: offer.offerAssetName },
+        { policyId: offer.askPolicyId, assetNameHex: offer.askAssetName },
+      ]),
+    );
+    return { data, assets };
+  },
+  async getPortfolio(context, address) {
+    const data = await fetchPortfolio(context, address);
+    return { data, assets: Object.fromEntries(data.map((asset) => [asset.assetKey, asset])) };
+  },
+  getTransactions: fetchTransactions,
+  getConfirmedTransactionHashes: fetchConfirmedTransactionHashes,
+};

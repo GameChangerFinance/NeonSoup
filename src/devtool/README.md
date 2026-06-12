@@ -101,13 +101,16 @@ debugging tool.
   GCScript through the same generic wallet-code transport.
 - Opening or closing the wallet does not change Cart lifecycle state. A compact
   returned `neonsoupExecution` receipt moves matching items to pending; positive
-  network observations move them to confirmed.
+  network observations move them to confirmed. Pending transaction hashes are
+  checked in bounded provider batches and atomically reconcile Cart and
+  transaction-table status.
 - Generated protocol GCScripts keep signed transaction CBOR internal to wallet
   sign/submit steps. Return receipts are composed with GCScript macro/ISL from
   explicit args and wallet-runtime build results.
 
 ## Future Work Notes
 
-- Cardano GraphQL MKII is scaffolded as a provider option and is expected to
-  become the default network provider later; Blockfrost remains the current
-  working provider.
+- Cardano GraphQL MKII and Blockfrost implement the same devtool provider
+  contract. MKII uses bounded nested GraphQL queries to reduce request fan-out;
+  it is the default provider. Blockfrost remains selectable for parity and
+  fallback testing.

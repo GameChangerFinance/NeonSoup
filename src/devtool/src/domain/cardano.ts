@@ -123,6 +123,26 @@ function plutusFields(value: CborValue): CborValue[] {
   return value && typeof value === 'object' && 'val' in value ? asArr(value.val) : [];
 }
 
+function constructorIndex(value: CborValue | undefined): number {
+  if (!value || typeof value !== 'object' || !('tag' in value)) return -1;
+  if (value.tag >= 121 && value.tag <= 127) return value.tag - 121;
+  if (value.tag >= 1280 && value.tag <= 1400) return value.tag - 1280 + 7;
+  if (value.tag === 102) {
+    const [index] = asArr(value.val);
+    return typeof index === 'bigint' ? Number(index) : -1;
+  }
+  return -1;
+}
+
+function parsePreviousInput(value: CborValue | undefined): { txHash: string; index: string } | null {
+  if (constructorIndex(value) !== 0) return null;
+  const [reference] = plutusFields(value ?? null);
+  const [transactionId, index] = plutusFields(reference ?? null);
+  const [transactionHash] = plutusFields(transactionId ?? null);
+  const txHash = asBytes(transactionHash);
+  return txHash && typeof index === 'bigint' ? { txHash, index: index.toString() } : null;
+}
+
 function normalizeTxAsset(policyId: string, assetNameHex: string) {
   return !policyId && !assetNameHex
     ? { policyId: 'ada', assetNameHex: 'ada' }
@@ -139,6 +159,7 @@ export interface ParsedSwapDatum {
   askBeacon: string;
   priceNumerator: string;
   priceDenominator: string;
+  previousInput: { txHash: string; index: string } | null;
 }
 
 export function parseSwapDatum(datumHex: string): ParsedSwapDatum | null {
@@ -158,6 +179,7 @@ export function parseSwapDatum(datumHex: string): ParsedSwapDatum | null {
       askBeacon: asBytes(fields[7]),
       priceNumerator: (price[0] ?? 0n).toString(),
       priceDenominator: (price[1] ?? 1n).toString(),
+      previousInput: parsePreviousInput(fields[9]),
     };
   } catch {
     return null;

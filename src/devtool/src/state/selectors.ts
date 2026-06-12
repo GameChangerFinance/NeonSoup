@@ -1,4 +1,5 @@
 import { assetKeyOf, configuredAssets, hardAsset } from '../domain/assets';
+import { isCurrentOutputOwner } from '../domain/ownership';
 import type { AppState, OpenOffer, PortfolioAsset, ResolvedAsset } from './types';
 
 export function assetMap(state: AppState): Record<string, ResolvedAsset> {
@@ -25,7 +26,7 @@ export function visibleOffers(state: AppState): OpenOffer[] {
   return state.openOffers.filter((offer) => {
     const ownerMatch =
       !state.options.ownerOnly ||
-      Boolean(state.wallet?.stakeKeyHash && offer.ownerStakeKeyHash === state.wallet.stakeKeyHash);
+      isCurrentOutputOwner(offer, state.wallet?.stakeKeyHash);
     const knownMatch =
       !state.options.hideUnknownOffers ||
       (isKnownAsset(state, offer.offerPolicyId, offer.offerAssetName) &&

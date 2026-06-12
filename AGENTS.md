@@ -19,6 +19,57 @@ Production NeonSoup is expected to come later.
 - Provider defaults are read from Vite env variables. Use `.env.example` as the
   committed template and keep private `.env` files untracked.
 
+## Provider Goals
+
+- Cardano GraphQL MKII is the default provider for the devtool network layer.
+- All providers must share the same app-facing signatures and interfaces.
+- Provider selection must change transport and response mapping only; it must not
+  change application behavior, row semantics, or call-site shape.
+- Keep provider-neutral domain types in the app layer. Do not leak raw provider
+  response shapes into React components, reducers, or table renderers.
+- Prefer blockchain-backed categorization from provider queries over wallet
+  return payloads, metadata, or UI state snapshots.
+- For protocol transactions, treat wallet receipts as hint-only. Replace them
+  with chain-backed classification once `getTransactions` can supply
+  `valid_contract`, inputs, outputs, token beacons, and parsed datum
+  `previousInput` evidence.
+- Keep provider fallback explicit. Do not silently switch providers after an
+  error because responses may represent different chain snapshots.
+
+## MKII Provider Design
+
+- Use `range` on MKII root list queries. Do not rely on unbounded root list
+  requests.
+- Prefer small, whitelist-friendly GraphQL documents with stable operation
+  names and a narrow field surface.
+- Use GraphQL nesting to fetch the required UTxO, datum, token, transaction, and
+  asset fields in the same HTTP response when the query shape supports it.
+- Keep query documents immutable and named. Runtime values belong in GraphQL
+  variables, not interpolated query text.
+- Inspect `extensions.explain.operations` before accepting a query as semantically
+  correct or efficient.
+- When sorting or filtering is needed, map app-level enums through a closed
+  allowlist to provider-level query arguments. Do not forward arbitrary UI values
+  directly into GraphQL `order_by` or filter shapes.
+- Prefer deterministic pagination helpers over ad hoc page merging. Pagination
+  should normalize `limit`, `offset`, `nextOffset`, and deduplication by
+  canonical identity.
+- Keep pagination reusable across offers, assets, transactions, and future
+  tables. Do not rebuild paging logic inside individual views.
+- Use bundle-aware transaction classification. A single on-chain protocol
+  transaction may represent multiple fills or mixed actions, so summaries and
+  row labels must reflect bundle counts instead of assuming one action per row.
+- Use canonical keys for page deduplication and row identity:
+  `txHash#index` for UTxOs and `policyId.assetNameHex` for assets.
+- Treat server-side results as one source of truth, but keep client-side
+  de-duplication and sort fallback in reusable helpers when the backend cannot
+  prove the full ordering.
+- After API calls or wallet-return URL handling, reconcile cart and app state
+  through normalized shared helpers so the visible state reflects the latest
+  confirmed chain/provider result. Do not patch state differently for each
+  provider; keep the reconciliation path provider-neutral and reuse the same
+  normalization layer across transports.
+
 ## Commands
 
 - Install dependencies: `pnpm install`
@@ -99,6 +150,23 @@ wallet-intent loading.
   `policyId + assetNameHex`; do not use the older provider label in app code.
 - Do not add ad hoc localStorage migrations for old devtool state shapes. Use
   the centralized version mismatch banner and update/reset flow.
+- Normalize transactions, offers, assets, and users in reusable helpers before
+  rendering any table. Keep the row model stable and derived from the normalized
+  domain layer.
+- Keep on-chain/API parsing and categorization centralized in reusable domain
+  helpers by purpose. Table and UI components should render normalized
+  rows/data only and should not decide protocol action, ownership meaning, or
+  identity.
+- Wrap refresh handlers in closures when wiring UI events. Do not pass the raw
+  click event through to loading or reconciliation code, or state loaders can
+  receive array/event-shaped garbage such as `extraPendingHashes is not
+  iterable`.
+- Ownership badges must be derived from explicit stake-key comparison against
+  the current wallet. Missing `You` badges are a normalization bug, not a
+  rendering preference.
+- Keep provider contracts normalized around shared chain transaction shapes so
+  MKII and Blockfrost differ only in transport and mapping, not row semantics
+  or classification behavior.
 
 ## Devtool UI Notes
 
@@ -141,6 +209,38 @@ wallet-intent loading.
   protocol fragment itself requires it. Example: the cart bundling bug came
   from group-local wrapper scripts changing cache shape instead of the fragment
   code itself.
+
+## Data Normalization Goals
+
+The devtool should centralize API-to-app-state parsing and categorization in
+reusable helpers instead of scattering it across tables, components, reducers,
+or provider call sites.
+
+- Transaction rows, bundle summaries, and execution labels must be derived from
+  reusable transaction-domain helpers.
+- Offer/order rows must be normalized once and reused across every table or
+  view that renders live protocol state.
+- Asset rows, balances, and holdings must share one canonical asset-key and
+  quantity normalization path.
+- User-scoped views must use explicit ownership semantics from helpers rather
+  than ad hoc booleans.
+- Table components should render normalized domain objects only; they should
+  not decide protocol action, ownership meaning, or row identity.
+- Preserve current working behavior when refactoring, especially live offer
+  ownership display, cart composition, and intent execution.
+- When a blockchain-backed source of truth exists, prefer it over wallet-return
+  payloads, metadata, or UI state snapshots for categorization.
+
+## Design Principles
+
+- Keep categorization logic reusable, deterministic, and canonical.
+- Separate current live state from historical transaction history.
+- Treat bundled executions as bundles, not as multiple accidental single-row
+  actions.
+- Use explicit semantic names for ownership concepts instead of overloading
+  `You` or similar UI labels.
+- Keep new parsing and categorization code centralized in a few focused domain
+  helpers rather than duplicated in each table.
 
 ## Protocol Notes
 

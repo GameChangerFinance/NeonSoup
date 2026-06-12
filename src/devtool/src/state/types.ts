@@ -6,6 +6,7 @@ export type NetworkProviderKind = 'blockfrost' | 'graphqlMk2';
 export type NoticeTone = 'info' | 'success' | 'warning' | 'danger';
 export type CartExecutionMode = 'bundle' | 'parallel';
 export type CartItemStatus = 'draft' | 'pending' | 'confirmed' | 'failed';
+export type ProtocolAction = ActionMode | 'mixed' | 'unknown' | 'swap';
 
 export interface AssetRef {
   policyId: string;
@@ -61,13 +62,18 @@ export interface PortfolioAsset extends ResolvedAsset {
 export interface ProtocolTransaction {
   id: string;
   txHash: string;
-  action: ActionMode | 'swap';
+  action: ProtocolAction;
   status: 'submitted' | 'confirmed' | 'failed';
   at: number;
   pair?: AssetPair;
   summary: string;
   groupId?: string;
   itemIds?: string[];
+  actions?: ActionMode[];
+  actionCounts?: Partial<Record<ActionMode, number>>;
+  evidence?: 'chain' | 'wallet-receipt';
+  participantStakeKeyHashes?: string[];
+  outputOwnerStakeKeyHashes?: string[];
 }
 
 export type IntentArgs = Record<string, string>;
@@ -231,7 +237,6 @@ export type AppAction =
   | { type: 'set-cart-item-selected'; itemId: string; selected: boolean }
   | { type: 'set-cart-items-selected'; itemIds: string[]; selected: boolean }
   | { type: 'apply-execution-receipt'; receipt: NeonSoupExecutionReceipt; at: number }
-  | { type: 'confirm-cart-items'; itemIds: string[]; confirmedAt: number }
   | { type: 'requeue-cart-item'; itemId: string }
   | { type: 'set-cart-mode'; mode: CartExecutionMode }
   | { type: 'set-cart-max-intents-per-transaction'; value: number }
@@ -244,7 +249,8 @@ export type AppAction =
   | { type: 'set-selected-order'; orderId: string }
   | { type: 'set-selected-pair'; pair: AssetPair | null }
   | { type: 'add-transaction'; tx: ProtocolTransaction }
-  | { type: 'confirm-transactions'; txHashes: string[] }
+  | { type: 'merge-transactions'; transactions: ProtocolTransaction[] }
+  | { type: 'reconcile-confirmed-transactions'; txHashes: string[]; failedTxHashes?: string[]; confirmedAt: number }
   | { type: 'set-notice'; key: keyof AppState['notices']; notice: Notice | null }
   | { type: 'set-loading'; key: keyof AppState['loading']; value: boolean }
   | { type: 'select-offer-for-fill'; offer: OpenOffer; amount: string }
