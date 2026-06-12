@@ -18,6 +18,24 @@ Inspect the recipe. Fork it. Compose your own flavors. Deploy kitchens on your o
 
 **Not production ready yet! Use only on testnet.**
 
+## 🛠️ Devtool Dapp
+
+The current frontend is a developer tool for testing the P2P DeFi Kernel order
+book, GameChanger Wallet intents, and protocol UX before the production
+NeonSoup frontend lands. It is a Vite + React + TypeScript app under
+[`src/devtool/`](src/devtool/) and builds to `dist/index.html`.
+
+See [`src/devtool/README.md`](src/devtool/README.md) for setup, env variables,
+and UI notes.
+
+Provider defaults are configured through Vite env variables. Copy
+[`.env.example`](.env.example) to `.env` for local development and keep private
+provider URLs/API tokens out of commits.
+The devtool app version uses SemVer build metadata:
+`package.json` version + `VITE_NEONSOUP_BUILD_TAG`, for example
+`0.0.1+local`. Changing the build tag intentionally prompts users to
+update/reset incompatible browser state.
+
 ## 🚀 Overview
 
 **NeonSoup** is a peer-to-peer execution layer for Cardano DeFi with a deep exploration for cypherpunk values: 
