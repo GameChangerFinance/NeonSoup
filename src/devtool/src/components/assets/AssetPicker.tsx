@@ -1,5 +1,6 @@
 import type { ResolvedAsset } from '../../state/types';
 import { assetTitle } from '../../domain/assets';
+import { assetMetadataWarningText } from '../../domain/assetWarnings';
 
 interface AssetPickerProps {
   id: string;
@@ -10,6 +11,8 @@ interface AssetPickerProps {
 }
 
 export function AssetPicker({ id, label, value, assets, onChange }: AssetPickerProps) {
+  const warning = assetMetadataWarningText(assets[value]);
+  const warningId = `${id}-metadata-warning`;
   return (
     <div>
       <label className="form-label" htmlFor={id}>
@@ -19,6 +22,7 @@ export function AssetPicker({ id, label, value, assets, onChange }: AssetPickerP
         id={id}
         className="form-select"
         value={value}
+        aria-describedby={warning ? warningId : undefined}
         onChange={(event) => onChange(event.target.value)}
       >
         {Object.entries(assets).map(([key, asset]) => (
@@ -27,6 +31,11 @@ export function AssetPicker({ id, label, value, assets, onChange }: AssetPickerP
           </option>
         ))}
       </select>
+      {warning ? (
+        <div id={warningId} className="form-text text-warning">
+          {warning}
+        </div>
+      ) : null}
     </div>
   );
 }

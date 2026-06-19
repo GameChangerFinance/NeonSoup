@@ -1,5 +1,10 @@
 import { APP_CONFIG } from '../config/appConfig';
 import type { AssetMetadata, NetworkTag, PortfolioAsset, ResolvedAsset } from '../state/types';
+import {
+  defaultMinExecutableOfferQuantity,
+  defaultMinMakerRemainderQuantity,
+  normalizeBaseUnitQuantity,
+} from './assetPolicy';
 import { short, truncate } from './text';
 
 export function assetIdOf(policyId: string, assetNameHex: string): string {
@@ -40,8 +45,11 @@ export function normalizeLogo(value: unknown): string {
 
 export function normalizeAssetMetadata(asset: AssetMetadata): ResolvedAsset {
   const policyId = asset.policyId || 'ada';
-  const assetNameHex = asset.assetNameHex ?? asset.assetName ?? (policyId === 'ada' ? 'ada' : '');
+  const rawAssetNameHex = asset.assetNameHex ?? asset.assetName ?? (policyId === 'ada' ? 'ada' : '');
+  const assetNameHex = policyId === 'ada' && (!rawAssetNameHex || rawAssetNameHex === 'lovelace') ? 'ada' : rawAssetNameHex;
   const assetId = asset.assetId || assetIdOf(policyId, assetNameHex);
+  const decimalsKnown = asset.decimalsKnown ?? Number.isFinite(asset.decimals);
+  const decimals = decimalsKnown ? Math.max(0, Math.trunc(asset.decimals)) : 0;
   return {
     ...asset,
     policyId,
@@ -51,7 +59,16 @@ export function normalizeAssetMetadata(asset: AssetMetadata): ResolvedAsset {
     label: assetLabel(asset),
     ticker: normalizeTicker(asset.ticker || asset.label),
     description: assetDescription(asset),
-    decimals: Number.isFinite(asset.decimals) ? Math.max(0, Math.trunc(asset.decimals)) : 0,
+    decimals,
+    decimalsKnown,
+    minExecutableOfferQuantity: normalizeBaseUnitQuantity(
+      asset.minExecutableOfferQuantity,
+      defaultMinExecutableOfferQuantity(policyId, assetNameHex, decimals),
+    ),
+    minMakerRemainderQuantity: normalizeBaseUnitQuantity(
+      asset.minMakerRemainderQuantity,
+      defaultMinMakerRemainderQuantity(policyId, assetNameHex, decimals),
+    ),
     logo: normalizeLogo(asset.logo),
     known: asset.known ?? true,
   };
@@ -102,6 +119,7 @@ export function hardAsset(
     label: policyId === 'ada' ? 'ADA' : short(assetNameHex || policyId, 8, 4),
     ticker: policyId === 'ada' ? 'ADA' : '',
     decimals: policyId === 'ada' ? 6 : 0,
+    decimalsKnown: policyId === 'ada',
     known: policyId === 'ada',
   });
 }
@@ -138,6 +156,7 @@ export function applyFetchedMetadata(base: ResolvedAsset, fetched: unknown): Res
         ...(typeof m.description === 'string' ? { description: m.description } : {}),
       }),
     decimals: base.known ? base.decimals : Number.isFinite(decimals) ? Math.max(0, Math.trunc(decimals)) : base.decimals,
+    decimalsKnown: base.known || Number.isFinite(decimals) || Boolean(base.decimalsKnown),
     logo: base.logo || normalizeLogo(m.logo || m.image),
   };
 }

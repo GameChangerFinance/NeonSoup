@@ -15,6 +15,7 @@ import { JsonViewer } from './components/common/JsonViewer';
 import { OptionsPanel } from './components/options/OptionsPanel';
 import { CartModal } from './components/cart/CartModal';
 import { CartPanel } from './components/cart/CartPanel';
+import { SwapRouteBar } from './components/swap/SwapRouteBar';
 import { useAppDispatch, useAppState } from './state/appState';
 import { assetMap, balanceOf, resolveAsset, selectedOffer, visibleOffers, visiblePortfolio } from './state/selectors';
 import { assetTitle, configuredAssets } from './domain/assets';
@@ -24,7 +25,17 @@ import {
   transactionsFromReceipt,
 } from './domain/transactions';
 import { isCurrentOutputOwner } from './domain/ownership';
-import { fromBase, percent, toBase } from './domain/quantities';
+import { createOpenBookSnapshot, openBookSnapshotIsFresh } from './domain/openBook';
+import { fromBase, percent, ratioDecimal, toBase } from './domain/quantities';
+import {
+  percentToBps,
+  quoteSwap,
+  summarizeSwapBookPolicyFilters,
+  type SwapBookPolicySummary,
+  type SwapPrice,
+  type SwapQuote,
+  type SwapQuoteSeverity,
+} from './domain/swapQuote';
 import { safeError, short } from './domain/text';
 import { loadOpenOffers, loadPortfolio, loadTransactions } from './services/networkProvider';
 import { captureWalletReturn, consumeWalletReturn, openWalletCode } from './services/gcWallet';
@@ -32,6 +43,7 @@ import { fillAskAmount } from './services/intents';
 import {
   createBulkOpenCartItems,
   createCartItemFromCurrentIntent,
+  createSwapCartItems,
   selectedCartItems,
   validateCartItemsCanBeAdded,
 } from './services/cartIntents';
@@ -43,7 +55,7 @@ import {
 import { clearStoredState, readWalletReturn } from './services/storage';
 import { APP_CONFIG } from './config/appConfig';
 import { createInitialState } from './state/reducer';
-import type { AppState, CartItem, OpenOffer, WalletConnection } from './state/types';
+import type { AppState, CartItem, NoticeTone, OpenOffer, ResolvedAsset, WalletConnection } from './state/types';
 
 function pairMatches(stateOffer: OpenOffer, offerKey: string, askKey: string, assets: ReturnType<typeof assetMap>) {
   const offer = assets[offerKey];
@@ -85,6 +97,81 @@ function pendingTransactionHashes(state: AppState): string[] {
   ];
 }
 
+function openBookIsStale(state: AppState): boolean {
+  return !openBookSnapshotIsFresh(
+    state.openOffersSnapshot,
+    state.options.provider,
+    state.options.network,
+    Date.now(),
+    APP_CONFIG.pollingIntervalMs,
+  );
+}
+
+function quoteTextClass(severity: SwapQuoteSeverity): string {
+  if (severity === 'danger') return 'swap-quote-summary-danger';
+  if (severity === 'warning') return 'swap-quote-summary-warning';
+  if (severity === 'success') return 'swap-quote-summary-success';
+  return 'swap-quote-summary-info';
+}
+
+function formatBps(bps: number): string {
+  return `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`;
+}
+
+function priceText(price: SwapPrice | null, offerAsset: ResolvedAsset | undefined, receiveAsset: ResolvedAsset | undefined): string {
+  if (!price || !offerAsset || !receiveAsset || price.denominator <= 0n) return '-';
+  const numerator = price.numerator * 10n ** BigInt(receiveAsset.decimals);
+  const denominator = price.denominator * 10n ** BigInt(offerAsset.decimals);
+  return ratioDecimal(numerator, denominator, 8);
+}
+
+function inversePriceText(price: SwapPrice | null, offerAsset: ResolvedAsset | undefined, receiveAsset: ResolvedAsset | undefined): string {
+  if (!price || !offerAsset || !receiveAsset || price.numerator <= 0n) return '-';
+  const numerator = price.denominator * 10n ** BigInt(offerAsset.decimals);
+  const denominator = price.numerator * 10n ** BigInt(receiveAsset.decimals);
+  return ratioDecimal(numerator, denominator, 8);
+}
+
+function quoteSummary(quote: SwapQuote, offerAsset: ResolvedAsset, receiveAsset: ResolvedAsset): string {
+  const filled = fromBase(quote.filledInputQuantity, offerAsset.decimals);
+  const executionInput = fromBase(quote.executionInputQuantity, offerAsset.decimals);
+  const output = fromBase(quote.outputQuantity, receiveAsset.decimals);
+  const effective = priceText(quote.effectivePrice, offerAsset, receiveAsset);
+  const parts = [
+    `Quote routes ${filled}/${executionInput} ${assetTitle(offerAsset)} into ${output} ${assetTitle(receiveAsset)}`,
+    `effective ${effective} ${assetTitle(offerAsset)} per ${assetTitle(receiveAsset)}`,
+    `slippage ${formatBps(quote.weightedSlippageBps)}`,
+    `worst leg ${formatBps(quote.marginalSlippageBps)}`,
+  ];
+  if (quote.unfilledRequestedQuantity > 0n) {
+    parts.push(`${fromBase(quote.unfilledRequestedQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)} not routed`);
+  }
+  if (quote.roundUpInputQuantity > 0n) {
+    parts.push(`amount adjusted to ${executionInput} ${assetTitle(offerAsset)} for protocol-safe execution`);
+  }
+  if (quote.remainderBlockedCount) {
+    parts.push(`${quote.remainderBlockedCount} route boundary${quote.remainderBlockedCount === 1 ? '' : 'ies'} could not satisfy the maker-remainder policy`);
+  }
+  return parts.join('. ');
+}
+
+function bookPolicySummaryText(summary: SwapBookPolicySummary, receiveAsset: ResolvedAsset): string {
+  if (!summary.count) return '';
+  return `${summary.count} offer${summary.count === 1 ? '' : 's'} below minimum executable size filtered from the book (${fromBase(
+    summary.offerQuantity,
+    receiveAsset.decimals,
+  )} ${assetTitle(receiveAsset)})`;
+}
+
+const WALLET_REQUIRED_MESSAGE =
+  'Connect a wallet before operating. This is a temporary devtool restriction while wallet-agnostic intent execution is being fixed.';
+
+function showTemporaryFullFillProtocolAlert() {
+  window.alert(
+    'Temporary notice: transactions that fully consume an order currently fail in this devtool flow. The protocol is designed for upcoming wallet features that will improve DevEx. Avoid full-fill routes for now or brace for impact at wallet-side!',
+  );
+}
+
 export default function App() {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -94,14 +181,56 @@ export default function App() {
   const ask = assets[state.forms.openAskAssetKey];
   const currentOffer = selectedOffer(state);
   const offers = visibleOffers(state);
+  const pairOfferKey =
+    state.tradeTab === 'swap' || state.tradeTab === 'fill'
+      ? state.forms.openAskAssetKey
+      : state.forms.openOfferAssetKey;
+  const pairAskKey =
+    state.tradeTab === 'swap' || state.tradeTab === 'fill'
+      ? state.forms.openOfferAssetKey
+      : state.forms.openAskAssetKey;
   const pairOffers = offers.filter((item) =>
-    pairMatches(item, state.forms.openOfferAssetKey, state.forms.openAskAssetKey, assets),
+    pairMatches(item, pairOfferKey, pairAskKey, assets),
   );
+  const swapQuote = useMemo(
+    () =>
+      quoteSwap({
+        offers: state.openOffers,
+        offerAsset: offer,
+        receiveAsset: ask,
+        offerAmount: state.forms.swapOfferAmount,
+        payUp: state.forms.swapPayUp,
+        slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
+        payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+      }),
+    [
+      ask,
+      offer,
+      state.forms.swapOfferAmount,
+      state.forms.swapPayUp,
+      state.openOffers,
+      state.options.swapPayUpPercent,
+      state.options.swapSlippageTolerancePercent,
+    ],
+  );
+  const bookPolicySummary = useMemo(
+    () => summarizeSwapBookPolicyFilters(state.openOffers, offer, ask),
+    [ask, offer, state.openOffers],
+  );
+  const swapPolicyStatusByUtxo = useMemo(() => {
+    const labels: Record<string, string> = {};
+    swapQuote.filteredOffers.forEach(({ offer: filteredOffer, reason }) => {
+      const key = `${filteredOffer.txHash}#${filteredOffer.txIndex}`;
+      labels[key] = reason === 'min-executable-offer' ? 'Below minimum executable offer' : 'Skipped by pay-up';
+    });
+    return labels;
+  }, [swapQuote.filteredOffers]);
   const portfolio = visiblePortfolio(state);
   const hiddenOffers = Math.max(0, state.openOffers.length - offers.length);
   const hiddenPortfolio = Math.max(0, state.portfolio.length - portfolio.length);
   const offersRefreshId = useRef(0);
   const portfolioRefreshId = useRef(0);
+  const walletLaunchDisabled = !state.wallet;
 
   function updateStoredState() {
     clearStoredState();
@@ -207,7 +336,7 @@ export default function App() {
   }, [state.forms.fillOfferAmount, state.selectedOrderId, state.openOffers, state.assetInfo]);
 
   useEffect(() => {
-    if (!offer || !ask || state.action !== 'open') return;
+    if (!offer || !ask || (state.tradeTab !== 'open' && state.tradeTab !== 'bulk-open' && state.tradeTab !== 'swap')) return;
     const pair = {
       offer: { policyId: offer.policyId, assetNameHex: offer.assetNameHex },
       ask: { policyId: ask.policyId, assetNameHex: ask.assetNameHex },
@@ -222,7 +351,7 @@ export default function App() {
       return;
     }
     dispatch({ type: 'set-selected-pair', pair });
-  }, [ask, dispatch, offer, state.action, state.selectedPair]);
+  }, [ask, dispatch, offer, state.selectedPair, state.tradeTab]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -282,22 +411,26 @@ export default function App() {
     }
   }
 
-  async function refreshOffers(extraPendingHashes: string[] = []) {
+  async function refreshOffers(extraPendingHashes: string[] = []): Promise<OpenOffer[] | null> {
     const refreshId = ++offersRefreshId.current;
     dispatch({ type: 'set-loading', key: 'offers', value: true });
     dispatch({ type: 'set-notice', key: 'offers', notice: { tone: 'warning', message: 'Loading open offers...' } });
     try {
       const loaded = await loadOpenOffers(state);
-      if (refreshId !== offersRefreshId.current) return;
+      if (refreshId !== offersRefreshId.current) return null;
       dispatch({ type: 'set-asset-info', assets: loaded.assets });
-      dispatch({ type: 'set-open-offers', offers: loaded.data });
+      dispatch({
+        type: 'set-open-offers',
+        offers: loaded.data,
+        snapshot: createOpenBookSnapshot(state.options.provider, state.options.network, loaded.data.length),
+      });
       const transactionHashes = [
         ...loaded.data.map((offer) => offer.txHash),
         ...pendingTransactionHashes(state),
         ...extraPendingHashes,
       ];
       await reconcileChainTransactions(transactionHashes, () => refreshId === offersRefreshId.current);
-      if (refreshId !== offersRefreshId.current) return;
+      if (refreshId !== offersRefreshId.current) return null;
       dispatch({
         type: 'set-notice',
         key: 'offers',
@@ -306,12 +439,14 @@ export default function App() {
           message: `${loaded.data.length} open offer${loaded.data.length === 1 ? '' : 's'} loaded.`,
         },
       });
+      return loaded.data;
     } catch (error) {
       dispatch({
         type: 'set-notice',
         key: 'offers',
         notice: { tone: 'danger', message: `Could not load open offers: ${safeError(error)}` },
       });
+      return null;
     } finally {
       if (refreshId === offersRefreshId.current) {
         dispatch({ type: 'set-loading', key: 'offers', value: false });
@@ -399,6 +534,11 @@ export default function App() {
     addItemsToCart([createCartItemFromCurrentIntent(state)]);
   }
 
+  function addFillToCart() {
+    showTemporaryFullFillProtocolAlert();
+    addCurrentIntentToCart();
+  }
+
   function addBulkOpenToCart() {
     const count = Number(state.forms.bulkOpenCount || '0');
     const priceVariance = Number(state.forms.bulkOpenVariancePercent || '0');
@@ -406,7 +546,55 @@ export default function App() {
     addItemsToCart(createBulkOpenCartItems(state, count, priceVariance, offerVariance), true);
   }
 
+  function swapSelectedPair() {
+    dispatch({
+      type: 'set-forms',
+      forms: {
+        openOfferAssetKey: state.forms.openAskAssetKey,
+        openAskAssetKey: state.forms.openOfferAssetKey,
+      },
+    });
+  }
+
+  async function quoteOffersForSwap(): Promise<OpenOffer[]> {
+    if (!openBookIsStale(state)) return state.openOffers;
+    const refreshed = await refreshOffers();
+    return refreshed || state.openOffers;
+  }
+
+  async function createCurrentSwapCartItems(): Promise<CartItem[]> {
+    const quoteOffers = await quoteOffersForSwap();
+    const freshQuote = quoteSwap({
+      offers: quoteOffers,
+      offerAsset: offer,
+      receiveAsset: ask,
+      offerAmount: state.forms.swapOfferAmount,
+      payUp: state.forms.swapPayUp,
+      slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
+      payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+    });
+    return createSwapCartItems(state, freshQuote);
+  }
+
+  async function addSwapToCart() {
+    showTemporaryFullFillProtocolAlert();
+    addItemsToCart(await createCurrentSwapCartItems(), true);
+  }
+
+  async function runSwap() {
+    showTemporaryFullFillProtocolAlert();
+    await runIntentItems(await createCurrentSwapCartItems());
+  }
+
   async function runIntentItems(items: CartItem[]) {
+    if (!state.wallet) {
+      dispatch({
+        type: 'set-notice',
+        key: 'app',
+        notice: { tone: 'warning', message: WALLET_REQUIRED_MESSAGE },
+      });
+      return;
+    }
     if (!items.length) {
       dispatch({
         type: 'set-notice',
@@ -443,6 +631,9 @@ export default function App() {
   }
 
   async function runAction() {
+    if (state.tradeTab === 'fill') {
+      showTemporaryFullFillProtocolAlert();
+    }
     await runIntentItems([createCartItemFromCurrentIntent(state)]);
   }
 
@@ -455,6 +646,7 @@ export default function App() {
     const warnings: string[] = [];
     const offerQuantity = toBase(state.forms.openOfferAmount, offer.decimals);
     const offerBalance = balanceOf(state, offer.policyId, offer.assetNameHex);
+    if (!state.wallet) warnings.push(WALLET_REQUIRED_MESSAGE);
     if (offer.policyId === ask.policyId && offer.assetNameHex === ask.assetNameHex) warnings.push('Same asset pair.');
     if (offerBalance && offerQuantity > offerBalance) warnings.push('Offer exceeds wallet balance.');
     return warnings;
@@ -466,6 +658,7 @@ export default function App() {
     const offeredAsset = resolveAsset(state, currentOffer.offerPolicyId, currentOffer.offerAssetName);
     const quantity = toBase(state.forms.fillOfferAmount, offeredAsset.decimals);
     const available = BigInt(currentOffer.utxoOfferQuantity || '0');
+    if (!state.wallet) warnings.push(WALLET_REQUIRED_MESSAGE);
     if (quantity > available) warnings.push('Fill amount exceeds selected offer availability.');
     if (currentOffer.offerPolicyId === currentOffer.askPolicyId && currentOffer.offerAssetName === currentOffer.askAssetName) {
       warnings.push('Same asset pair.');
@@ -473,9 +666,62 @@ export default function App() {
     return warnings;
   }, [currentOffer, state, state.forms.fillOfferAmount]);
 
+  const swapWarnings = useMemo(() => {
+    if (!offer || !ask) return ['Select both assets.'];
+    const warnings: string[] = [];
+    const offerQuantity = swapQuote.executionInputQuantity;
+    const offerBalance = balanceOf(state, offer.policyId, offer.assetNameHex);
+    if (!state.wallet) warnings.push(WALLET_REQUIRED_MESSAGE);
+    if (offer.policyId === ask.policyId && offer.assetNameHex === ask.assetNameHex) warnings.push('Same asset pair.');
+    if (!swapQuote.requestedInputQuantity) warnings.push('Enter an amount to offer.');
+    if (offerBalance && offerQuantity > offerBalance) warnings.push('Offered amount exceeds wallet balance.');
+    if (offerQuantity && !swapQuote.outputQuantity) warnings.push('No executable liquidity for this amount and pair.');
+    if (swapQuote.roundUpInputQuantity > 0n) {
+      warnings.push(
+        `Offer adjusted from ${fromBase(swapQuote.requestedInputQuantity, offer.decimals)} to ${fromBase(
+          swapQuote.executionInputQuantity,
+          offer.decimals,
+        )} ${assetTitle(offer)} to avoid a below-minimum maker remainder.`,
+      );
+    }
+    if (swapQuote.unfilledRequestedQuantity > 0n) {
+      warnings.push(`${fromBase(swapQuote.unfilledRequestedQuantity, offer.decimals)} ${assetTitle(offer)} is not routed at the current book depth.`);
+    }
+    if (swapQuote.skippedUnsupportedCount) {
+      warnings.push(`${swapQuote.skippedUnsupportedCount} future/unsupported order${swapQuote.skippedUnsupportedCount === 1 ? '' : 's'} skipped.`);
+    }
+    if (swapQuote.payUpFallback) warnings.push('Pay-up band skipped all available liquidity; using cheapest route.');
+    if (swapQuote.remainderBlockedCount) warnings.push('A route boundary could not satisfy the maker-remainder policy.');
+    if (openBookIsStale(state)) warnings.push('Quote will refresh the open-book mirror before wallet execution.');
+    return warnings;
+  }, [
+    ask,
+    offer,
+    state,
+    swapQuote.executionInputQuantity,
+    swapQuote.outputQuantity,
+    swapQuote.payUpFallback,
+    swapQuote.remainderBlockedCount,
+    swapQuote.requestedInputQuantity,
+    swapQuote.roundUpInputQuantity,
+    swapQuote.skippedUnsupportedCount,
+    swapQuote.unfilledRequestedQuantity,
+  ]);
+
   function renderTrade() {
     const offerBalance = offer ? balanceOf(state, offer.policyId, offer.assetNameHex) : 0n;
     const offerQuantity = offer ? toBase(state.forms.openOfferAmount, offer.decimals) : 0n;
+    const swapOfferQuantity = offer ? swapQuote.executionInputQuantity : 0n;
+    const swapReceivedLabel = ask ? fromBase(swapQuote.outputQuantity, ask.decimals) : '';
+    const effectivePriceLabel = priceText(swapQuote.effectivePrice, offer, ask);
+    const inverseEffectivePriceLabel = inversePriceText(swapQuote.effectivePrice, offer, ask);
+    const bookPolicyText = ask ? bookPolicySummaryText(bookPolicySummary, ask) : '';
+    const payUpLabel =
+      state.forms.swapPayUp && swapQuote.payUpSkippedCount
+        ? `Skipping ${swapQuote.payUpSkippedCount} cheapest order${swapQuote.payUpSkippedCount === 1 ? '' : 's'} up to +${state.options.swapPayUpPercent}%.`
+        : state.forms.swapPayUp
+          ? `Pay-up band +${state.options.swapPayUpPercent}% active.`
+          : `Disabled: use cheapest executable route.`;
     const selectedOfferedAsset = currentOffer
       ? resolveAsset(state, currentOffer.offerPolicyId, currentOffer.offerAssetName)
       : null;
@@ -497,12 +743,13 @@ export default function App() {
             askKey={state.forms.openAskAssetKey}
             onOfferChange={(assetKey) => dispatch({ type: 'set-forms', forms: { openOfferAssetKey: assetKey } })}
             onAskChange={(assetKey) => dispatch({ type: 'set-forms', forms: { openAskAssetKey: assetKey } })}
+            onSwapPair={swapSelectedPair}
           />
         </section>
 
         <section className="app-card p-3 p-lg-4 mb-4">
           <ul className="nav nav-tabs action-tabs mb-4" role="tablist" aria-label="Trade action">
-            {(['open', 'fill', 'close', 'bulk-open'] as const).map((mode) => (
+            {(['swap', 'open', 'fill', 'close', 'bulk-open'] as const).map((mode) => (
               <li key={mode} className="nav-item" role="presentation">
               <button
                 type="button"
@@ -515,6 +762,138 @@ export default function App() {
               </li>
             ))}
           </ul>
+
+          {state.tradeTab === 'swap' && offer && ask ? (
+            <div className="row g-4">
+              <div className="col-12">
+                <div className="swap-quote-grid">
+                  <div className="swap-quote-field">
+                    <AmountInput
+                      id="swap-offer-amount"
+                      label={`Offer ${assetTitle(offer)}`}
+                      value={state.forms.swapOfferAmount}
+                      onChange={(value) => dispatch({ type: 'set-forms', forms: { swapOfferAmount: value } })}
+                      help={`Balance ${fromBase(offerBalance, offer.decimals)} ${assetTitle(offer)}`}
+                    />
+                  </div>
+                  <div className="swap-quote-field">
+                    <AmountInput
+                      id="swap-receive-amount"
+                      label={`Estimated receive ${assetTitle(ask)}`}
+                      value={swapReceivedLabel}
+                      onChange={() => undefined}
+                      readOnly
+                    />
+                  </div>
+                  <div className={`swap-quote-field swap-quote-field-${swapQuote.severity}`}>
+                    <label className="form-label" htmlFor="swap-effective-price">
+                      Effective price
+                    </label>
+                    <div id="swap-effective-price" className="swap-effective-price">
+                      {effectivePriceLabel}
+                    </div>
+                    <div className="form-text">
+                      {effectivePriceLabel === '-'
+                        ? `No executable route for ${assetTitle(offer)} / ${assetTitle(ask)}.`
+                        : `${assetTitle(offer)} per ${assetTitle(ask)} · 1 ${assetTitle(offer)} ≈ ${inverseEffectivePriceLabel} ${assetTitle(ask)}`}
+                    </div>
+                    <span className={`badge rounded-pill swap-severity-badge swap-severity-${swapQuote.severity}`}>
+                      {formatBps(swapQuote.weightedSlippageBps)} slippage
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="col-12">
+                <div className="swap-warning-slot">
+                  {swapWarnings.length ? (
+                    <FormAlert tone={swapQuote.outputQuantity ? 'warning' : 'info'}>{swapWarnings.join(' ')}</FormAlert>
+                  ) : null}
+                </div>
+              </div>
+              <div className="col-12">
+                <BalanceBar
+                  value={percent(swapOfferQuantity, offerBalance)}
+                  label="Offered amount versus current balance"
+                  unavailable={!state.wallet}
+                />
+              </div>
+              <div className="col-12">
+                <div className="d-flex justify-content-between gap-3 small mb-1">
+                  <span className="text-body-secondary">Swap route segments</span>
+                  <span className="text-body-secondary">Click or hover to inspect</span>
+                </div>
+                <SwapRouteBar quote={swapQuote} offerAsset={offer} receiveAsset={ask} />
+              </div>
+              {bookPolicyText ? (
+                <div className="col-12">
+                  <FormAlert tone="warning">{bookPolicyText}</FormAlert>
+                </div>
+              ) : null}
+              <div className="col-12 col-xl-6">
+                <div className="form-check form-switch">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    role="switch"
+                    id="swap-parallel-mode"
+                    checked={state.cart.mode === 'parallel'}
+                    onChange={(event) =>
+                      dispatch({ type: 'set-cart-mode', mode: event.target.checked ? 'parallel' : 'bundle' })
+                    }
+                  />
+                  <label className="form-check-label" htmlFor="swap-parallel-mode">
+                    Best-effort fills
+                    <span className="d-block small text-body-secondary">
+                      {state.cart.mode === 'parallel'
+                        ? 'Parallel mode: higher execution assurance, higher fees.'
+                        : 'Bundle mode: cheaper atomic execution.'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <div className="col-12 col-xl-6">
+                <div className="form-check form-switch">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    role="switch"
+                    id="swap-pay-up"
+                    checked={state.forms.swapPayUp}
+                    onChange={(event) => dispatch({ type: 'set-forms', forms: { swapPayUp: event.target.checked } })}
+                  />
+                  <label className="form-check-label" htmlFor="swap-pay-up">
+                    Pay up for lower contention
+                    <span className="d-block small text-body-secondary">
+                      {payUpLabel}
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <div className="col-12">
+                <div
+                  className={`swap-quote-summary-text ${
+                    swapQuote.outputQuantity > 0n ? quoteTextClass(swapQuote.severity) : 'swap-quote-summary-info'
+                  }`}
+                >
+                  {swapQuote.outputQuantity > 0n
+                    ? `${quoteSummary(swapQuote, offer, ask)}. Tolerance ${state.options.swapSlippageTolerancePercent}%.`
+                    : 'The quote engine uses the current full-book mirror and will re-fetch before execution when stale.'}
+                </div>
+              </div>
+              <div className="col-12 d-flex flex-wrap justify-content-end gap-2">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void runSwap()}
+                  disabled={walletLaunchDisabled}
+                  title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Swap in wallet'}
+                >
+                  Swap
+                </button>
+                <CartAddButton onClick={() => void addSwapToCart()} />
+              </div>
+            </div>
+          ) : null}
 
           {state.tradeTab === 'open' && offer && ask ? (
             <div className="row g-4">
@@ -536,7 +915,7 @@ export default function App() {
                 />
               </div>
               <div className="col-12">
-                <BalanceBar value={percent(offerQuantity, offerBalance)} label="Offered versus current balance" />
+                <BalanceBar value={percent(offerQuantity, offerBalance)} label="Offered versus current balance" unavailable={!state.wallet} />
               </div>
               {openWarnings.length ? (
                 <div className="col-12">
@@ -544,7 +923,13 @@ export default function App() {
                 </div>
               ) : null}
               <div className="col-12 d-flex flex-wrap justify-content-end gap-2">
-                <button type="button" className="btn btn-primary" onClick={runAction}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={runAction}
+                  disabled={walletLaunchDisabled}
+                  title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Open in wallet'}
+                >
                   Open offer
                 </button>
                 <CartAddButton onClick={addCurrentIntentToCart} />
@@ -596,7 +981,11 @@ export default function App() {
                 />
               </div>
               <div className="col-12">
-                <BalanceBar value={percent(offerQuantity, offerBalance)} label="Offered versus current balance per offer" />
+                <BalanceBar
+                  value={percent(offerQuantity, offerBalance)}
+                  label="Offered versus current balance per offer"
+                  unavailable={!state.wallet}
+                />
               </div>
               <div className="col-12">
                 <FormAlert tone="info">
@@ -649,10 +1038,16 @@ export default function App() {
                 </div>
               ) : null}
               <div className="col-12 d-flex flex-wrap justify-content-end gap-2">
-                <button type="button" className="btn btn-primary" onClick={runAction}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={runAction}
+                  disabled={walletLaunchDisabled}
+                  title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Fill in wallet'}
+                >
                   Fill offer
                 </button>
-                <CartAddButton onClick={addCurrentIntentToCart} />
+                <CartAddButton onClick={addFillToCart} />
               </div>
             </div>
           ) : null}
@@ -661,11 +1056,17 @@ export default function App() {
             <div className="vstack gap-3">
               <FormAlert tone={currentOffer ? 'warning' : 'info'}>
                 {currentOffer
-                  ? `Close selected offer ${short(currentOffer.txHash)}#${currentOffer.txIndex}. Verify owner stake credential before signing.`
+                  ? `Close selected offer ${short(currentOffer.txHash)}#${currentOffer.txIndex}. Verify owner stake credential before signing.${state.wallet ? '' : ` ${WALLET_REQUIRED_MESSAGE}`}`
                   : 'Select one of your offers to close.'}
               </FormAlert>
               <div className="d-flex flex-wrap justify-content-end gap-2">
-                <button type="button" className="btn btn-outline-danger" onClick={runAction}>
+                <button
+                  type="button"
+                  className="btn btn-outline-danger"
+                  onClick={runAction}
+                  disabled={walletLaunchDisabled}
+                  title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Close in wallet'}
+                >
                   Close offer
                 </button>
                 <CartAddButton onClick={addCurrentIntentToCart} />
@@ -685,7 +1086,13 @@ export default function App() {
             <ReloadButton label="Refresh pair offers" onClick={() => void refreshOffers()} disabled={state.loading.offers} />
           </div>
           {state.loading.offers ? <LoadingState label="Loading offers" /> : null}
-          <OpenOffersTable state={state} offers={pairOffers} onFill={selectFill} onClose={selectClose} />
+          <OpenOffersTable
+            state={state}
+            offers={pairOffers}
+            {...(state.tradeTab === 'swap' ? { policyStatusByUtxo: swapPolicyStatusByUtxo } : {})}
+            onFill={selectFill}
+            onClose={selectClose}
+          />
         </section>
       </>
     );
@@ -770,6 +1177,7 @@ export default function App() {
             askKey={state.forms.openAskAssetKey}
             onOfferChange={(assetKey) => dispatch({ type: 'set-forms', forms: { openOfferAssetKey: assetKey } })}
             onAskChange={(assetKey) => dispatch({ type: 'set-forms', forms: { openAskAssetKey: assetKey } })}
+            onSwapPair={swapSelectedPair}
           />
         </section>
         <section className="app-card p-3 p-lg-4">
@@ -809,7 +1217,14 @@ export default function App() {
     return (
       <>
         <PageHeader title="Cart" eyebrow="Composable intents" />
-        <CartPanel state={state} dispatch={dispatch} onRunSelected={runCartSelected} />
+        {!state.wallet ? <FormAlert tone="warning">{WALLET_REQUIRED_MESSAGE}</FormAlert> : null}
+        <CartPanel
+          state={state}
+          dispatch={dispatch}
+          onRunSelected={runCartSelected}
+          runDisabled={walletLaunchDisabled}
+          runDisabledReason={WALLET_REQUIRED_MESSAGE}
+        />
       </>
     );
   }
@@ -856,7 +1271,13 @@ export default function App() {
       ) : null}
       {state.notices.app ? <FormAlert tone={state.notices.app.tone}>{state.notices.app.message}</FormAlert> : null}
       {renderCurrentView()}
-      <CartModal state={state} dispatch={dispatch} onRunSelected={runCartSelected} />
+      <CartModal
+        state={state}
+        dispatch={dispatch}
+        onRunSelected={runCartSelected}
+        runDisabled={walletLaunchDisabled}
+        runDisabledReason={WALLET_REQUIRED_MESSAGE}
+      />
     </AppShell>
   );
 }

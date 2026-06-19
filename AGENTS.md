@@ -70,6 +70,44 @@ Production NeonSoup is expected to come later.
   provider; keep the reconciliation path provider-neutral and reuse the same
   normalization layer across transports.
 
+## Swap Feature Goals
+
+- Build `Swap` as an AMM-like user experience on top of the order book, not as a pool swap abstraction.
+- Default to bundle mode for cheapest atomic execution.
+- Offer opt-in parallel mode for best-effort partial completion on fast markets.
+- Offer opt-in contention-premium routing so the user can select a slightly worse-priced order to improve inclusion probability.
+- Current Swap execution routes one-way order UTxOs only.
+- Two-way swap support is contemplated for future implementation: discover both one-way and two-way swap UTxOs, then normalize them into one directional quote model for the UI without reusing one-way datum/redeemer logic for two-way execution.
+- Keep all quote and fill decisions local to the user device or wallet flow; do not add a trusted matcher, batcher, or custom indexer just to make the UX convenient.
+- Re-quote immediately before submission and reconcile visible state from the final chain result.
+
+## Swap Design Practices
+
+- Treat the live chain book as the source of truth for executable liquidity.
+- Keep detailed Swap math, threshold policy, p2p-wallet notes, route-bar rules,
+  color treatment, and current limitations in `docs/SWAP.md`; update that file
+  instead of bloating this agent note.
+- Keep Swap book state layered: raw canonical book, policy executable book, and
+  actual route. Raw orders stay keyed by `txHash#index`; asset policy uses
+  canonical `policyId.assetNameHex` asset keys.
+- Use `minExecutableOfferQuantity` for book-level open-order filtering and
+  `minMakerRemainderQuantity` for route-boundary remainder decisions. Both are
+  base-unit integer strings; `0` disables each policy independently for coins
+  and native assets.
+- Do not reintroduce a single overloaded asset threshold for both book filtering
+  and maker-remainder routing.
+- Quote labels and route bars must use the exact denominator from `docs/SWAP.md`;
+  do not mix input quantities, receive-asset liquidity, and maker remainders in
+  one progress bar without converting to the documented display denominator.
+- Filtered offers affect executable price and UX, so keep filter summaries,
+  effective price, slippage baselines, route colors, and cart generation derived
+  from the raw/executable/route layers consistently.
+- Preserve one-way swap semantics for currently executable instant user fills and two-way swap semantics for future liquidity-provider support.
+- Use directional depth, not raw UTxO count, to describe available liquidity.
+- Keep discovery narrow: pair-scoped queries, bounded pagination, and minimal fields for quote generation.
+- Prefer reusable normalization helpers for open offers, quote rows, partial fills, and bundle summaries.
+- Let the UI present simple `amount to offer`, `amount to receive`, and `Swap` actions while the app layer handles price discovery and protocol-specific routing.
+
 ## Commands
 
 - Install dependencies: `pnpm install`
@@ -87,6 +125,18 @@ After editing any source intent, rebuild the matching `dist/intents/*.gcscript.j
 After editing `src/devtool/`, run the narrowest useful check first, then
 `pnpm run build` when the change touches shared frontend behavior, bundling, or
 wallet-intent loading.
+
+## TODO
+
+- Add explicit NeonSoup discovery for two-way swap UTxOs. Current execution only routes one-way orders; keep two-way rows unsupported until provider discovery, directional normalization, and two-way-specific wallet protocols are implemented.
+- Normalize both swap types into directional quote rows in the future so the swap UI can reuse the existing fill/composition pipeline without pretending two-way orders are one-way orders.
+- Wire the `Swap` feature to support bundle-first, parallel best-effort, and contention-premium execution modes.
+- Keep the quote engine on-device and chain-backed; avoid introducing a centralized matching service.
+- Validate the final fill path against live chain state immediately before submission.
+- Remove the temporary Swap/Fill full-fill `window.alert()` once wallet-side
+  full-fill support works.
+- Remove the temporary connected-wallet requirement for wallet-launching actions
+  once user-agnostic intent execution no longer fails with missing address data.
 
 ## Safety Rules
 

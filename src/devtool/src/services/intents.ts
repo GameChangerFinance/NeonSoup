@@ -66,10 +66,15 @@ export function buildFillArgs(state: AppState, offer: OpenOffer | null): IntentA
   const offeredAsset =
     state.assetInfo[assetKeyOf(offer.offerPolicyId, offer.offerAssetName)] ||
     hardAsset(state.options.network, state.customAssets, offer.offerPolicyId, offer.offerAssetName);
+  const offerQuantity = toBase(state.forms.fillOfferAmount, offeredAsset.decimals);
+  return buildFillArgsForQuantity(state, offer, offerQuantity);
+}
+
+export function buildFillArgsForQuantity(state: AppState, offer: OpenOffer | null, offerQuantity: bigint): IntentArgs {
+  if (!offer) return {};
   const askAsset =
     state.assetInfo[assetKeyOf(offer.askPolicyId, offer.askAssetName)] ||
     hardAsset(state.options.network, state.customAssets, offer.askPolicyId, offer.askAssetName);
-  const offerQuantity = toBase(state.forms.fillOfferAmount, offeredAsset.decimals);
   const askQuantity =
     offerQuantity > 0n
       ? ceilDiv(offerQuantity * BigInt(offer.priceNumerator), BigInt(offer.priceDenominator))

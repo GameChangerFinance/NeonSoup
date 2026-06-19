@@ -1,12 +1,13 @@
 export type NetworkTag = 'preprod' | 'mainnet';
 export type ViewId = 'trade' | 'orders' | 'activity' | 'user' | 'options' | 'developer' | 'cart';
 export type ActionMode = 'open' | 'fill' | 'close';
-export type TradeTab = ActionMode | 'bulk-open';
+export type TradeTab = 'swap' | ActionMode | 'bulk-open';
 export type NetworkProviderKind = 'blockfrost' | 'graphqlMk2';
 export type NoticeTone = 'info' | 'success' | 'warning' | 'danger';
 export type CartExecutionMode = 'bundle' | 'parallel';
 export type CartItemStatus = 'draft' | 'pending' | 'confirmed' | 'failed';
 export type ProtocolAction = ActionMode | 'mixed' | 'unknown' | 'swap';
+export type OrderKind = 'one-way' | 'two-way' | 'future' | 'unknown';
 
 export interface AssetRef {
   policyId: string;
@@ -19,6 +20,9 @@ export interface AssetMetadata extends AssetRef {
   label: string;
   ticker: string;
   decimals: number;
+  decimalsKnown?: boolean;
+  minExecutableOfferQuantity?: string;
+  minMakerRemainderQuantity?: string;
   description?: string;
   logo?: string;
   fingerprint?: string;
@@ -29,6 +33,8 @@ export interface AssetMetadata extends AssetRef {
 export interface ResolvedAsset extends AssetMetadata {
   assetKey: string;
   assetId: string;
+  minExecutableOfferQuantity: string;
+  minMakerRemainderQuantity: string;
 }
 
 export interface AssetPair {
@@ -38,6 +44,7 @@ export interface AssetPair {
 
 export interface OpenOffer {
   id: string;
+  orderKind?: OrderKind;
   txHash: string;
   txIndex: string;
   address: string;
@@ -53,6 +60,13 @@ export interface OpenOffer {
   askBeacon: string;
   priceNumerator: string;
   priceDenominator: string;
+}
+
+export interface OpenBookSnapshot {
+  provider: NetworkProviderKind;
+  network: NetworkTag;
+  updatedAt: number;
+  orderCount: number;
 }
 
 export interface PortfolioAsset extends ResolvedAsset {
@@ -165,6 +179,8 @@ export interface AppOptions {
   provider: NetworkProviderKind;
   blockfrostUrl: string;
   blockfrostKey: string;
+  swapSlippageTolerancePercent: number;
+  swapPayUpPercent: number;
   popupMode: boolean;
   hideUnknownOffers: boolean;
   hideUnknownPortfolio: boolean;
@@ -182,6 +198,8 @@ export interface FormState {
   bulkOpenOfferVariancePercent: string;
   fillOfferAmount: string;
   fillAskAmount: string;
+  swapOfferAmount: string;
+  swapPayUp: boolean;
 }
 
 export interface Notice {
@@ -204,6 +222,7 @@ export interface AppState {
   cart: CartState;
   lastWalletReturn: unknown;
   openOffers: OpenOffer[];
+  openOffersSnapshot: OpenBookSnapshot | null;
   portfolio: PortfolioAsset[];
   transactions: ProtocolTransaction[];
   assetInfo: Record<string, ResolvedAsset>;
@@ -242,7 +261,7 @@ export type AppAction =
   | { type: 'set-cart-max-intents-per-transaction'; value: number }
   | { type: 'set-cart-modal-open'; open: boolean }
   | { type: 'set-cart-show-confirmed-only'; showConfirmedOnly: boolean }
-  | { type: 'set-open-offers'; offers: OpenOffer[] }
+  | { type: 'set-open-offers'; offers: OpenOffer[]; snapshot?: OpenBookSnapshot }
   | { type: 'set-portfolio'; portfolio: PortfolioAsset[] }
   | { type: 'set-asset-info'; assets: Record<string, ResolvedAsset> }
   | { type: 'set-custom-assets'; network: NetworkTag; assets: Record<string, AssetMetadata> }

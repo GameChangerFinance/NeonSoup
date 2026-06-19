@@ -10,6 +10,8 @@ interface CartPanelProps {
   state: AppState;
   dispatch: React.Dispatch<AppAction>;
   onRunSelected: () => void | Promise<void>;
+  runDisabled?: boolean;
+  runDisabledReason?: string;
   embedded?: boolean;
 }
 
@@ -47,7 +49,7 @@ function statusClass(status: CartItem['status']): string {
   return 'text-bg-secondary';
 }
 
-export function CartPanel({ state, dispatch, onRunSelected, embedded = false }: CartPanelProps) {
+export function CartPanel({ state, dispatch, onRunSelected, runDisabled = false, runDisabledReason = '', embedded = false }: CartPanelProps) {
   const visibleItems = visibleCartItems(state.cart);
   const selectedItems = selectedCartItems(state.cart);
   const selectedVisibleIds = visibleItems.filter((item) => item.selected).map((item) => item.id);
@@ -74,7 +76,13 @@ export function CartPanel({ state, dispatch, onRunSelected, embedded = false }: 
           </p>
         </div>
         <div className="d-flex flex-wrap align-items-center justify-content-start justify-content-lg-end gap-2">
-          <button type="button" className="btn btn-primary btn-sm" onClick={onRunSelected}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={onRunSelected}
+            disabled={runDisabled}
+            title={runDisabled ? runDisabledReason : 'Run selected Cart intents'}
+          >
             Run selected
           </button>
           <div className="form-check form-switch mb-0">

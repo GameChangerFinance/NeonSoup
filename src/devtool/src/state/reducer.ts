@@ -10,6 +10,8 @@ export const defaultOptions: AppOptions = {
   provider: APP_CONFIG.defaultProvider,
   blockfrostUrl: '',
   blockfrostKey: '',
+  swapSlippageTolerancePercent: 0.5,
+  swapPayUpPercent: 1,
   popupMode: true,
   hideUnknownOffers: true,
   hideUnknownPortfolio: true,
@@ -76,7 +78,7 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
     migrationSourceVersion: seed?.migrationSourceVersion || '',
     view: seed?.view || 'trade',
     action: seed?.action || 'open',
-    tradeTab: seed?.tradeTab || seed?.action || 'open',
+    tradeTab: seed?.tradeTab || 'swap',
     selectedOrderId: seed?.selectedOrderId || '',
     selectedPair: seed?.selectedPair || null,
     options,
@@ -90,12 +92,15 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
       bulkOpenOfferVariancePercent: '0',
       fillOfferAmount: '',
       fillAskAmount: '',
+      swapOfferAmount: '',
+      swapPayUp: false,
       ...(seed?.forms || {}),
     },
     wallet: seed?.wallet || null,
     cart: seed?.cart || freshCart(),
     lastWalletReturn: null,
     openOffers: normalizeOpenOffers(seed?.openOffers || []),
+    openOffersSnapshot: null,
     portfolio: normalizePortfolioAssets(seed?.portfolio || []),
     transactions: mergeProtocolTransactions([], seed?.transactions || []),
     assetInfo,
@@ -124,7 +129,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         tradeTab: action.tab,
-        action: action.tab === 'bulk-open' ? state.action : action.tab,
+        action: action.tab === 'bulk-open' || action.tab === 'swap' ? state.action : action.tab,
       };
     case 'set-options': {
       const options = { ...state.options, ...action.options };
@@ -262,12 +267,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, cart: { ...state.cart, modalOpen: action.open } };
     case 'set-cart-show-confirmed-only':
       return { ...state, cart: { ...state.cart, showConfirmedOnly: action.showConfirmedOnly } };
-    case 'set-open-offers':
+    case 'set-open-offers': {
+      const openOffers = normalizeOpenOffers(action.offers);
       return {
         ...state,
-        openOffers: normalizeOpenOffers(action.offers),
-        selectedOrderId: state.selectedOrderId || action.offers[0]?.id || '',
+        openOffers,
+        openOffersSnapshot: action.snapshot || state.openOffersSnapshot,
+        selectedOrderId: state.selectedOrderId || openOffers[0]?.id || '',
       };
+    }
     case 'set-portfolio':
       return { ...state, portfolio: normalizePortfolioAssets(action.portfolio) };
     case 'set-asset-info':

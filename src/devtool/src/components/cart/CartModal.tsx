@@ -5,9 +5,11 @@ interface CartModalProps {
   state: AppState;
   dispatch: React.Dispatch<AppAction>;
   onRunSelected: () => void | Promise<void>;
+  runDisabled?: boolean;
+  runDisabledReason?: string;
 }
 
-export function CartModal({ state, dispatch, onRunSelected }: CartModalProps) {
+export function CartModal({ state, dispatch, onRunSelected, runDisabled = false, runDisabledReason = '' }: CartModalProps) {
   if (!state.cart.modalOpen) return null;
 
   return (
@@ -26,7 +28,14 @@ export function CartModal({ state, dispatch, onRunSelected }: CartModalProps) {
             />
           </div>
           <div className="modal-body">
-            <CartPanel state={state} dispatch={dispatch} onRunSelected={onRunSelected} embedded />
+            <CartPanel
+              state={state}
+              dispatch={dispatch}
+              onRunSelected={onRunSelected}
+              runDisabled={runDisabled}
+              runDisabledReason={runDisabledReason}
+              embedded
+            />
           </div>
         </div>
       </div>

@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": "/tmp/neonsoup-devtool-tests",
+    "rootDir": ".",
+    "types": []
+  },
+  "include": [
+    "src/domain/assetPolicy.ts",
+    "src/domain/assetWarnings.ts",
+    "src/domain/openBook.ts",
+    "src/domain/quantities.ts",
+    "src/domain/swapQuote.ts",
+    "src/domain/text.ts",
+    "src/domain/uiFormat.ts",
+    "src/state/types.ts",
+    "tests/**/*.ts"
+  ]
+}

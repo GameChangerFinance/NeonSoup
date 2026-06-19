@@ -50,8 +50,25 @@ function validateAssetJson(value: unknown): Record<string, AssetMetadata> {
     if (!Number.isFinite(asset.decimals) || asset.decimals < 0) {
       throw new Error(`${key}.decimals must be a non-negative number.`);
     }
+    if (
+      asset.minExecutableOfferQuantity !== undefined &&
+      (typeof asset.minExecutableOfferQuantity !== 'string' || !/^\d+$/.test(asset.minExecutableOfferQuantity))
+    ) {
+      throw new Error(`${key}.minExecutableOfferQuantity must be a base-unit integer string.`);
+    }
+    if (
+      asset.minMakerRemainderQuantity !== undefined &&
+      (typeof asset.minMakerRemainderQuantity !== 'string' || !/^\d+$/.test(asset.minMakerRemainderQuantity))
+    ) {
+      throw new Error(`${key}.minMakerRemainderQuantity must be a base-unit integer string.`);
+    }
   }
   return assets;
+}
+
+function optionPercent(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(50, value));
 }
 
 export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: OptionsPanelProps) {
@@ -198,6 +215,52 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                 <option value="dark">Dark</option>
                 <option value="light">Light</option>
               </select>
+            </div>
+            <div className="row g-3">
+              <div className="col-12 col-md-6">
+                <label className="form-label" htmlFor="swapSlippageTolerancePercent">
+                  Swap slippage tolerance %
+                </label>
+                <input
+                  id="swapSlippageTolerancePercent"
+                  className="form-control"
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.1"
+                  value={state.options.swapSlippageTolerancePercent}
+                  onChange={(event) =>
+                    dispatch({
+                      type: 'set-options',
+                      options: {
+                        swapSlippageTolerancePercent: optionPercent(Number(event.target.value), 0.5),
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className="col-12 col-md-6">
+                <label className="form-label" htmlFor="swapPayUpPercent">
+                  Swap pay-up band %
+                </label>
+                <input
+                  id="swapPayUpPercent"
+                  className="form-control"
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.1"
+                  value={state.options.swapPayUpPercent}
+                  onChange={(event) =>
+                    dispatch({
+                      type: 'set-options',
+                      options: {
+                        swapPayUpPercent: optionPercent(Number(event.target.value), 1),
+                      },
+                    })
+                  }
+                />
+              </div>
             </div>
             <div className="d-flex flex-wrap gap-2">
               <button type="button" className="btn btn-outline-primary" onClick={onRefreshOffers}>
