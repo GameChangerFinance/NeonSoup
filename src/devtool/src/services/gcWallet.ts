@@ -4,14 +4,20 @@ import { clearWalletReturn, writeWalletReturn } from './storage';
 import { text } from '../domain/text';
 import { getGcRuntime } from './gcRuntime';
 
+export function gcWalletUrlPattern(state: AppState): string {
+  return state.options.gcWalletUrlPattern.trim();
+}
+
 export async function walletUrlForCode(state: AppState, code: IntentTemplate['code']): Promise<string> {
   const gc = getGcRuntime();
+  const urlPattern = gcWalletUrlPattern(state);
   return gc.encode.url({
     input: JSON.stringify(code),
     apiVersion: '2',
     network: state.options.network,
     encoding: APP_CONFIG.encoding as 'gzip',
     disableNetworkRouter: false,
+    ...(urlPattern ? { urlPattern } : {}),
   });
 }
 

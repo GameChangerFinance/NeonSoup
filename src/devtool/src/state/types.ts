@@ -179,6 +179,7 @@ export interface AppOptions {
   provider: NetworkProviderKind;
   blockfrostUrl: string;
   blockfrostKey: string;
+  gcWalletUrlPattern: string;
   swapSlippageTolerancePercent: number;
   swapPayUpPercent: number;
   popupMode: boolean;

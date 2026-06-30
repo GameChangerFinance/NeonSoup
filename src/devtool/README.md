@@ -30,12 +30,20 @@ VITE_NEONSOUP_MAINNET_BLOCKFROST_URL=
 VITE_NEONSOUP_MAINNET_BLOCKFROST_KEY=
 VITE_NEONSOUP_PREPROD_GRAPHQL_MK2_URL=
 VITE_NEONSOUP_MAINNET_GRAPHQL_MK2_URL=
+VITE_NEONSOUP_ENABLE_WALLET_URL_PATTERN_OVERRIDE=
+VITE_NEONSOUP_GC_WALLET_URL_PATTERN=
 VITE_NEONSOUP_BUILD_TAG=
 NEONSOUP_GOOGLE_ANALYTICS_ID=
 ```
 
 The Options view can still override provider URL/API key at runtime in browser
 localStorage. Source defaults should stay secret-free.
+
+Set `VITE_NEONSOUP_ENABLE_WALLET_URL_PATTERN_OVERRIDE=true` only in trusted
+local/dev builds to expose the GameChanger wallet URL pattern override. Set
+`VITE_NEONSOUP_GC_WALLET_URL_PATTERN` to provide the initial option value. An
+empty value lets the GC library use its official wallet URL. See the root
+`.env.example` for the local wallet example.
 
 Google Analytics is omitted from generated HTML unless
 `NEONSOUP_GOOGLE_ANALYTICS_ID` is set at build or dev-server startup.

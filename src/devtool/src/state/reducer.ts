@@ -10,6 +10,7 @@ export const defaultOptions: AppOptions = {
   provider: APP_CONFIG.defaultProvider,
   blockfrostUrl: '',
   blockfrostKey: '',
+  gcWalletUrlPattern: APP_CONFIG.gcWalletUrlPattern,
   swapSlippageTolerancePercent: 0.5,
   swapPayUpPercent: 1,
   popupMode: true,

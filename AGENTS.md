@@ -149,8 +149,15 @@ wallet-intent loading.
   `VITE_NEONSOUP_PREPROD_BLOCKFROST_KEY`,
   `VITE_NEONSOUP_MAINNET_BLOCKFROST_URL`,
   `VITE_NEONSOUP_MAINNET_BLOCKFROST_KEY`,
-  `VITE_NEONSOUP_PREPROD_GRAPHQL_MK2_URL`, and
-  `VITE_NEONSOUP_MAINNET_GRAPHQL_MK2_URL`.
+  `VITE_NEONSOUP_PREPROD_GRAPHQL_MK2_URL`,
+  `VITE_NEONSOUP_MAINNET_GRAPHQL_MK2_URL`,
+  `VITE_NEONSOUP_ENABLE_WALLET_URL_PATTERN_OVERRIDE`, and
+  `VITE_NEONSOUP_GC_WALLET_URL_PATTERN`.
+- Keep GameChanger wallet URL-pattern runtime customization disabled in
+  production builds. The feature flag hides the Options input only; it must not
+  erase or ignore the configured `gcWalletUrlPattern` value. Route all wallet
+  launches through the centralized `gcWallet.ts` option handling and show a
+  warning in Options when the editable field is enabled and non-empty.
 - The devtool app version uses legal SemVer build metadata:
   `package.json` version + `VITE_NEONSOUP_BUILD_TAG`, for example
   `0.0.1+local`. Use that build tag to intentionally force local-state update

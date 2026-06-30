@@ -88,6 +88,7 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
         : 'Blockfrost-compatible provider. Leave URL empty to use the GameChanger-hosted endpoint.',
     [state.options.provider],
   );
+  const walletUrlPattern = state.options.gcWalletUrlPattern.trim();
 
   function saveAssets() {
     try {
@@ -176,6 +177,32 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
               />
               <div className="form-text">Stored only in browser localStorage. Do not commit keys into files.</div>
             </div>
+            {APP_CONFIG.walletUrlPatternOverrideEnabled ? (
+              <div className="col-12">
+                <label className="form-label" htmlFor="gcWalletUrlPattern">
+                  GameChanger wallet URL pattern override
+                </label>
+                <input
+                  id="gcWalletUrlPattern"
+                  className="form-control"
+                  value={state.options.gcWalletUrlPattern}
+                  placeholder="Use official GameChanger wallet"
+                  onChange={(event) =>
+                    dispatch({ type: 'set-options', options: { gcWalletUrlPattern: event.target.value } })
+                  }
+                />
+                <div className="form-text">
+                  Optional <code>gc.encode.url()</code> urlPattern. Include <code>{'{gcscript}'}</code>. Return URLs
+                  inside the GCScript are unchanged.
+                </div>
+                {walletUrlPattern ? (
+                  <div className="alert alert-warning mt-3 mb-0" role="alert">
+                    Wallet intents will open through a custom GameChanger wallet URL pattern. Only use this with a
+                    wallet deployment you trust.
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
