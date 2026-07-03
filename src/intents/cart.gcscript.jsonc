@@ -227,11 +227,34 @@
         "submit": {
             "type": "submitTxs",
             "mode": "noWait",
+            "noFail": true,
+            "extras": true,
             "txs": "{get('cache.sign')}"
-        },        
+        },
+        "knownErrors":{
+            "type":"macro",
+            "run":{
+                // Some other common error messages from Ogmios/Cardano GraphQL MKII API could be included here 
+                // To consume even less script bytes these could be stored as hashes and check against hashes, not plain text
+                "contention":"The transaction contains unknown UTxO references as inputs. This can happen if the inputs you're trying to spend have already been spent, or if you've simply referred to non-existing UTxO altogether. The field 'data.unknownOutputReferences' indicates all unknown inputs."
+            }
+        },      
         "finally": {
             "type": "macro",
-            "run": {                                
+            "run": {       
+                "txs":[
+                    {
+                        // small strings and boolean checks to send back to dapps:
+                        "txHash": "{get('cache.build.txHash')}",
+                        "status": "{get('cache.submit.txsExtended.0.status')}",
+                        "hasContentionError":"{eq(get('cache.submit.txsExtended.0.error'),get('cache.knownErrors.contention'))}",
+                        "hasSubmitError":"{eq(get('cache.submit.txsExtended.0.status'),'error')}",
+
+                        // when we can afford packing big payloads back to dapps:
+                        // "error": "{get('cache.submit.txsExtended.0.error')}",
+                        // "errorDetail": "{get('cache.submit.txsExtended.0.errorDetail')}"
+                    }
+                ],                         
                 "items":[
                     {
                         "txHash": "{get('cache.build.txHash')}",

@@ -90,11 +90,22 @@
         "submit": {
             "type": "submitTxs",
             "mode": "noWait",
+            "noFail": true,
+            "extras": true,
             "txs": "{get('cache.sign')}"
+        },
+        "knownErrors": {
+            "type": "macro",
+            "run": {
+                "contention": "The transaction contains unknown UTxO references as inputs. This can happen if the inputs you're trying to spend have already been spent, or if you've simply referred to non-existing UTxO altogether. The field 'data.unknownOutputReferences' indicates all unknown inputs."
+            }
         },
         "finally": {
             "type": "macro",
-            "run": {                                
+            "run": {
+                "status": "{get('cache.submit.txsExtended.0.status')}",
+                "hasSubmitError": "{eq(get('cache.submit.txsExtended.0.status'),'error')}",
+                "hasContentionError": "{eq(get('cache.submit.txsExtended.0.error'),get('cache.knownErrors.contention'))}",
                 "txHash": "{get('cache.build.txHash')}",
                 "index": "{get('cache.build.indexMap.output.swap-output')}",
                 "pairBeacon": "{get('cache.openOfferIntent.pairBeacon')}",
