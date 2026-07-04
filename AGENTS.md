@@ -33,6 +33,10 @@ Production NeonSoup is expected to come later.
   with chain-backed classification once `getTransactions` can supply
   `valid_contract`, inputs, outputs, token beacons, and parsed datum
   `previousInput` evidence.
+- Treat wallet receipts, provider-visible transaction hashes, and confirmed
+  chain transactions as different evidence levels. Do not promote pending Cart
+  items or transaction rows to confirmed from a receipt or hash lookup alone;
+  require explicit chain confirmation evidence in the normalized domain layer.
 - Keep provider fallback explicit. Do not silently switch providers after an
   error because responses may represent different chain snapshots.
 
@@ -69,6 +73,9 @@ Production NeonSoup is expected to come later.
   confirmed chain/provider result. Do not patch state differently for each
   provider; keep the reconciliation path provider-neutral and reuse the same
   normalization layer across transports.
+- In `src/devtool`, only mark Cart items confirmed after the provider
+  `ChainTransaction` has real inclusion evidence. Wallet receipts and
+  provider-visible hashes stay pending otherwise.
 
 ## Swap Feature Goals
 
@@ -186,6 +193,9 @@ wallet-intent loading.
   `myAddress` issue in cart execution was not that `getCurrentAddress` was
   missing, but that it was introduced at the wrong scope, so imported intents
   could not reliably resolve `offer-address` against `cache.myAddress`.
+- Before changing close logic, verify the exact `txHash#index` against the live
+  chain API. A historical transaction that no longer yields a UTxO is a stale or
+  spent input, not protocol contention.
 - The old single-file frontend was ported to Vite React. Keep the devtool
   structure compact and Bootstrap-first unless explicitly requested otherwise.
 - Prefer warnings over input blocking in the devtool UI. Bad values are useful for
@@ -207,9 +217,17 @@ wallet-intent loading.
   `policyId + assetNameHex`; do not use the older provider label in app code.
 - Do not add ad hoc localStorage migrations for old devtool state shapes. Use
   the centralized version mismatch banner and update/reset flow.
+- Persisted UI flags may be repurposed only when visible labels and centralized
+  selector semantics make the new behavior explicit. Avoid ad hoc migrations
+  unless the stored shape actually changes.
 - Normalize transactions, offers, assets, and users in reusable helpers before
   rendering any table. Keep the row model stable and derived from the normalized
   domain layer.
+- Keep cart swap quantities and execution-history filtering centralized in the
+  shared domain layer. Panels should render normalized rows and labels only,
+  rather than recomputing swap accounting or history predicates locally.
+- Execution/history filters should be centralized in shared state or domain
+  helpers, not recomputed in panels.
 - Keep on-chain/API parsing and categorization centralized in reusable domain
   helpers by purpose. Table and UI components should render normalized
   rows/data only and should not decide protocol action, ownership meaning, or
@@ -266,6 +284,17 @@ wallet-intent loading.
   protocol fragment itself requires it. Example: the cart bundling bug came
   from group-local wrapper scripts changing cache shape instead of the fragment
   code itself.
+- Close intents should preserve the expected final output shape exactly. The
+  last output should be the unfilled offer; a redundant ask-side row can make
+  the generated close tx fail even when the input UTxO is live.
+- When a submission flow must keep going after rejected transactions, use
+  `submitTxs` with `extras: true` and `noFail: true`, then reconcile from
+  `txsExtended` instead of stopping at the first error. In NeonSoup, use this
+  only as wallet submission evidence; chain/provider confirmation remains
+  authoritative for final Cart status.
+- Cart default view should show draft items only; the history toggle should show
+  non-draft statuses while preserving old persisted field names until a
+  deliberate migration.
 
 ## Data Normalization Goals
 
@@ -325,6 +354,17 @@ or provider call sites.
 - GCScript/ISL does not have normal imperative conditionals. Existing
   normalization-map patterns are intentional and should be preserved unless a
   simpler protocol-safe approach is clearly available.
+- `utxo-ask-quantity` is a required compatibility arg for fill/close value
+  accounting and must default to `"0"` across providers, intent args, top-level
+  wrappers, and Cart snapshots.
+- `src/intents/lib/common.gcscript.jsonc` may own shared selectors such as
+  `assetKind`; swap and close own value movement. Do not put `remainingADA`,
+  `continuingAsk`, or close return math in common.
+- Do not store role quantities in one asset-keyed object because ADA/tADA can
+  collide as `ada-ada`.
+- Close of partially filled orders must return accumulated ask value.
+- Current open is not update; do not add consumed-UTxO preservation math to
+  open.
 
 ## Debugging
 

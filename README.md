@@ -36,6 +36,15 @@ The devtool app version uses SemVer build metadata:
 `0.0.1+local`. Changing the build tag intentionally prompts users to
 update/reset incompatible browser state.
 
+Recent devtool work made Cart execution explicitly evidence-based. Wallet
+submission receipts and provider-visible transaction hashes are treated as
+tentative hints; Cart items are only marked confirmed after normalized chain
+data provides confirmation evidence. The Cart also distinguishes draft
+preparation from execution history, and fill/close accounting now tracks the
+consumed UTxO's accumulated ask-side value separately from new fill deltas.
+See [`docs/SWAP.md`](docs/SWAP.md) for the swap-routing and value-accounting
+rules behind those flows.
+
 ## 🚀 Overview
 
 **NeonSoup** is a peer-to-peer execution layer for Cardano DeFi with a deep exploration for cypherpunk values: 
