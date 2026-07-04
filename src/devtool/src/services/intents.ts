@@ -66,10 +66,15 @@ export function buildFillArgs(state: AppState, offer: OpenOffer | null): IntentA
   const offeredAsset =
     state.assetInfo[assetKeyOf(offer.offerPolicyId, offer.offerAssetName)] ||
     hardAsset(state.options.network, state.customAssets, offer.offerPolicyId, offer.offerAssetName);
+  const offerQuantity = toBase(state.forms.fillOfferAmount, offeredAsset.decimals);
+  return buildFillArgsForQuantity(state, offer, offerQuantity);
+}
+
+export function buildFillArgsForQuantity(state: AppState, offer: OpenOffer | null, offerQuantity: bigint): IntentArgs {
+  if (!offer) return {};
   const askAsset =
     state.assetInfo[assetKeyOf(offer.askPolicyId, offer.askAssetName)] ||
     hardAsset(state.options.network, state.customAssets, offer.askPolicyId, offer.askAssetName);
-  const offerQuantity = toBase(state.forms.fillOfferAmount, offeredAsset.decimals);
   const askQuantity =
     offerQuantity > 0n
       ? ceilDiv(offerQuantity * BigInt(offer.priceNumerator), BigInt(offer.priceDenominator))
@@ -85,6 +90,7 @@ export function buildFillArgs(state: AppState, offer: OpenOffer | null): IntentA
     'utxo-tx-index': offer.txIndex,
     'utxo-coin-quantity': offer.utxoCoinQuantity,
     'utxo-offer-quantity': offer.utxoOfferQuantity,
+    'utxo-ask-quantity': offer.utxoAskQuantity || '0',
     'offer-quantity': offerQuantity.toString(),
     'ask-quantity': askQuantity.toString(),
     'owner-stake-keyhash': offer.ownerStakeKeyHash || '',
@@ -103,6 +109,7 @@ export function buildCloseArgs(state: AppState, offer: OpenOffer | null): Intent
     'utxo-tx-index': offer.txIndex,
     'utxo-coin-quantity': offer.utxoCoinQuantity,
     'utxo-offer-quantity': offer.utxoOfferQuantity,
+    'utxo-ask-quantity': offer.utxoAskQuantity || '0',
     'offer-address': state.wallet?.address || offer.address,
     'owner-stake-keyhash': offer.ownerStakeKeyHash || '',
     'intent-id': newIntentId(`${offer.txHash.slice(0, 8)}-${offer.txIndex}`),

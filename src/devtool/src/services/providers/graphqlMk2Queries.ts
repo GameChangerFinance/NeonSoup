@@ -99,6 +99,7 @@ export const GRAPHQL_MK2_QUERIES = {
     where: {hash: {_in: $txHashes}}
   ) {
     hash
+    includedAt
   }
 }`,
   transactionsByHash: `query NeonSoup_GetTransactionsByHash($limit: Int = 25, $offset: Int = 0, $txHashes: [Hash32Type!]) {

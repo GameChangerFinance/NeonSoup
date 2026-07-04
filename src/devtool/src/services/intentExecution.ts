@@ -82,7 +82,10 @@ function argRefsFor(item: CartItem, itemIndex: number): GcNode {
   const args = Object.fromEntries(
     Object.keys(item.args).map((key) => [key, `{get('args.items.${itemIndex}.protocol-args.${key}')}`]),
   );
-  if (item.name === 'fill' || item.name === 'close') args['offer-address'] = "{get('cache.myAddress')}";
+  if (item.name === 'fill' || item.name === 'close') {
+    args['offer-address'] = "{get('cache.myAddress')}";
+    if (!('utxo-ask-quantity' in item.args)) args['utxo-ask-quantity'] = '0';
+  }
   return args;
 }
 
@@ -311,6 +314,14 @@ function receiptMacro(sources: ReceiptGroupSource[]): GcNode {
       executionId: "{get('args.execution-id')}",
       itemCount: "{get('args.item-count')}",
       groupCount: "{get('args.group-count')}",
+      txs: sources.map((source, txIndex) => ({
+        groupId: `{get('args.groups.${txIndex}.group-id')}`,
+        groupIndex: `{get('args.groups.${txIndex}.group-index')}`,
+        txHash: `{get('cache.${source.buildCachePath}.txHash')}`,
+        status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
+        hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
+        hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
+      })),
       items: entries.map((entry) => ({
         itemId: `{get('args.items.${entry.itemIndex}.item-id')}`,
         intentId: `{get('args.items.${entry.itemIndex}.intent-id')}`,
@@ -362,7 +373,16 @@ function baseScript(
       submit: {
         type: 'submitTxs',
         mode: 'noWait',
+        noFail: true,
+        extras: true,
         txs: "{get('cache.sign')}",
+      },
+      knownErrors: {
+        type: 'macro',
+        run: {
+          contention:
+            "The transaction contains unknown UTxO references as inputs. This can happen if the inputs you're trying to spend have already been spent, or if you've simply referred to non-existing UTxO altogether. The field 'data.unknownOutputReferences' indicates all unknown inputs.",
+        },
       },
       finally: receiptMacro(receiptSources),
     },
@@ -487,12 +507,14 @@ export function executionReceiptFromWalletReturn(raw: unknown): NeonSoupExecutio
     typeof candidate.executionId !== 'string' ||
     typeof candidate.itemCount !== 'number' ||
     typeof candidate.groupCount !== 'number' ||
-    !Array.isArray(candidate.items)
+    !Array.isArray(candidate.items) ||
+    !Array.isArray(candidate.txs)
   ) {
     return null;
   }
   const itemIds = new Set<string>();
   const groupIds = new Set<string>();
+  const groupIndexes = new Map<number, string>();
   const valid = candidate.items.every((item) => {
     if (
       !item ||
@@ -519,9 +541,31 @@ export function executionReceiptFromWalletReturn(raw: unknown): NeonSoupExecutio
     }
     itemIds.add(item.itemId);
     groupIds.add(item.groupId);
+    groupIndexes.set(item.groupIndex, item.groupId);
     return true;
   });
-  return valid && itemIds.size === candidate.itemCount && groupIds.size === candidate.groupCount
+  if (!valid || itemIds.size !== candidate.itemCount || groupIds.size !== candidate.groupCount) return null;
+
+  const txKeys = new Set<string>();
+  const validTxs = candidate.txs.every((tx) => {
+    if (
+      !tx ||
+      typeof tx.groupId !== 'string' ||
+      typeof tx.groupIndex !== 'number' ||
+      typeof tx.txHash !== 'string' ||
+      typeof tx.status !== 'string' ||
+      typeof tx.hasSubmitError !== 'boolean' ||
+      typeof tx.hasContentionError !== 'boolean'
+    ) {
+      return false;
+    }
+    const key = `${tx.groupIndex}:${tx.groupId}`;
+    if (txKeys.has(key)) return false;
+    txKeys.add(key);
+    return groupIndexes.get(tx.groupIndex) === tx.groupId;
+  });
+
+  return validTxs && txKeys.size === candidate.groupCount
     ? (candidate as NeonSoupExecutionReceipt)
     : null;
 }

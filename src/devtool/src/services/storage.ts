@@ -1,11 +1,20 @@
 import { APP_CONFIG } from '../config/appConfig';
-import type { AppOptions, AppState, AssetMetadata, CartState, NetworkTag, WalletConnection } from '../state/types';
+import type {
+  AppOptions,
+  AppState,
+  AssetMetadata,
+  CartState,
+  NetworkTag,
+  TradeTab,
+  WalletConnection,
+} from '../state/types';
 
 export interface StoredState {
   version?: string;
   options?: Partial<AppOptions>;
   forms?: Partial<AppState['forms']>;
   wallet?: WalletConnection | null;
+  tradeTab?: TradeTab;
   customAssets?: Partial<Record<NetworkTag, Record<string, AssetMetadata>>>;
   cart?: CartState;
 }
@@ -44,6 +53,7 @@ export function saveStoredState(state: AppState): void {
     options: state.options,
     forms: state.forms,
     wallet: state.wallet,
+    tradeTab: state.tradeTab,
     customAssets: state.customAssets,
     cart: state.cart,
   };

@@ -1,8 +1,9 @@
 import type { AppState, CartItem, CartState, IntentArgs } from '../state/types';
 import { assetTitle } from '../domain/assets';
 import { fromBase, gcd } from '../domain/quantities';
+import type { SwapQuote } from '../domain/swapQuote';
 import { resolveAsset, selectedOffer } from '../state/selectors';
-import { buildArgsForAction, buildOpenArgs, newIntentId } from './intents';
+import { buildArgsForAction, buildFillArgsForQuantity, buildOpenArgs, newIntentId } from './intents';
 
 export interface CartValidationResult {
   ok: boolean;
@@ -157,14 +158,46 @@ export function createBulkOpenCartItems(
   });
 }
 
+export function createSwapCartItems(state: AppState, quote: SwapQuote): CartItem[] {
+  return quote.segments
+    .filter((segment) => segment.offerQuantity > 0n)
+    .map((segment) => {
+      const args = buildFillArgsForQuantity(state, segment.offer, segment.offerQuantity);
+      const intentId = args['intent-id'] || newIntentId(`swap-${segment.offer.txHash.slice(0, 8)}`);
+      args['intent-id'] = intentId;
+      const receivedAsset = resolveAsset(state, segment.offer.offerPolicyId, segment.offer.offerAssetName);
+      const paidAsset = resolveAsset(state, segment.offer.askPolicyId, segment.offer.askAssetName);
+      return {
+        id: `fill-${intentId}`,
+        name: 'fill',
+        args,
+        selected: true,
+        status: 'draft',
+        createdAt: Date.now(),
+        sourceOfferId: segment.offer.id,
+        sourceLabel: `Swap ${fromBase(segment.askQuantity, paidAsset.decimals)} ${assetTitle(paidAsset)} → ${fromBase(segment.offerQuantity, receivedAsset.decimals)} ${assetTitle(receivedAsset)}`,
+        pair: {
+          offer: {
+            policyId: segment.offer.offerPolicyId,
+            assetNameHex: segment.offer.offerAssetName,
+          },
+          ask: {
+            policyId: segment.offer.askPolicyId,
+            assetNameHex: segment.offer.askAssetName,
+          },
+        },
+      } satisfies CartItem;
+    });
+}
+
 export function selectedCartItems(cart: CartState): CartItem[] {
   return cart.items.filter((item) => item.selected);
 }
 
 export function visibleCartItems(cart: CartState): CartItem[] {
   return cart.showConfirmedOnly
-    ? cart.items.filter((item) => item.status === 'confirmed')
-    : cart.items.filter((item) => item.status !== 'confirmed');
+    ? cart.items.filter((item) => item.status !== 'draft')
+    : cart.items.filter((item) => item.status === 'draft');
 }
 
 export function validateCartItemsCanBeAdded(cart: CartState, items: CartItem[]): CartValidationResult {

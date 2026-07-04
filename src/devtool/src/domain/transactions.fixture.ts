@@ -62,6 +62,16 @@ export function verifyTransactionFixtures(): void {
     executionId: 'receipt',
     itemCount: 1,
     groupCount: 1,
+    txs: [
+      {
+        groupId: 'group',
+        groupIndex: 0,
+        txHash: 'single-fill',
+        status: 'pending',
+        hasSubmitError: false,
+        hasContentionError: false,
+      },
+    ],
     items: [
       {
         itemId: 'item',

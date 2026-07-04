@@ -15,6 +15,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     migrationSourceVersion: stored.migrationSourceVersion,
     ...(useStoredState && stored.stored.options ? { options: stored.stored.options } : {}),
     ...(useStoredState && stored.stored.forms ? { forms: stored.stored.forms } : {}),
+    ...(useStoredState && stored.stored.tradeTab ? { tradeTab: stored.stored.tradeTab } : {}),
     wallet: useStoredState ? stored.stored.wallet || null : null,
     customAssets: useStoredState ? stored.stored.customAssets || {} : {},
     ...(useStoredState && stored.stored.cart ? { cart: stored.stored.cart } : {}),

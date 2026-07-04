@@ -50,8 +50,25 @@ function validateAssetJson(value: unknown): Record<string, AssetMetadata> {
     if (!Number.isFinite(asset.decimals) || asset.decimals < 0) {
       throw new Error(`${key}.decimals must be a non-negative number.`);
     }
+    if (
+      asset.minExecutableOfferQuantity !== undefined &&
+      (typeof asset.minExecutableOfferQuantity !== 'string' || !/^\d+$/.test(asset.minExecutableOfferQuantity))
+    ) {
+      throw new Error(`${key}.minExecutableOfferQuantity must be a base-unit integer string.`);
+    }
+    if (
+      asset.minMakerRemainderQuantity !== undefined &&
+      (typeof asset.minMakerRemainderQuantity !== 'string' || !/^\d+$/.test(asset.minMakerRemainderQuantity))
+    ) {
+      throw new Error(`${key}.minMakerRemainderQuantity must be a base-unit integer string.`);
+    }
   }
   return assets;
+}
+
+function optionPercent(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(50, value));
 }
 
 export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: OptionsPanelProps) {
@@ -71,6 +88,7 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
         : 'Blockfrost-compatible provider. Leave URL empty to use the GameChanger-hosted endpoint.',
     [state.options.provider],
   );
+  const walletUrlPattern = state.options.gcWalletUrlPattern.trim();
 
   function saveAssets() {
     try {
@@ -159,6 +177,32 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
               />
               <div className="form-text">Stored only in browser localStorage. Do not commit keys into files.</div>
             </div>
+            {APP_CONFIG.walletUrlPatternOverrideEnabled ? (
+              <div className="col-12">
+                <label className="form-label" htmlFor="gcWalletUrlPattern">
+                  GameChanger wallet URL pattern override
+                </label>
+                <input
+                  id="gcWalletUrlPattern"
+                  className="form-control"
+                  value={state.options.gcWalletUrlPattern}
+                  placeholder="Use official GameChanger wallet"
+                  onChange={(event) =>
+                    dispatch({ type: 'set-options', options: { gcWalletUrlPattern: event.target.value } })
+                  }
+                />
+                <div className="form-text">
+                  Optional <code>gc.encode.url()</code> urlPattern. Include <code>{'{gcscript}'}</code>. Return URLs
+                  inside the GCScript are unchanged.
+                </div>
+                {walletUrlPattern ? (
+                  <div className="alert alert-warning mt-3 mb-0" role="alert">
+                    Wallet intents will open through a custom GameChanger wallet URL pattern. Only use this with a
+                    wallet deployment you trust.
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -198,6 +242,52 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                 <option value="dark">Dark</option>
                 <option value="light">Light</option>
               </select>
+            </div>
+            <div className="row g-3">
+              <div className="col-12 col-md-6">
+                <label className="form-label" htmlFor="swapSlippageTolerancePercent">
+                  Swap slippage tolerance %
+                </label>
+                <input
+                  id="swapSlippageTolerancePercent"
+                  className="form-control"
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.1"
+                  value={state.options.swapSlippageTolerancePercent}
+                  onChange={(event) =>
+                    dispatch({
+                      type: 'set-options',
+                      options: {
+                        swapSlippageTolerancePercent: optionPercent(Number(event.target.value), 0.5),
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className="col-12 col-md-6">
+                <label className="form-label" htmlFor="swapPayUpPercent">
+                  Swap pay-up band %
+                </label>
+                <input
+                  id="swapPayUpPercent"
+                  className="form-control"
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.1"
+                  value={state.options.swapPayUpPercent}
+                  onChange={(event) =>
+                    dispatch({
+                      type: 'set-options',
+                      options: {
+                        swapPayUpPercent: optionPercent(Number(event.target.value), 1),
+                      },
+                    })
+                  }
+                />
+              </div>
             </div>
             <div className="d-flex flex-wrap gap-2">
               <button type="button" className="btn btn-outline-primary" onClick={onRefreshOffers}>

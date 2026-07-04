@@ -3,6 +3,7 @@ import { normalizeOpenOffers } from '../domain/orders';
 import { fromBase } from '../domain/quantities';
 import { APP_CONFIG } from '../config/appConfig';
 import { mergeProtocolTransactions } from '../domain/transactions';
+import { reconcileCartItemsByTransactionStatus } from './cartReconciliation';
 import type { AppAction, AppOptions, AppState, AssetMetadata, CartState, NetworkTag } from './types';
 
 export const defaultOptions: AppOptions = {
@@ -10,6 +11,9 @@ export const defaultOptions: AppOptions = {
   provider: APP_CONFIG.defaultProvider,
   blockfrostUrl: '',
   blockfrostKey: '',
+  gcWalletUrlPattern: APP_CONFIG.gcWalletUrlPattern,
+  swapSlippageTolerancePercent: 0.5,
+  swapPayUpPercent: 1,
   popupMode: true,
   hideUnknownOffers: true,
   hideUnknownPortfolio: true,
@@ -29,8 +33,8 @@ function freshCart(): CartState {
 
 function cartVisibleItems(cart: CartState) {
   return cart.showConfirmedOnly
-    ? cart.items.filter((item) => item.status === 'confirmed')
-    : cart.items.filter((item) => item.status !== 'confirmed');
+    ? cart.items.filter((item) => item.status !== 'draft')
+    : cart.items.filter((item) => item.status === 'draft');
 }
 
 function withCart(state: AppState, cart: CartState): AppState {
@@ -76,7 +80,7 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
     migrationSourceVersion: seed?.migrationSourceVersion || '',
     view: seed?.view || 'trade',
     action: seed?.action || 'open',
-    tradeTab: seed?.tradeTab || seed?.action || 'open',
+    tradeTab: seed?.tradeTab || 'swap',
     selectedOrderId: seed?.selectedOrderId || '',
     selectedPair: seed?.selectedPair || null,
     options,
@@ -90,12 +94,15 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
       bulkOpenOfferVariancePercent: '0',
       fillOfferAmount: '',
       fillAskAmount: '',
+      swapOfferAmount: '',
+      swapPayUp: false,
       ...(seed?.forms || {}),
     },
     wallet: seed?.wallet || null,
     cart: seed?.cart || freshCart(),
     lastWalletReturn: null,
     openOffers: normalizeOpenOffers(seed?.openOffers || []),
+    openOffersSnapshot: null,
     portfolio: normalizePortfolioAssets(seed?.portfolio || []),
     transactions: mergeProtocolTransactions([], seed?.transactions || []),
     assetInfo,
@@ -124,7 +131,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         tradeTab: action.tab,
-        action: action.tab === 'bulk-open' ? state.action : action.tab,
+        action: action.tab === 'bulk-open' || action.tab === 'swap' ? state.action : action.tab,
       };
     case 'set-options': {
       const options = { ...state.options, ...action.options };
@@ -217,19 +224,27 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const receiptItems = new Map(
         action.receipt.items.map((item) => [item.itemId, item] as const),
       );
+      const receiptTxs = new Map(
+        action.receipt.txs.map((tx) => [tx.groupIndex, tx] as const),
+      );
       return withCart(state, {
         ...state.cart,
         items: state.cart.items.map((cartItem) => {
           const result = receiptItems.get(cartItem.id);
           if (!result) return cartItem;
+          const tx = receiptTxs.get(result.groupIndex);
+          const hasSubmitError = Boolean(tx?.hasSubmitError);
           return {
             ...cartItem,
-            status: 'pending',
-            pendingAt: action.at,
+            status: hasSubmitError ? 'failed' : 'pending',
+            ...(!hasSubmitError ? { pendingAt: action.at } : {}),
             selected: false,
-            txHash: result.txHash,
+            txHash: tx?.txHash || result.txHash,
             groupId: result.groupId,
             groupIndex: result.groupIndex,
+            ...(tx?.status ? { walletSubmitStatus: tx.status } : {}),
+            walletSubmitError: hasSubmitError,
+            walletSubmitContention: Boolean(tx?.hasContentionError),
             expectedOutputs: result.outputs,
           };
         }),
@@ -245,6 +260,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             txHash: _txHash,
             groupId: _groupId,
             groupIndex: _groupIndex,
+            walletSubmitStatus: _walletSubmitStatus,
+            walletSubmitError: _walletSubmitError,
+            walletSubmitContention: _walletSubmitContention,
             expectedOutputs: _expectedOutputs,
             ...draft
           } = item;
@@ -262,12 +280,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, cart: { ...state.cart, modalOpen: action.open } };
     case 'set-cart-show-confirmed-only':
       return { ...state, cart: { ...state.cart, showConfirmedOnly: action.showConfirmedOnly } };
-    case 'set-open-offers':
+    case 'set-open-offers': {
+      const openOffers = normalizeOpenOffers(action.offers);
       return {
         ...state,
-        openOffers: normalizeOpenOffers(action.offers),
-        selectedOrderId: state.selectedOrderId || action.offers[0]?.id || '',
+        openOffers,
+        openOffersSnapshot: action.snapshot || state.openOffersSnapshot,
+        selectedOrderId: state.selectedOrderId || openOffers[0]?.id || '',
       };
+    }
     case 'set-portfolio':
       return { ...state, portfolio: normalizePortfolioAssets(action.portfolio) };
     case 'set-asset-info':
@@ -306,13 +327,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         cart: {
           ...state.cart,
-          items: state.cart.items.map((item) =>
-            item.status === 'pending' && item.txHash && failedTxHashes.has(item.txHash)
-              ? { ...item, status: 'failed', selected: false }
-              : item.status === 'pending' && item.txHash && txHashes.has(item.txHash)
-                ? { ...item, status: 'confirmed', confirmedAt: action.confirmedAt, selected: false }
-                : item,
-          ),
+          items: reconcileCartItemsByTransactionStatus(state.cart.items, txHashes, failedTxHashes, action.confirmedAt),
         },
         transactions: state.transactions.map((tx) =>
           tx.status === 'submitted' && failedTxHashes.has(tx.txHash)

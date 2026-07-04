@@ -2,6 +2,7 @@ interface CartAddButtonProps {
   onClick: () => void;
   label?: string;
   size?: 'sm' | 'md';
+  disabled?: boolean;
 }
 
 function AddCartIcon() {
@@ -20,7 +21,7 @@ function AddCartIcon() {
   );
 }
 
-export function CartAddButton({ onClick, label = 'Add to Cart', size = 'md' }: CartAddButtonProps) {
+export function CartAddButton({ onClick, label = 'Add to Cart', size = 'md', disabled = false }: CartAddButtonProps) {
   const iconOnly = label === 'Add to Cart';
   const classes = [
     'btn',
@@ -32,7 +33,7 @@ export function CartAddButton({ onClick, label = 'Add to Cart', size = 'md' }: C
     .join(' ');
 
   return (
-    <button type="button" className={classes} onClick={onClick} title={label} aria-label={label}>
+    <button type="button" className={classes} onClick={onClick} title={label} aria-label={label} disabled={disabled}>
       {iconOnly ? <span className="visually-hidden">{label}</span> : <span>{label}</span>}
       <AddCartIcon />
     </button>

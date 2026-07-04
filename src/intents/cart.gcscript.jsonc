@@ -19,6 +19,7 @@
               "utxo-tx-index": "1",
               "utxo-coin-quantity": "8427820",
               "utxo-offer-quantity": "8427820",
+              "utxo-ask-quantity": "0",
               "offer-quantity": "3000000",
               "ask-quantity": "861354",
               "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",
@@ -35,6 +36,7 @@
               "utxo-tx-index": "1",
               "utxo-coin-quantity": "7698610",
               "utxo-offer-quantity": "7698610",
+              "utxo-ask-quantity": "0",
               "offer-quantity": "3500000",
               "ask-quantity": "996303",
               "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",
@@ -60,6 +62,7 @@
             //   "utxo-tx-index": "1",
             //   "utxo-coin-quantity": "2577380",
             //   "utxo-offer-quantity": "8000000",
+            //   "utxo-ask-quantity": "0",
             //   "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",
             //   "intent-id": "677f6b71-1-1780864249967-e01eae35"
             // }
@@ -90,6 +93,7 @@
                     "utxo-tx-index"       : "{get('args.items.0.utxo-tx-index')}",
                     "utxo-coin-quantity"  : "{get('args.items.0.utxo-coin-quantity')}",
                     "utxo-offer-quantity" : "{get('args.items.0.utxo-offer-quantity')}",
+                    "utxo-ask-quantity"   : "{get('args.items.0.utxo-ask-quantity')}",
                     "ask-quantity"        : "{get('args.items.0.ask-quantity')}",
                     "offer-quantity"      : "{get('args.items.0.offer-quantity')}",
                     "offer-address"       : "{get('cache.myAddress')}",
@@ -108,6 +112,7 @@
                     "utxo-tx-index"       : "{get('args.items.1.utxo-tx-index')}",
                     "utxo-coin-quantity"  : "{get('args.items.1.utxo-coin-quantity')}",
                     "utxo-offer-quantity" : "{get('args.items.1.utxo-offer-quantity')}",
+                    "utxo-ask-quantity"   : "{get('args.items.1.utxo-ask-quantity')}",
                     "ask-quantity"        : "{get('args.items.1.ask-quantity')}",
                     "offer-quantity"      : "{get('args.items.1.offer-quantity')}",
                     "offer-address"       : "{get('cache.myAddress')}",
@@ -144,6 +149,7 @@
                 //     "utxo-tx-index"       : "{get('args.items.3.utxo-tx-index')}",
                 //     "utxo-coin-quantity"  : "{get('args.items.3.utxo-coin-quantity')}",
                 //     "utxo-offer-quantity" : "{get('args.items.3.utxo-offer-quantity')}",
+                //     "utxo-ask-quantity"   : "{get('args.items.3.utxo-ask-quantity')}",
                 //     "ask-quantity"        : "{get('args.items.3.ask-quantity')}",
                 //     "offer-quantity"      : "{get('args.items.3.offer-quantity')}",
                 //     "offer-address"       : "{get('cache.myAddress')}",
@@ -227,11 +233,34 @@
         "submit": {
             "type": "submitTxs",
             "mode": "noWait",
+            "noFail": true,
+            "extras": true,
             "txs": "{get('cache.sign')}"
-        },        
+        },
+        "knownErrors":{
+            "type":"macro",
+            "run":{
+                // Some other common error messages from Ogmios/Cardano GraphQL MKII API could be included here 
+                // To consume even less script bytes these could be stored as hashes and check against hashes, not plain text
+                "contention":"The transaction contains unknown UTxO references as inputs. This can happen if the inputs you're trying to spend have already been spent, or if you've simply referred to non-existing UTxO altogether. The field 'data.unknownOutputReferences' indicates all unknown inputs."
+            }
+        },      
         "finally": {
             "type": "macro",
-            "run": {                                
+            "run": {       
+                "txs":[
+                    {
+                        // small strings and boolean checks to send back to dapps:
+                        "txHash": "{get('cache.build.txHash')}",
+                        "status": "{get('cache.submit.txsExtended.0.status')}",
+                        "hasContentionError":"{eq(get('cache.submit.txsExtended.0.error'),get('cache.knownErrors.contention'))}",
+                        "hasSubmitError":"{eq(get('cache.submit.txsExtended.0.status'),'error')}",
+
+                        // when we can afford packing big payloads back to dapps:
+                        // "error": "{get('cache.submit.txsExtended.0.error')}",
+                        // "errorDetail": "{get('cache.submit.txsExtended.0.errorDetail')}"
+                    }
+                ],                         
                 "items":[
                     {
                         "txHash": "{get('cache.build.txHash')}",

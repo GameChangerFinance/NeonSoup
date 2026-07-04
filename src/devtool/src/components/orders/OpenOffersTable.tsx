@@ -9,11 +9,12 @@ import { EmptyState } from '../common/EmptyState';
 interface OpenOffersTableProps {
   state: AppState;
   offers: OpenOffer[];
+  policyStatusByUtxo?: Record<string, string>;
   onFill: (offer: OpenOffer) => void;
   onClose: (offer: OpenOffer) => void;
 }
 
-export function OpenOffersTable({ state, offers, onFill, onClose }: OpenOffersTableProps) {
+export function OpenOffersTable({ state, offers, policyStatusByUtxo, onFill, onClose }: OpenOffersTableProps) {
   if (!offers.length) {
     return <EmptyState title="No offers match this view." detail="Refresh or adjust filters to inspect live offers." />;
   }
@@ -38,6 +39,7 @@ export function OpenOffersTable({ state, offers, onFill, onClose }: OpenOffersTa
             (policyId, assetNameHex) => resolveAsset(state, policyId, assetNameHex),
           ).map((row) => {
             const { offer, offeredAsset, askAsset, ownerBadge } = row;
+            const policyStatus = policyStatusByUtxo?.[row.utxoRef];
             return (
               <tr key={row.key} className={offer.id === state.selectedOrderId ? 'table-active' : undefined}>
                 <td>
@@ -50,6 +52,11 @@ export function OpenOffersTable({ state, offers, onFill, onClose }: OpenOffersTa
                       {short(offer.txHash)}#{offer.txIndex}
                       <CopyIcon value={row.utxoRef} label="Copy UTxO reference" />
                     </div>
+                    {policyStatus ? (
+                      <span className="badge rounded-pill text-bg-warning align-self-start">
+                        {policyStatus}
+                      </span>
+                    ) : null}
                   </div>
                 </td>
                 <td className="d-none">

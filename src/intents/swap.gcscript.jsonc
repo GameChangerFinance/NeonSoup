@@ -18,6 +18,7 @@
         "utxo-tx-index": "0",
         "utxo-coin-quantity": "10000000",
         "utxo-offer-quantity": "10000000",        
+        "utxo-ask-quantity": "0",
         "ask-quantity": "1500000",        
         "offer-quantity": "500000",
         
@@ -42,6 +43,7 @@
                 "utxo-tx-index"       : "{get('args.utxo-tx-index')}",
                 "utxo-coin-quantity"  : "{get('args.utxo-coin-quantity')}",
                 "utxo-offer-quantity" : "{get('args.utxo-offer-quantity')}",
+                "utxo-ask-quantity"   : "{get('args.utxo-ask-quantity')}",
                 "ask-quantity"        : "{get('args.ask-quantity')}",
                 "offer-quantity"      : "{get('args.offer-quantity')}",
                 "offer-address"       : "{get('cache.myAddress')}",
@@ -132,11 +134,22 @@
         "submit": {
             "type": "submitTxs",
             "mode": "noWait",
+            "noFail": true,
+            "extras": true,
             "txs": "{get('cache.sign')}"
-        },        
+        },
+        "knownErrors": {
+            "type": "macro",
+            "run": {
+                "contention": "The transaction contains unknown UTxO references as inputs. This can happen if the inputs you're trying to spend have already been spent, or if you've simply referred to non-existing UTxO altogether. The field 'data.unknownOutputReferences' indicates all unknown inputs."
+            }
+        },
         "finally": {
             "type": "macro",
-            "run": {                                
+            "run": {
+                "status": "{get('cache.submit.txsExtended.0.status')}",
+                "hasSubmitError": "{eq(get('cache.submit.txsExtended.0.status'),'error')}",
+                "hasContentionError": "{eq(get('cache.submit.txsExtended.0.error'),get('cache.knownErrors.contention'))}",
                 "txHash": "{get('cache.build.txHash')}",
                 "index": "{get(  join('.','cache.build.indexMap.output', join('-',get('cache.swapOfferIntent.intentTag'),'remainingOfferWithBeacons') )  )}",
                 "pairBeacon": "{get('cache.swapOfferIntent.pairBeacon')}",
