@@ -231,6 +231,13 @@ export function CartPanel({ state, dispatch, onRunSelected, runDisabled = false,
                       {item.confirmedAt ? (
                         <div className="small text-body-secondary mt-1">Confirmed {new Date(item.confirmedAt).toLocaleString()}</div>
                       ) : null}
+                      {item.walletSubmitError ? (
+                        <div className="small text-warning mt-1">
+                          Wallet submit error{item.walletSubmitContention ? ': contention' : ''}; chain data is authoritative.
+                        </div>
+                      ) : item.walletSubmitStatus && item.walletSubmitStatus !== 'unknown' ? (
+                        <div className="small text-body-secondary mt-1">Wallet status: {item.walletSubmitStatus}</div>
+                      ) : null}
                     </td>
                     <td className="small text-body-secondary">{new Date(item.createdAt).toLocaleString()}</td>
                     <td>

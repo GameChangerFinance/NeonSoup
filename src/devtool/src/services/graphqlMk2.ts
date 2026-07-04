@@ -1,7 +1,7 @@
 import { APP_CONFIG } from '../config/appConfig';
 import { applyFetchedMetadata, assetIdOf, assetKeyOf, hardAsset } from '../domain/assets';
 import { parseSwapDatum, stakeFromAddress } from '../domain/cardano';
-import { parseChainIncludedAt } from '../domain/transactions';
+import { isConfirmedChainTransaction, parseChainIncludedAt } from '../domain/transactions';
 import type { AssetRef, OpenOffer, PortfolioAsset, ResolvedAsset } from '../state/types';
 import { fetchAllPages, pageInfo } from './providers/pagination';
 import {
@@ -332,14 +332,22 @@ async function getConfirmedTransactionHashes(context: ProviderContext, txHashes:
   const confirmed: string[] = [];
   for (let offset = 0; offset < unique.length; offset += 100) {
     const batch = unique.slice(offset, offset + 100);
-    const result = await requestGraphql<{ transactions?: Array<{ hash?: string | null }> | null }, { limit: number; offset: number; txHashes: string[] }>(
+    const result = await requestGraphql<
+      { transactions?: Array<{ hash?: string | null; includedAt?: string | number | null }> | null },
+      { limit: number; offset: number; txHashes: string[] }
+    >(
       context,
       GRAPHQL_MK2_OPERATIONS.confirmedTransactions,
       GRAPHQL_MK2_QUERIES.confirmedTransactions,
       { limit: batch.length, offset: 0, txHashes: batch },
     );
     (result.transactions || []).forEach((transaction) => {
-      if (transaction.hash) confirmed.push(transaction.hash);
+      if (
+        transaction.hash &&
+        isConfirmedChainTransaction({ includedAt: parseChainIncludedAt(transaction.includedAt) })
+      ) {
+        confirmed.push(transaction.hash);
+      }
     });
   }
   return confirmed;

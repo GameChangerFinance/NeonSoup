@@ -15,7 +15,9 @@
     "src/domain/quantities.ts",
     "src/domain/swapQuote.ts",
     "src/domain/text.ts",
+    "src/domain/transactions.ts",
     "src/domain/uiFormat.ts",
+    "src/state/cartReconciliation.ts",
     "src/state/types.ts",
     "tests/**/*.ts"
   ]

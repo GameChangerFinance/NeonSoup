@@ -21,6 +21,7 @@ import { assetMap, balanceOf, resolveAsset, selectedOffer, visibleOffers, visibl
 import { assetTitle, configuredAssets } from './domain/assets';
 import {
   composeTransactionRows,
+  isConfirmedChainTransaction,
   protocolTransactionFromChain,
   transactionsFromReceipt,
 } from './domain/transactions';
@@ -166,12 +167,6 @@ function bookPolicySummaryText(summary: SwapBookPolicySummary, receiveAsset: Res
 const WALLET_REQUIRED_MESSAGE =
   'Connect a wallet before operating. This is a temporary devtool restriction while wallet-agnostic intent execution is being fixed.';
 
-function showTemporaryFullFillProtocolAlert() {
-  window.alert(
-    'Temporary notice: transactions that fully consume an order currently fail in this devtool flow. The protocol is designed for upcoming wallet features that will improve DevEx. Avoid full-fill routes for now or brace for impact at wallet-side!',
-  );
-}
-
 export default function App() {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -250,13 +245,16 @@ export default function App() {
       dispatch({ type: 'apply-execution-receipt', receipt, at });
       dispatch({ type: 'merge-transactions', transactions: transactionsFromReceipt(receipt, at) });
     }
+    const submitFailures = receipt?.txs.filter((tx) => tx.hasSubmitError).length || 0;
     dispatch({
       type: 'set-notice',
       key: 'app',
       notice: {
-        tone: receipt || !hasExecutionExport(raw) ? 'success' : 'warning',
+        tone: submitFailures || (hasExecutionExport(raw) && !receipt) ? 'warning' : 'success',
         message: receipt
-          ? `${receipt.itemCount} submitted intent${receipt.itemCount === 1 ? '' : 's'} captured.`
+          ? submitFailures
+            ? `${receipt.itemCount} intent${receipt.itemCount === 1 ? '' : 's'} captured with ${submitFailures} tentative submission error${submitFailures === 1 ? '' : 's'}. Chain data remains authoritative.`
+            : `${receipt.itemCount} submitted intent${receipt.itemCount === 1 ? '' : 's'} captured.`
           : hasExecutionExport(raw)
             ? 'Wallet returned a malformed NeonSoup execution receipt. No Cart items were updated.'
             : 'Wallet response captured.',
@@ -386,10 +384,11 @@ export default function App() {
   ): Promise<void> {
     try {
       const chainTransactions = await loadTransactions(state, txHashes);
-      if (!isCurrent() || !chainTransactions.length) return;
+      const confirmedChainTransactions = chainTransactions.filter(isConfirmedChainTransaction);
+      if (!isCurrent() || !confirmedChainTransactions.length) return;
       dispatch({
         type: 'merge-transactions',
-        transactions: chainTransactions.map((transaction) =>
+        transactions: confirmedChainTransactions.map((transaction) =>
           protocolTransactionFromChain(
             transaction,
             APP_CONFIG.networks[state.options.network].beaconPolicy || APP_CONFIG.beaconPolicy,
@@ -398,10 +397,10 @@ export default function App() {
       });
       dispatch({
         type: 'reconcile-confirmed-transactions',
-        txHashes: chainTransactions
+        txHashes: confirmedChainTransactions
           .filter((transaction) => transaction.validContract !== false)
           .map((transaction) => transaction.hash),
-        failedTxHashes: chainTransactions
+        failedTxHashes: confirmedChainTransactions
           .filter((transaction) => transaction.validContract === false)
           .map((transaction) => transaction.hash),
         confirmedAt: Date.now(),
@@ -535,7 +534,6 @@ export default function App() {
   }
 
   function addFillToCart() {
-    showTemporaryFullFillProtocolAlert();
     addCurrentIntentToCart();
   }
 
@@ -577,12 +575,10 @@ export default function App() {
   }
 
   async function addSwapToCart() {
-    showTemporaryFullFillProtocolAlert();
     addItemsToCart(await createCurrentSwapCartItems(), true);
   }
 
   async function runSwap() {
-    showTemporaryFullFillProtocolAlert();
     await runIntentItems(await createCurrentSwapCartItems());
   }
 
@@ -631,9 +627,6 @@ export default function App() {
   }
 
   async function runAction() {
-    if (state.tradeTab === 'fill') {
-      showTemporaryFullFillProtocolAlert();
-    }
     await runIntentItems([createCartItemFromCurrentIntent(state)]);
   }
 

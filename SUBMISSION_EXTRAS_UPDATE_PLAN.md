@@ -142,8 +142,8 @@ Guidelines:
    normalized `txs[]` section.
 2. Update `executionReceiptFromWalletReturn()` to validate both `txs[]` and
    `items[]`.
-3. Keep parser strict but backward-compatible enough to avoid breaking older
-   stored returns during normal devtool use.
+3. Keep parser strict: `txs[]` is required and older `items[]`-only receipts
+   are invalid.
 4. Update reducer behavior so `hasSubmitError` is the only wallet-exported
    condition that creates tentative failed/requeueable UX.
 5. Add lightweight UI display for tentative submission status where it already

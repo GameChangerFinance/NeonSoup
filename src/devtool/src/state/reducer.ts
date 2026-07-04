@@ -3,6 +3,7 @@ import { normalizeOpenOffers } from '../domain/orders';
 import { fromBase } from '../domain/quantities';
 import { APP_CONFIG } from '../config/appConfig';
 import { mergeProtocolTransactions } from '../domain/transactions';
+import { reconcileCartItemsByTransactionStatus } from './cartReconciliation';
 import type { AppAction, AppOptions, AppState, AssetMetadata, CartState, NetworkTag } from './types';
 
 export const defaultOptions: AppOptions = {
@@ -223,19 +224,27 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const receiptItems = new Map(
         action.receipt.items.map((item) => [item.itemId, item] as const),
       );
+      const receiptTxs = new Map(
+        action.receipt.txs.map((tx) => [tx.groupIndex, tx] as const),
+      );
       return withCart(state, {
         ...state.cart,
         items: state.cart.items.map((cartItem) => {
           const result = receiptItems.get(cartItem.id);
           if (!result) return cartItem;
+          const tx = receiptTxs.get(result.groupIndex);
+          const hasSubmitError = Boolean(tx?.hasSubmitError);
           return {
             ...cartItem,
-            status: 'pending',
-            pendingAt: action.at,
+            status: hasSubmitError ? 'failed' : 'pending',
+            ...(!hasSubmitError ? { pendingAt: action.at } : {}),
             selected: false,
-            txHash: result.txHash,
+            txHash: tx?.txHash || result.txHash,
             groupId: result.groupId,
             groupIndex: result.groupIndex,
+            ...(tx?.status ? { walletSubmitStatus: tx.status } : {}),
+            walletSubmitError: hasSubmitError,
+            walletSubmitContention: Boolean(tx?.hasContentionError),
             expectedOutputs: result.outputs,
           };
         }),
@@ -251,6 +260,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             txHash: _txHash,
             groupId: _groupId,
             groupIndex: _groupIndex,
+            walletSubmitStatus: _walletSubmitStatus,
+            walletSubmitError: _walletSubmitError,
+            walletSubmitContention: _walletSubmitContention,
             expectedOutputs: _expectedOutputs,
             ...draft
           } = item;
@@ -315,13 +327,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         cart: {
           ...state.cart,
-          items: state.cart.items.map((item) =>
-            item.status === 'pending' && item.txHash && failedTxHashes.has(item.txHash)
-              ? { ...item, status: 'failed', selected: false }
-              : item.status === 'pending' && item.txHash && txHashes.has(item.txHash)
-                ? { ...item, status: 'confirmed', confirmedAt: action.confirmedAt, selected: false }
-                : item,
-          ),
+          items: reconcileCartItemsByTransactionStatus(state.cart.items, txHashes, failedTxHashes, action.confirmedAt),
         },
         transactions: state.transactions.map((tx) =>
           tx.status === 'submitted' && failedTxHashes.has(tx.txHash)

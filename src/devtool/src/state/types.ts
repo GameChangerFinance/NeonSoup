@@ -78,6 +78,9 @@ export interface ProtocolTransaction {
   txHash: string;
   action: ProtocolAction;
   status: 'submitted' | 'confirmed' | 'failed';
+  walletSubmitStatus?: string;
+  walletSubmitError?: boolean;
+  walletSubmitContention?: boolean;
   at: number;
   pair?: AssetPair;
   summary: string;
@@ -117,6 +120,9 @@ export interface CartItem {
   txHash?: string;
   groupId?: string;
   groupIndex?: number;
+  walletSubmitStatus?: string;
+  walletSubmitError?: boolean;
+  walletSubmitContention?: boolean;
   expectedOutputs?: ExecutionOutputRef[];
   sourceOfferId?: string;
   sourceLabel?: string;
@@ -145,6 +151,15 @@ export interface ExecutionReceiptItem {
   outputs: ExecutionOutputRef[];
 }
 
+export interface ExecutionReceiptTx {
+  groupId: string;
+  groupIndex: number;
+  txHash: string;
+  status: string;
+  hasSubmitError: boolean;
+  hasContentionError: boolean;
+}
+
 export interface ExecutionReceiptGroup {
   groupId: string;
   groupIndex: number;
@@ -157,6 +172,7 @@ export interface NeonSoupExecutionReceipt {
   executionId: string;
   itemCount: number;
   groupCount: number;
+  txs: ExecutionReceiptTx[];
   items: ExecutionReceiptItem[];
 }
 

@@ -12,6 +12,10 @@ export interface TransactionRow extends ProtocolTransaction {
   ownershipBadge: OwnershipBadge | null;
 }
 
+export function isConfirmedChainTransaction(transaction: Pick<ChainTransaction, 'includedAt'>): boolean {
+  return transaction.includedAt > 0;
+}
+
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter(Boolean))];
 }
@@ -114,17 +118,30 @@ export function protocolTransactionFromChain(
 export function transactionsFromReceipt(receipt: NeonSoupExecutionReceipt, at: number): ProtocolTransaction[] {
   const groups = new Map<string, typeof receipt.items>();
   receipt.items.forEach((item) => groups.set(item.groupId, [...(groups.get(item.groupId) || []), item]));
-  return [...groups.entries()].map(([groupId, items]) => ({
-    id: `receipt-${items[0]?.txHash || groupId}`,
-    txHash: items[0]?.txHash || '',
-    action: 'unknown',
-    status: 'submitted',
-    at,
-    groupId,
-    itemIds: items.map((item) => item.itemId),
-    evidence: 'wallet-receipt',
-    summary: `Submitted ${items.length} intent${items.length === 1 ? '' : 's'}; awaiting chain verification.`,
-  }));
+  const txsByGroup = new Map(receipt.txs.map((tx) => [tx.groupId, tx] as const));
+  return [...groups.entries()].map(([groupId, items]) => {
+    const tx = txsByGroup.get(groupId);
+    const txHash = tx?.txHash || items[0]?.txHash || '';
+    const hasSubmitError = Boolean(tx?.hasSubmitError);
+    const statusLabel = tx?.status && tx.status !== 'unknown' ? ` Wallet status: ${tx.status}.` : '';
+    const contentionLabel = tx?.hasContentionError ? ' Wallet suggests UTxO contention.' : '';
+    return {
+      id: `receipt-${txHash || groupId}`,
+      txHash,
+      action: 'unknown',
+      status: hasSubmitError ? 'failed' : 'submitted',
+      ...(tx?.status ? { walletSubmitStatus: tx.status } : {}),
+      walletSubmitError: hasSubmitError,
+      walletSubmitContention: Boolean(tx?.hasContentionError),
+      at,
+      groupId,
+      itemIds: items.map((item) => item.itemId),
+      evidence: 'wallet-receipt',
+      summary: hasSubmitError
+        ? `Wallet reported a tentative submission failure for ${items.length} intent${items.length === 1 ? '' : 's'}; awaiting chain/provider evidence.${contentionLabel}`
+        : `Submitted ${items.length} intent${items.length === 1 ? '' : 's'}; awaiting chain verification.${statusLabel}${contentionLabel}`,
+    };
+  });
 }
 
 export function mergeProtocolTransactions(
@@ -161,7 +178,7 @@ export function composeTransactionRows(
           summary:
             transaction.status === 'submitted'
               ? transaction.summary
-              : 'Captured transaction; awaiting chain-backed categorization.',
+              : transaction.summary || 'Captured transaction; awaiting chain-backed categorization.',
         };
     return {
       ...normalized,
