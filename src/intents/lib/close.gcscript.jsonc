@@ -61,19 +61,6 @@
             "type": "macro",
             "run": "{get('args.utxo-coin-quantity')}"
         },
-        "tokenOutputQuantity":{
-            "type": "macro",
-            "run":{
-                "remainingOffer":{
-                    "coin":"0",
-                    "token":"{get('args.utxo-offer-quantity')}"
-                },
-                "askDeposit":{
-                    "coin":"0",
-                    "token":"{get('args.utxo-ask-quantity')}"
-                }
-            }
-        },        
         "emptyRedeemer": {
             "type": "plutusData",
             "data": {
@@ -121,12 +108,7 @@
                             {
                                 "policyId": "{get('cache.dependencies.normalized.forTx.offer-policy-id')}",
                                 "assetNameHex": "{get('cache.dependencies.normalized.forTx.offer-asset-name')}",
-                                "quantity": "{get(join('.','cache','tokenOutputQuantity','remainingOffer',get('cache.dependencies.assetKindForTx.offer')))}"
-                            },
-                            {
-                                "policyId": "{get('cache.dependencies.normalized.forTx.ask-policy-id')}",
-                                "assetNameHex": "{get('cache.dependencies.normalized.forTx.ask-asset-name')}",
-                                "quantity": "{get(join('.','cache','tokenOutputQuantity','askDeposit',get('cache.dependencies.assetKindForTx.ask')))}"
+                                "quantity": "{get('args.utxo-offer-quantity')}"
                             }
                         ]
                     } 
