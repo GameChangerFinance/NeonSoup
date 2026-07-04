@@ -33,8 +33,8 @@ function freshCart(): CartState {
 
 function cartVisibleItems(cart: CartState) {
   return cart.showConfirmedOnly
-    ? cart.items.filter((item) => item.status === 'confirmed')
-    : cart.items.filter((item) => item.status !== 'confirmed');
+    ? cart.items.filter((item) => item.status !== 'draft')
+    : cart.items.filter((item) => item.status === 'draft');
 }
 
 function withCart(state: AppState, cart: CartState): AppState {

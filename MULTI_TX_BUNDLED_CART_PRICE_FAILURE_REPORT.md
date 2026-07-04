@@ -71,6 +71,44 @@ UTxO and adding the new ask deposit.
    deliberately, but the reported validator trace points first to ask-delta
    accounting.
 
+5. Splitting `utxo-coin-quantity` and `utxo-ask-quantity` creates an ADA/tADA
+   accounting risk if the asset classes are not normalized first.
+
+   Introducing a separate `args.utxo-ask-quantity` can fix native-token ask
+   accumulation, but it can also break ADA-like cases if the intent treats coin
+   ADA and token quantities with the same assumptions. Actual ADA is already
+   represented by the UTxO coin/lovelace value, while tADA or other ADA-like
+   assets may be ordinary native tokens. If the fragment adds an ADA ask amount
+   through both the coin path and a separate ask-asset path, the continuing
+   output can double count the ADA value and distort the validator-visible
+   `ask_given`.
+
+   The problem is not only the presence or absence of
+   `args.utxo-ask-quantity`; it is the lack of a normalized value model that
+   clearly distinguishes:
+
+   ```txt
+   current coin/lovelace value
+   current offered asset quantity
+   current asked asset quantity
+   new offered asset delta
+   new asked asset delta
+   whether each side is coin ADA or a native token
+   ```
+
+   A comprehensive fix should therefore be found at the argument-normalization
+   and intent-boundary layer. Ideally, `utxo-coin-quantity` and
+   `utxo-ask-quantity` should either be combined into a clearer canonical value
+   shape, or replaced with an explicit design where each offer/ask side carries
+   both coin and token accounting data without relying on ad hoc assumptions.
+   The final design should make ADA, tADA, and arbitrary native-token cases
+   unambiguous before the GCScript fragment performs BigNum arithmetic.
+
+   This risk may exist in other intents too, not only the swap/fill fragment.
+   Any change should be normalized across all relevant open, fill, close, cart,
+   and bundled-intent paths instead of patching one fragment with a local
+   one-off argument convention.
+
 ## Suggested Fix
 
 1. Add current ask quantity to fill protocol args.

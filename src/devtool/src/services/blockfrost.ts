@@ -127,8 +127,13 @@ export async function fetchOpenOffers(context: ProviderContext): Promise<OpenOff
       const datum = parseSwapDatum(utxo.inline_datum);
       if (!datum) continue;
       const offerAssetId = assetIdOf(datum.offerPolicyId, datum.offerAssetName);
+      const askAssetId = assetIdOf(datum.askPolicyId, datum.askAssetName);
       const lovelace = utxo.amount.find((item) => item[blockfrostAssetIdField] === 'lovelace')?.quantity || '0';
       const offered = utxo.amount.find((item) => item[blockfrostAssetIdField] === offerAssetId)?.quantity || '0';
+      const asked =
+        askAssetId === 'lovelace'
+          ? '0'
+          : utxo.amount.find((item) => item[blockfrostAssetIdField] === askAssetId)?.quantity || '0';
       seen.add(id);
       offers.push({
         id,
@@ -138,6 +143,7 @@ export async function fetchOpenOffers(context: ProviderContext): Promise<OpenOff
         ownerStakeKeyHash: stakeFromAddress(utxo.address),
         utxoCoinQuantity: lovelace,
         utxoOfferQuantity: offered,
+        utxoAskQuantity: asked,
         ...datum,
       });
     }

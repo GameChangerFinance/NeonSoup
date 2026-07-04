@@ -156,6 +156,7 @@ function mapOpenOffer(context: ProviderContext, utxo: Mk2Utxo): OpenOffer | null
   const beaconPolicy = APP_CONFIG.networks[context.networkTag].beaconPolicy || APP_CONFIG.beaconPolicy;
   if (!txHash || !txIndex || !address || !datum || !validBeaconTokens(tokens, beaconPolicy, datum)) return null;
   const offerAssetId = assetIdOf(datum.offerPolicyId, datum.offerAssetName);
+  const askAssetId = assetIdOf(datum.askPolicyId, datum.askAssetName);
   return {
     id: `${txHash}:${txIndex}`,
     txHash,
@@ -164,6 +165,7 @@ function mapOpenOffer(context: ProviderContext, utxo: Mk2Utxo): OpenOffer | null
     ownerStakeKeyHash: stakeFromAddress(address),
     utxoCoinQuantity: utxo.value || '0',
     utxoOfferQuantity: offerAssetId === 'lovelace' ? utxo.value || '0' : tokenQuantity(tokens, offerAssetId),
+    utxoAskQuantity: askAssetId === 'lovelace' ? '0' : tokenQuantity(tokens, askAssetId),
     ...datum,
   };
 }

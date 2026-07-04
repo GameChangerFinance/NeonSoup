@@ -110,6 +110,26 @@
                 }
             }                   
         },
+        "assetKind": {
+            "type": "macro",
+            "run": {
+                "offer": {
+                    "{join('-', get('args.offer-policy-id'), get('args.offer-asset-name'))}": "token",
+                    "ada-ada": "coin"
+                },
+                "ask": {
+                    "{join('-', get('args.ask-policy-id'), get('args.ask-asset-name'))}": "token",
+                    "ada-ada": "coin"
+                }
+            }
+        },
+        "assetKindForTx": {
+            "type": "macro",
+            "run": {
+                "offer": "{get(join('.','cache','assetKind','offer',join('-',get('args.offer-policy-id'),get('args.offer-asset-name'))))}",
+                "ask": "{get(join('.','cache','assetKind','ask',join('-',get('args.ask-policy-id'),get('args.ask-asset-name'))))}"
+            }
+        },
         "pairBeacon": {
             "type": "macro",
             "run": "{sha256(flatten(hexToByteArray(get('cache.normalized.forPairBeaconHashing.offer-policy-id')), hexToByteArray(get('cache.normalized.forPairBeaconHashing.offer-asset-name')),  hexToByteArray(get('cache.normalized.forPairBeaconHashing.ask-policy-id')), hexToByteArray(get('cache.normalized.forPairBeaconHashing.ask-asset-name'))))}"

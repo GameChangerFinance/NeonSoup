@@ -152,7 +152,7 @@ export function CartPanel({ state, dispatch, onRunSelected, runDisabled = false,
             }
           />
           <label className="form-check-label small" htmlFor="cart-show-confirmed-only">
-            Show confirmed only
+            Show execution history
           </label>
         </div>
       </div>
@@ -270,7 +270,7 @@ export function CartPanel({ state, dispatch, onRunSelected, runDisabled = false,
       ) : (
         <EmptyState
           title={state.cart.items.length ? 'No Cart items match this filter.' : 'Cart is empty.'}
-          detail={state.cart.items.length ? 'Toggle Show confirmed only to switch between active and confirmed items.' : 'Add Open, Fill, Close, or Bulk-Open intents.'}
+          detail={state.cart.items.length ? 'Toggle Show execution history to switch between draft items and submitted history.' : 'Add Open, Fill, Close, or Bulk-Open intents.'}
         />
       )}
     </section>

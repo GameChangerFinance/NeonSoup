@@ -196,8 +196,8 @@ export function selectedCartItems(cart: CartState): CartItem[] {
 
 export function visibleCartItems(cart: CartState): CartItem[] {
   return cart.showConfirmedOnly
-    ? cart.items.filter((item) => item.status === 'confirmed')
-    : cart.items.filter((item) => item.status !== 'confirmed');
+    ? cart.items.filter((item) => item.status !== 'draft')
+    : cart.items.filter((item) => item.status === 'draft');
 }
 
 export function validateCartItemsCanBeAdded(cart: CartState, items: CartItem[]): CartValidationResult {

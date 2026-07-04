@@ -82,7 +82,10 @@ function argRefsFor(item: CartItem, itemIndex: number): GcNode {
   const args = Object.fromEntries(
     Object.keys(item.args).map((key) => [key, `{get('args.items.${itemIndex}.protocol-args.${key}')}`]),
   );
-  if (item.name === 'fill' || item.name === 'close') args['offer-address'] = "{get('cache.myAddress')}";
+  if (item.name === 'fill' || item.name === 'close') {
+    args['offer-address'] = "{get('cache.myAddress')}";
+    if (!('utxo-ask-quantity' in item.args)) args['utxo-ask-quantity'] = '0';
+  }
   return args;
 }
 

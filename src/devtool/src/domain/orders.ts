@@ -28,7 +28,7 @@ export function normalizeOpenOffers(offers: readonly OpenOffer[]): OpenOffer[] {
   const normalized = new Map<string, OpenOffer>();
   offers.forEach((offer) => {
     const key = openOfferKey(offer);
-    normalized.set(key, { ...offer, id: key, orderKind: normalizeOrderKind(offer.orderKind) });
+    normalized.set(key, { ...offer, id: key, orderKind: normalizeOrderKind(offer.orderKind), utxoAskQuantity: offer.utxoAskQuantity || '0' });
   });
   return [...normalized.values()].sort(
     (a, b) => a.txHash.localeCompare(b.txHash) || Number(a.txIndex) - Number(b.txIndex),

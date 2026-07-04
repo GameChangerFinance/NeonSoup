@@ -10,6 +10,7 @@
 //     "utxo-tx-index": "0",
 //     "utxo-coin-quantity": "10000000",
 //     "utxo-offer-quantity": "10000000",
+//     "utxo-ask-quantity": "0",
 //     "offer-address": "addr_test1qpf7s7teq4d5g5sfhztshnxjvfnlxtz335mwnq2ruvvd8k9a9ww7ur94zw24dnf6wwrvp5v4u937m0zpjwqjqt2898ks4wugl5",
 //     "owner-stake-keyhash": "f3eb9839fb3be3e66b330bc9d3213d498c3d61a1fe4b33699f04dce5",        
 //     "intent-id": "1"
@@ -56,22 +57,22 @@
         //         }                    
         //     }
         // },       
-        "quantity":{
+        "returnADA": {
+            "type": "macro",
+            "run": "{get('args.utxo-coin-quantity')}"
+        },
+        "tokenOutputQuantity":{
             "type": "macro",
             "run":{
-                "utxo":{
-                    "ada-ada":"{get('args.utxo-coin-quantity')}",                                                                
-                    "{join('-', get('args.offer-policy-id'), get('args.offer-asset-name'))}":"{get('args.utxo-offer-quantity')}"
+                "remainingOffer":{
+                    "coin":"0",
+                    "token":"{get('args.utxo-offer-quantity')}"
+                },
+                "askDeposit":{
+                    "coin":"0",
+                    "token":"{get('args.utxo-ask-quantity')}"
                 }
             }
-        },         
-        "currentADA": {
-            "type": "macro",
-            "run": "{get('cache.quantity.utxo.ada-ada')}"
-        },                
-        "currentOffer": {
-            "type": "macro",            
-            "run": "{get(join('.','cache','quantity','utxo',  join('-',get('cache.dependencies.normalized.forTx.offer-policy-id'),get('cache.dependencies.normalized.forTx.offer-asset-name'))  ))}"
         },        
         "emptyRedeemer": {
             "type": "plutusData",
@@ -113,9 +114,19 @@
                         "address": "{get('args.offer-address')}",
                         "assets": [
                             {
+                                "policyId": "ada",
+                                "assetNameHex": "ada",
+                                "quantity": "{get('cache.returnADA')}"
+                            },
+                            {
                                 "policyId": "{get('cache.dependencies.normalized.forTx.offer-policy-id')}",
                                 "assetNameHex": "{get('cache.dependencies.normalized.forTx.offer-asset-name')}",
-                                "quantity": "{get('cache.currentOffer')}"
+                                "quantity": "{get(join('.','cache','tokenOutputQuantity','remainingOffer',get('cache.dependencies.assetKindForTx.offer')))}"
+                            },
+                            {
+                                "policyId": "{get('cache.dependencies.normalized.forTx.ask-policy-id')}",
+                                "assetNameHex": "{get('cache.dependencies.normalized.forTx.ask-asset-name')}",
+                                "quantity": "{get(join('.','cache','tokenOutputQuantity','askDeposit',get('cache.dependencies.assetKindForTx.ask')))}"
                             }
                         ]
                     } 

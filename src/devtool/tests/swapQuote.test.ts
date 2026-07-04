@@ -60,6 +60,7 @@ function order(
     ownerStakeKeyHash: 'stake',
     utxoCoinQuantity: '3000000',
     utxoOfferQuantity: quantity,
+    utxoAskQuantity: '0',
     pairBeacon: 'pair',
     offerPolicyId: received.policyId,
     offerAssetName: received.assetNameHex,

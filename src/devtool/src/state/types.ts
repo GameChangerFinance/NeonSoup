@@ -51,6 +51,7 @@ export interface OpenOffer {
   ownerStakeKeyHash: string;
   utxoCoinQuantity: string;
   utxoOfferQuantity: string;
+  utxoAskQuantity: string;
   pairBeacon: string;
   offerPolicyId: string;
   offerAssetName: string;

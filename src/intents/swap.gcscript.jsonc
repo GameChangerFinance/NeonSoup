@@ -18,6 +18,7 @@
         "utxo-tx-index": "0",
         "utxo-coin-quantity": "10000000",
         "utxo-offer-quantity": "10000000",        
+        "utxo-ask-quantity": "0",
         "ask-quantity": "1500000",        
         "offer-quantity": "500000",
         
@@ -42,6 +43,7 @@
                 "utxo-tx-index"       : "{get('args.utxo-tx-index')}",
                 "utxo-coin-quantity"  : "{get('args.utxo-coin-quantity')}",
                 "utxo-offer-quantity" : "{get('args.utxo-offer-quantity')}",
+                "utxo-ask-quantity"   : "{get('args.utxo-ask-quantity')}",
                 "ask-quantity"        : "{get('args.ask-quantity')}",
                 "offer-quantity"      : "{get('args.offer-quantity')}",
                 "offer-address"       : "{get('cache.myAddress')}",

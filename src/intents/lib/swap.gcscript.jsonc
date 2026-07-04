@@ -11,6 +11,7 @@
 //     "utxo-tx-index": "0",
 //     "utxo-coin-quantity": "10000000",
 //     "utxo-offer-quantity": "10000000",        
+//     "utxo-ask-quantity": "0",
 //     "ask-quantity": "1500000",        
 //     "offer-quantity": "500000",
 //     "offer-address": "addr_test1qpf7s7teq4d5g5sfhztshnxjvfnlxtz335mwnq2ruvvd8k9a9ww7ur94zw24dnf6wwrvp5v4u937m0zpjwqjqt2898ks4wugl5",
@@ -60,58 +61,41 @@
         //         }                    
         //     }
         // },    
-        "quantity":{
+        "coinDelta":{
             "type": "macro",
             "run":{
-                "ask"   :{
-                    "ada-ada":"0",
-                    "{join('-', get('args.ask-policy-id'), get('args.ask-asset-name'))}":"{get('args.ask-quantity')}"
+                "askDeposit": {
+                    "coin": "{get('args.ask-quantity')}",
+                    "token": "0"
                 },
-                "offer" :{
-                    "ada-ada":"0",
-                    "{join('-', get('args.offer-policy-id'), get('args.offer-asset-name'))}":"{get('args.offer-quantity')}"
-                },
-                "utxo":{
-                    "ada-ada":"{get('args.utxo-coin-quantity')}",                                                                
-                    "{join('-', get('args.offer-policy-id'), get('args.offer-asset-name'))}":"{get('args.utxo-offer-quantity')}"
+                "offerTaken": {
+                    "coin": "{get('args.offer-quantity')}",
+                    "token": "0"
                 }
             }
         }, 
-        "currentADA": {
-            "type": "macro",
-            "run": "{get('cache.quantity.utxo.ada-ada')}"
-        },                
-        "currentOffer": {
-            "type": "macro",            
-            "run": "{get(join('.','cache','quantity','utxo',  join('-',get('cache.dependencies.normalized.forTx.offer-policy-id'),get('cache.dependencies.normalized.forTx.offer-asset-name'))  ))}"
-        },
         "remainingADA": {
             "type": "macro",
-            // Former code only added ADA paid as the ask asset. For ADA-offer fills,
-            // the taken ADA must also leave the continuing swap UTxO.
-            // "run": "{addBigNum(get('cache.currentADA'), get('cache.quantity.ask.ada-ada') )}"
-            "run": "{subBigNum(addBigNum(get('cache.currentADA'), get('cache.quantity.ask.ada-ada')), get('cache.quantity.offer.ada-ada'))}"
+            "run": "{subBigNum(addBigNum(get('args.utxo-coin-quantity'), get(join('.','cache','coinDelta','askDeposit',get('cache.dependencies.assetKindForTx.ask')))), get(join('.','cache','coinDelta','offerTaken',get('cache.dependencies.assetKindForTx.offer'))))}"
         },                
         "remainingOffer": {
             "type": "macro",
-            "run": "{subBigNum(get('cache.currentOffer') , get('args.offer-quantity') )}"
+            "run": "{subBigNum(get('args.utxo-offer-quantity'), get('args.offer-quantity'))}"
         },
-        "outputQuantity":{
+        "continuingAsk": {
+            "type": "macro",
+            "run": "{addBigNum(get('args.utxo-ask-quantity'), get('args.ask-quantity'))}"
+        },
+        "tokenOutputQuantity":{
             "type": "macro",
             "run":{
                 "remainingOffer":{
-                    // If the offer asset is ADA, remainingADA already carries the
-                    // adjusted lovelace value. Keep this output row neutral so the
-                    // builder does not add the remaining ADA twice.
-                    "{join('-', get('args.offer-policy-id'), get('args.offer-asset-name'))}":"{get('cache.remainingOffer')}",
-                    "ada-ada":"0"
+                    "coin":"0",
+                    "token":"{get('cache.remainingOffer')}"
                 },
                 "askDeposit":{
-                    // If the ask asset is ADA, remainingADA already includes the
-                    // paid ADA. For native-token asks, this row deposits the ask
-                    // asset into the continuing order UTxO.
-                    "{join('-', get('args.ask-policy-id'), get('args.ask-asset-name'))}":"{get('args.ask-quantity')}",
-                    "ada-ada":"0"
+                    "coin":"0",
+                    "token":"{get('cache.continuingAsk')}"
                 }
             }
         },        
@@ -202,7 +186,7 @@
                             {
                                 "policyId": "{get('cache.dependencies.normalized.forTx.offer-policy-id')}",
                                 "assetNameHex": "{get('cache.dependencies.normalized.forTx.offer-asset-name')}",
-                                "quantity": "{get(join('.','cache','outputQuantity','remainingOffer', join('-',get('cache.dependencies.normalized.forTx.offer-policy-id'),get('cache.dependencies.normalized.forTx.offer-asset-name')) ))}"
+                                "quantity": "{get(join('.','cache','tokenOutputQuantity','remainingOffer',get('cache.dependencies.assetKindForTx.offer')))}"
                             },
                             {
                                 // Deposit the ask asset into the continuing order.
@@ -210,7 +194,7 @@
                                 // handled by remainingADA above.
                                 "policyId": "{get('cache.dependencies.normalized.forTx.ask-policy-id')}",
                                 "assetNameHex": "{get('cache.dependencies.normalized.forTx.ask-asset-name')}",
-                                "quantity": "{get(join('.','cache','outputQuantity','askDeposit', join('-',get('cache.dependencies.normalized.forTx.ask-policy-id'),get('cache.dependencies.normalized.forTx.ask-asset-name')) ))}"
+                                "quantity": "{get(join('.','cache','tokenOutputQuantity','askDeposit',get('cache.dependencies.assetKindForTx.ask')))}"
                             },
                             {
                                 "policyId": "{get('cache.dependencies.beaconsPolicy.scriptHashHex')}",
