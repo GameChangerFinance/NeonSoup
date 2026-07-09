@@ -2,6 +2,19 @@ import type { CartItem, ExecutionReceiptItem, GcscriptArgs, IntentTemplate } fro
 
 type GcNode = Record<string, unknown>;
 
+const NEONSOUP_EXECUTION_EXPORT = 'neonsoupExecution';
+const CARDANO_METADATA_MSG_LABEL = '674';
+const COLLATERAL_COIN_SELECTION = 'LASLAD';
+const SUBMIT_TXS_OPTIONS = {
+  mode: 'noWait',
+  noFail: true,
+  extras: true,
+} as const;
+const KNOWN_WALLET_ERRORS = {
+  contention:
+    "The transaction contains unknown UTxO references as inputs. This can happen if the inputs you're trying to spend have already been spent, or if you've simply referred to non-existing UTxO altogether. The field 'data.unknownOutputReferences' indicates all unknown inputs.",
+} as const;
+
 interface ComposeGroup {
   id: string;
   items: CartItem[];
@@ -82,14 +95,6 @@ function argRefsFor(item: CartItem, itemIndex: number): GcNode {
   return args;
 }
 
-function importStepFor(entries: ComposeEntry[]): GcNode {
-  return {
-    type: '$importAsScript',
-    argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex)])),
-    from: Object.fromEntries(entries.map((entry) => [entry.stepKey, libImportFor(entry.item).uri])),
-  };
-}
-
 function txFeatureReturnUrl(returnUrlPattern: string): string {
   const url = new URL(returnUrlPattern);
   url.searchParams.set('txHash', '{txHash}');
@@ -135,87 +140,6 @@ function metadataMsgFor(group: ComposeGroup, totalItems: number, allItems: CartI
   });
   if (group.items.length > items.length) lines.push(`+${group.items.length - items.length} more\n`);
   return [rootTitle(allItems) + '\n', groupSummary(group, totalItems) + '\n', `Group ${compactId(group.id)}\n`, ...lines];
-}
-
-function buildFeaturesFor(argsPath: string, returnUrlPattern: string): GcNode {
-  return {
-    title: `{get('${argsPath}.build-title')}`,
-    id: `{get('${argsPath}.build-id')}`,
-    tags: `{get('${argsPath}.tags')}`,
-    group: `{get('${argsPath}.group-id')}`,
-    indexOf: `{get('${argsPath}.index-of')}`,
-    returnURLPattern: txFeatureReturnUrl(returnUrlPattern),
-  };
-}
-
-function auxiliaryDataFor(argsPath: string): GcNode {
-  return {
-    '674': {
-      msg: `{get('${argsPath}.metadata-msg')}`,
-    },
-  };
-}
-
-function mechanicalTxFor(entries: ComposeEntry[], argsPath: string): GcNode {
-  const mints = entries
-    .filter(({ item }) => item.name === 'open' || item.name === 'close')
-    .map(({ cachePath }) => `{get('cache.${cachePath}.tx.mints.beacons')}`);
-  const inputs = entries
-    .filter(({ item }) => item.name === 'fill' || item.name === 'close')
-    .map(({ cachePath }) => `{get('cache.${cachePath}.tx.inputs.offerWithBeacons')}`);
-  const outputs = entries.flatMap(({ item, cachePath }) => {
-    if (item.name === 'open') return [`{get('cache.${cachePath}.tx.outputs.offerWithBeacons')}`];
-    if (item.name === 'fill') {
-      return [
-        `{get('cache.${cachePath}.tx.outputs.filledOffer')}`,
-        `{get('cache.${cachePath}.tx.outputs.remainingOfferWithBeacons')}`,
-      ];
-    }
-    return [`{get('cache.${cachePath}.tx.outputs.unfilledOffer')}`];
-  });
-  const scripts = entries.flatMap(({ item, cachePath }) => {
-    if (item.name === 'open') return [`{get('cache.${cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`];
-    if (item.name === 'fill') return [`{get('cache.${cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`];
-    return [
-      `{get('cache.${cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`,
-      `{get('cache.${cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`,
-    ];
-  });
-  const consumers = entries.flatMap(({ item, cachePath }) => {
-    if (item.name === 'open') return [`{get('cache.${cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`];
-    if (item.name === 'fill') {
-      return [`{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`];
-    }
-    return [
-      `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`,
-      `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`,
-    ];
-  });
-  const requiredSigners = entries
-    .filter(({ item }) => item.name === 'close')
-    .map(({ cachePath }) => `{get('cache.${cachePath}.tx.requiredSigners.0')}`);
-
-  const run: GcNode = {
-    outputs,
-    options: {
-      collateralCoinSelection: 'LASLAD',
-    },
-    auxiliaryData: auxiliaryDataFor(argsPath),
-  };
-  const tx: GcNode = {
-    type: 'macro',
-    run,
-  };
-  if (inputs.length) run.inputs = inputs;
-  if (mints.length) run.mints = mints;
-  if (scripts.length || consumers.length) {
-    const plutus: GcNode = {};
-    if (scripts.length) plutus.scripts = scripts;
-    if (consumers.length) plutus.consumers = consumers;
-    run.witnesses = { plutus };
-  }
-  if (requiredSigners.length) run.requiredSigners = requiredSigners;
-  return tx;
 }
 
 function groupEntries(group: ComposeGroup, groupIndex: number, globalOffset: number): ComposeEntry[] {
@@ -287,96 +211,6 @@ function receiptArgs(mode: 'bundle' | 'parallel', executionId: string, sources: 
   };
 }
 
-function receiptMacro(sources: ReceiptGroupSource[]): GcNode {
-  const entries = sources.flatMap((source) =>
-    source.entries.map((entry) => ({
-      ...entry,
-      group: source.group,
-      buildCachePath: source.buildCachePath,
-    })),
-  );
-  return {
-    type: 'macro',
-    run: {
-      executionId: "{get('args.execution-id')}",
-      itemCount: "{get('args.item-count')}",
-      groupCount: "{get('args.group-count')}",
-      txs: sources.map((source, txIndex) => ({
-        groupId: `{get('args.groups.${txIndex}.group-id')}`,
-        groupIndex: `{get('args.groups.${txIndex}.group-index')}`,
-        txHash: `{get('cache.${source.buildCachePath}.txHash')}`,
-        status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
-        hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
-        hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
-      })),
-      items: entries.map((entry) => ({
-        itemId: `{get('args.items.${entry.itemIndex}.item-id')}`,
-        intentId: `{get('args.items.${entry.itemIndex}.intent-id')}`,
-        type: `{get('args.items.${entry.itemIndex}.type')}`,
-        itemIndex: `{get('args.items.${entry.itemIndex}.item-index')}`,
-        groupId: `{get('args.groups.${entry.groupIndex}.group-id')}`,
-        groupIndex: `{get('args.items.${entry.itemIndex}.group-index')}`,
-        groupItemIndex: `{get('args.items.${entry.itemIndex}.group-item-index')}`,
-        txHash: `{get('cache.${entry.buildCachePath}.txHash')}`,
-        ...(entry.item.sourceOfferId ? { sourceOfferId: `{get('args.items.${entry.itemIndex}.source-offer-id')}` } : {}),
-        ...(entry.item.args['utxo-tx-hash']
-          ? {
-              sourceUtxo: {
-                txHash: `{get('args.items.${entry.itemIndex}.source-utxo.tx-hash')}`,
-                index: `{get('args.items.${entry.itemIndex}.source-utxo.index')}`,
-              },
-            }
-          : {}),
-        outputs: outputArgs(entry.item).map((_, outputIndex) => ({
-          role: `{get('args.items.${entry.itemIndex}.outputs.${outputIndex}.role')}`,
-          index: `{get(join('.','cache','${entry.buildCachePath}','indexMap','output',get('args.items.${entry.itemIndex}.outputs.${outputIndex}.idPattern')))}`,
-        })),
-      })),
-    },
-  };
-}
-
-function baseScript(
-  title: string,
-  args: GcscriptArgs,
-  run: GcNode,
-  buildRefs: string[],
-  receiptSources: ReceiptGroupSource[],
-  returnUrlPattern: string,
-): IntentTemplate['code'] {
-  return {
-    type: 'script',
-    title,
-    args,
-    exportAs: 'neonsoupExecution',
-    return: { mode: 'last' },
-    returnURLPattern: returnUrlPattern,
-    run: {
-      ...run,
-      sign: {
-        type: 'signTxs',
-        detailedPermissions: false,
-        txs: buildRefs,
-      },
-      submit: {
-        type: 'submitTxs',
-        mode: 'noWait',
-        noFail: true,
-        extras: true,
-        txs: "{get('cache.sign')}",
-      },
-      knownErrors: {
-        type: 'macro',
-        run: {
-          contention:
-            "The transaction contains unknown UTxO references as inputs. This can happen if the inputs you're trying to spend have already been spent, or if you've simply referred to non-existing UTxO altogether. The field 'data.unknownOutputReferences' indicates all unknown inputs.",
-        },
-      },
-      finally: receiptMacro(receiptSources),
-    },
-  };
-}
-
 export function createBundledGcscriptSource({
   items,
   maxIntentsPerTransaction,
@@ -385,35 +219,187 @@ export function createBundledGcscriptSource({
   groupRootId = shortId(groupPrefix(items)),
 }: BundledGcscriptSourceArgs): IntentTemplate['code'] {
   const groups = chunkItems(items, maxIntentsPerTransaction, groupRootId);
-  const txRun: GcNode = {};
-  const buildRefs: string[] = [];
-  const receiptSources: ReceiptGroupSource[] = [];
   let globalOffset = 0;
-  groups.forEach((group, index) => {
+  const sources = groups.map((group, index) => {
     const entries = groupEntries(group, index, globalOffset);
-    const txStep = `tx${index}`;
-    const buildStep = `build${index}`;
-    txRun[txStep] = mechanicalTxFor(entries, `args.groups.${index}`);
-    txRun[buildStep] = {
-      type: 'buildTx',
-      ...buildFeaturesFor(`args.groups.${index}`, returnUrlPattern),
-      tx: `{get('cache.${txStep}')}`,
-    };
-    buildRefs.push(`{get('cache.${buildStep}.txHex')}`);
-    receiptSources.push({
-      group,
-      buildCachePath: buildStep,
-      entries,
-    });
     globalOffset += group.items.length;
+    return {
+      group,
+      buildCachePath: `build${index}`,
+      entries,
+    };
   });
-  const entries = receiptSources.flatMap((source) => source.entries);
-  const run: GcNode = {
-    myAddress: { type: 'getCurrentAddress' },
-    intents: importStepFor(entries),
-    ...txRun,
+  const entries = sources.flatMap((source) => source.entries);
+
+  return {
+    type: 'script',
+    title: rootTitle(items),
+    args: receiptArgs('bundle', executionId, sources),
+    exportAs: NEONSOUP_EXECUTION_EXPORT,
+    return: { mode: 'last' },
+    returnURLPattern: returnUrlPattern,
+    run: {
+      myAddress: { type: 'getCurrentAddress' },
+      intents: {
+        type: '$importAsScript',
+        argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex)])),
+        from: Object.fromEntries(entries.map((entry) => [entry.stepKey, libImportFor(entry.item).uri])),
+      },
+      ...Object.fromEntries(
+        sources.flatMap((source, index) => {
+          const txStep = `tx${index}`;
+          const buildStep = source.buildCachePath;
+          const argsPath = `args.groups.${index}`;
+          const mints = source.entries
+            .filter(({ item }) => item.name === 'open' || item.name === 'close')
+            .map(({ cachePath }) => `{get('cache.${cachePath}.tx.mints.beacons')}`);
+          const inputs = source.entries
+            .filter(({ item }) => item.name === 'fill' || item.name === 'close')
+            .map(({ cachePath }) => `{get('cache.${cachePath}.tx.inputs.offerWithBeacons')}`);
+          const outputs = source.entries.flatMap(({ item, cachePath }) => {
+            if (item.name === 'open') return [`{get('cache.${cachePath}.tx.outputs.offerWithBeacons')}`];
+            if (item.name === 'fill') {
+              return [
+                `{get('cache.${cachePath}.tx.outputs.filledOffer')}`,
+                `{get('cache.${cachePath}.tx.outputs.remainingOfferWithBeacons')}`,
+              ];
+            }
+            return [`{get('cache.${cachePath}.tx.outputs.unfilledOffer')}`];
+          });
+          const scripts = source.entries.flatMap(({ item, cachePath }) => {
+            if (item.name === 'open') {
+              return [`{get('cache.${cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`];
+            }
+            if (item.name === 'fill') {
+              return [`{get('cache.${cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`];
+            }
+            return [
+              `{get('cache.${cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`,
+              `{get('cache.${cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`,
+            ];
+          });
+          const consumers = source.entries.flatMap(({ item, cachePath }) => {
+            if (item.name === 'open') {
+              return [`{get('cache.${cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`];
+            }
+            if (item.name === 'fill') {
+              return [`{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`];
+            }
+            return [
+              `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`,
+              `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`,
+            ];
+          });
+          const requiredSigners = source.entries
+            .filter(({ item }) => item.name === 'close')
+            .map(({ cachePath }) => `{get('cache.${cachePath}.tx.requiredSigners.0')}`);
+          const txRun: GcNode = {
+            outputs,
+            options: {
+              collateralCoinSelection: COLLATERAL_COIN_SELECTION,
+            },
+            auxiliaryData: {
+              [CARDANO_METADATA_MSG_LABEL]: {
+                msg: `{get('${argsPath}.metadata-msg')}`,
+              },
+            },
+          };
+          if (inputs.length) txRun.inputs = inputs;
+          if (mints.length) txRun.mints = mints;
+          if (scripts.length || consumers.length) {
+            const plutus: GcNode = {};
+            if (scripts.length) plutus.scripts = scripts;
+            if (consumers.length) plutus.consumers = consumers;
+            txRun.witnesses = { plutus };
+          }
+          if (requiredSigners.length) txRun.requiredSigners = requiredSigners;
+
+          return [
+            [
+              txStep,
+              {
+                type: 'macro',
+                run: txRun,
+              },
+            ],
+            [
+              buildStep,
+              {
+                type: 'buildTx',
+                title: `{get('${argsPath}.build-title')}`,
+                id: `{get('${argsPath}.build-id')}`,
+                tags: `{get('${argsPath}.tags')}`,
+                group: `{get('${argsPath}.group-id')}`,
+                indexOf: `{get('${argsPath}.index-of')}`,
+                returnURLPattern: txFeatureReturnUrl(returnUrlPattern),
+                tx: `{get('cache.${txStep}')}`,
+              },
+            ],
+          ];
+        }),
+      ),
+      sign: {
+        type: 'signTxs',
+        detailedPermissions: false,
+        txs: sources.map((source) => `{get('cache.${source.buildCachePath}.txHex')}`),
+      },
+      submit: {
+        type: 'submitTxs',
+        ...SUBMIT_TXS_OPTIONS,
+        txs: "{get('cache.sign')}",
+      },
+      knownErrors: {
+        type: 'macro',
+        run: KNOWN_WALLET_ERRORS,
+      },
+      finally: {
+        type: 'macro',
+        run: {
+          executionId: "{get('args.execution-id')}",
+          itemCount: "{get('args.item-count')}",
+          groupCount: "{get('args.group-count')}",
+          txs: sources.map((source, txIndex) => ({
+            groupId: `{get('args.groups.${txIndex}.group-id')}`,
+            groupIndex: `{get('args.groups.${txIndex}.group-index')}`,
+            txHash: `{get('cache.${source.buildCachePath}.txHash')}`,
+            status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
+            hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
+            hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
+          })),
+          items: sources
+            .flatMap((source) =>
+              source.entries.map((entry) => ({
+                ...entry,
+                buildCachePath: source.buildCachePath,
+              })),
+            )
+            .map((entry) => ({
+              itemId: `{get('args.items.${entry.itemIndex}.item-id')}`,
+              intentId: `{get('args.items.${entry.itemIndex}.intent-id')}`,
+              type: `{get('args.items.${entry.itemIndex}.type')}`,
+              itemIndex: `{get('args.items.${entry.itemIndex}.item-index')}`,
+              groupId: `{get('args.groups.${entry.groupIndex}.group-id')}`,
+              groupIndex: `{get('args.items.${entry.itemIndex}.group-index')}`,
+              groupItemIndex: `{get('args.items.${entry.itemIndex}.group-item-index')}`,
+              txHash: `{get('cache.${entry.buildCachePath}.txHash')}`,
+              ...(entry.item.sourceOfferId ? { sourceOfferId: `{get('args.items.${entry.itemIndex}.source-offer-id')}` } : {}),
+              ...(entry.item.args['utxo-tx-hash']
+                ? {
+                    sourceUtxo: {
+                      txHash: `{get('args.items.${entry.itemIndex}.source-utxo.tx-hash')}`,
+                      index: `{get('args.items.${entry.itemIndex}.source-utxo.index')}`,
+                    },
+                  }
+                : {}),
+              outputs: outputArgs(entry.item).map((_, outputIndex) => ({
+                role: `{get('args.items.${entry.itemIndex}.outputs.${outputIndex}.role')}`,
+                index: `{get(join('.','cache','${entry.buildCachePath}','indexMap','output',get('args.items.${entry.itemIndex}.outputs.${outputIndex}.idPattern')))}`,
+              })),
+            })),
+        },
+      },
+    },
   };
-  return baseScript(rootTitle(items), receiptArgs('bundle', executionId, receiptSources), run, buildRefs, receiptSources, returnUrlPattern);
 }
 
 export function createParallelGcscriptSource({
@@ -430,26 +416,173 @@ export function createParallelGcscriptSource({
     stepKey: String(index),
     cachePath: `intents.${index}`,
   }));
-  const run: GcNode = {
-    myAddress: { type: 'getCurrentAddress' },
-    intents: importStepFor(entries),
-  };
-  entries.forEach((entry) => {
-    const txStep = `tx${entry.itemIndex}`;
-    const buildStep = `build${entry.itemIndex}`;
-    const argsPath = `args.groups.${entry.groupIndex}`;
-    run[txStep] = mechanicalTxFor([entry], argsPath);
-    run[buildStep] = {
-      type: 'buildTx',
-      ...buildFeaturesFor(argsPath, returnUrlPattern),
-      tx: `{get('cache.${txStep}')}`,
-    };
-  });
-  const buildRefs = entries.map((entry) => `{get('cache.build${entry.itemIndex}.txHex')}`);
-  const receiptSources = entries.map((entry) => ({
+  const sources = entries.map((entry) => ({
     group: groups[entry.groupIndex] as ComposeGroup,
     buildCachePath: `build${entry.itemIndex}`,
     entries: [entry],
   }));
-  return baseScript(rootTitle(items), receiptArgs('parallel', executionId, receiptSources), run, buildRefs, receiptSources, returnUrlPattern);
+
+  return {
+    type: 'script',
+    title: rootTitle(items),
+    args: receiptArgs('parallel', executionId, sources),
+    exportAs: NEONSOUP_EXECUTION_EXPORT,
+    return: { mode: 'last' },
+    returnURLPattern: returnUrlPattern,
+    run: {
+      myAddress: { type: 'getCurrentAddress' },
+      intents: {
+        type: '$importAsScript',
+        argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex)])),
+        from: Object.fromEntries(entries.map((entry) => [entry.stepKey, libImportFor(entry.item).uri])),
+      },
+      ...Object.fromEntries(
+        entries.flatMap((entry) => {
+          const txStep = `tx${entry.itemIndex}`;
+          const buildStep = `build${entry.itemIndex}`;
+          const argsPath = `args.groups.${entry.groupIndex}`;
+          const mints =
+            entry.item.name === 'open' || entry.item.name === 'close'
+              ? [`{get('cache.${entry.cachePath}.tx.mints.beacons')}`]
+              : [];
+          const inputs =
+            entry.item.name === 'fill' || entry.item.name === 'close'
+              ? [`{get('cache.${entry.cachePath}.tx.inputs.offerWithBeacons')}`]
+              : [];
+          const outputs =
+            entry.item.name === 'open'
+              ? [`{get('cache.${entry.cachePath}.tx.outputs.offerWithBeacons')}`]
+              : entry.item.name === 'fill'
+                ? [
+                    `{get('cache.${entry.cachePath}.tx.outputs.filledOffer')}`,
+                    `{get('cache.${entry.cachePath}.tx.outputs.remainingOfferWithBeacons')}`,
+                  ]
+                : [`{get('cache.${entry.cachePath}.tx.outputs.unfilledOffer')}`];
+          const scripts =
+            entry.item.name === 'open'
+              ? [`{get('cache.${entry.cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`]
+              : entry.item.name === 'fill'
+                ? [`{get('cache.${entry.cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`]
+                : [
+                    `{get('cache.${entry.cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`,
+                    `{get('cache.${entry.cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`,
+                  ];
+          const consumers =
+            entry.item.name === 'open'
+              ? [`{get('cache.${entry.cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`]
+              : entry.item.name === 'fill'
+                ? [`{get('cache.${entry.cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`]
+                : [
+                    `{get('cache.${entry.cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`,
+                    `{get('cache.${entry.cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`,
+                  ];
+          const txRun: GcNode = {
+            outputs,
+            options: {
+              collateralCoinSelection: COLLATERAL_COIN_SELECTION,
+            },
+            auxiliaryData: {
+              [CARDANO_METADATA_MSG_LABEL]: {
+                msg: `{get('${argsPath}.metadata-msg')}`,
+              },
+            },
+          };
+          if (inputs.length) txRun.inputs = inputs;
+          if (mints.length) txRun.mints = mints;
+          if (scripts.length || consumers.length) {
+            const plutus: GcNode = {};
+            if (scripts.length) plutus.scripts = scripts;
+            if (consumers.length) plutus.consumers = consumers;
+            txRun.witnesses = { plutus };
+          }
+          if (entry.item.name === 'close') {
+            txRun.requiredSigners = [`{get('cache.${entry.cachePath}.tx.requiredSigners.0')}`];
+          }
+
+          return [
+            [
+              txStep,
+              {
+                type: 'macro',
+                run: txRun,
+              },
+            ],
+            [
+              buildStep,
+              {
+                type: 'buildTx',
+                title: `{get('${argsPath}.build-title')}`,
+                id: `{get('${argsPath}.build-id')}`,
+                tags: `{get('${argsPath}.tags')}`,
+                group: `{get('${argsPath}.group-id')}`,
+                indexOf: `{get('${argsPath}.index-of')}`,
+                returnURLPattern: txFeatureReturnUrl(returnUrlPattern),
+                tx: `{get('cache.${txStep}')}`,
+              },
+            ],
+          ];
+        }),
+      ),
+      sign: {
+        type: 'signTxs',
+        detailedPermissions: false,
+        txs: entries.map((entry) => `{get('cache.build${entry.itemIndex}.txHex')}`),
+      },
+      submit: {
+        type: 'submitTxs',
+        ...SUBMIT_TXS_OPTIONS,
+        txs: "{get('cache.sign')}",
+      },
+      knownErrors: {
+        type: 'macro',
+        run: KNOWN_WALLET_ERRORS,
+      },
+      finally: {
+        type: 'macro',
+        run: {
+          executionId: "{get('args.execution-id')}",
+          itemCount: "{get('args.item-count')}",
+          groupCount: "{get('args.group-count')}",
+          txs: sources.map((source, txIndex) => ({
+            groupId: `{get('args.groups.${txIndex}.group-id')}`,
+            groupIndex: `{get('args.groups.${txIndex}.group-index')}`,
+            txHash: `{get('cache.${source.buildCachePath}.txHash')}`,
+            status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
+            hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
+            hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
+          })),
+          items: sources
+            .flatMap((source) =>
+              source.entries.map((entry) => ({
+                ...entry,
+                buildCachePath: source.buildCachePath,
+              })),
+            )
+            .map((entry) => ({
+              itemId: `{get('args.items.${entry.itemIndex}.item-id')}`,
+              intentId: `{get('args.items.${entry.itemIndex}.intent-id')}`,
+              type: `{get('args.items.${entry.itemIndex}.type')}`,
+              itemIndex: `{get('args.items.${entry.itemIndex}.item-index')}`,
+              groupId: `{get('args.groups.${entry.groupIndex}.group-id')}`,
+              groupIndex: `{get('args.items.${entry.itemIndex}.group-index')}`,
+              groupItemIndex: `{get('args.items.${entry.itemIndex}.group-item-index')}`,
+              txHash: `{get('cache.${entry.buildCachePath}.txHash')}`,
+              ...(entry.item.sourceOfferId ? { sourceOfferId: `{get('args.items.${entry.itemIndex}.source-offer-id')}` } : {}),
+              ...(entry.item.args['utxo-tx-hash']
+                ? {
+                    sourceUtxo: {
+                      txHash: `{get('args.items.${entry.itemIndex}.source-utxo.tx-hash')}`,
+                      index: `{get('args.items.${entry.itemIndex}.source-utxo.index')}`,
+                    },
+                  }
+                : {}),
+              outputs: outputArgs(entry.item).map((_, outputIndex) => ({
+                role: `{get('args.items.${entry.itemIndex}.outputs.${outputIndex}.role')}`,
+                index: `{get(join('.','cache','${entry.buildCachePath}','indexMap','output',get('args.items.${entry.itemIndex}.outputs.${outputIndex}.idPattern')))}`,
+              })),
+            })),
+        },
+      },
+    },
+  };
 }

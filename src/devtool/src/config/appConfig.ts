@@ -15,7 +15,7 @@ export const APP_CONFIG = {
   storageKey: 'neonsoup-devtool-v5',
   walletReturnKey: 'neonsoup-wallet-return-v5',
   encoding: 'gzip',
-  popupFeatures: 'noopener,width=480,height=720',
+  popupFeatures: 'noopener,width=480,height=1024',
   walletUrlPatternOverrideEnabled: envFlag(env.VITE_NEONSOUP_ENABLE_WALLET_URL_PATTERN_OVERRIDE),
   gcWalletUrlPattern: env.VITE_NEONSOUP_GC_WALLET_URL_PATTERN || '',
   pollingIntervalMs: 10 * 60 * 1000,
