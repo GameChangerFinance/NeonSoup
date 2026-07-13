@@ -4,17 +4,14 @@ import { fromBase, gcd } from '../domain/quantities';
 import type { SwapQuote } from '../domain/swapQuote';
 import { resolveAsset, selectedOffer } from '../state/selectors';
 import { buildArgsForAction, buildFillArgsForQuantity, buildOpenArgs, newIntentId } from './intents';
-
-export interface CartValidationResult {
-  ok: boolean;
-  message?: string;
-}
-
-function sourceRef(item: CartItem): string {
-  const txHash = item.args['utxo-tx-hash'];
-  const txIndex = item.args['utxo-tx-index'];
-  return txHash && txIndex ? `${txHash}#${txIndex}` : '';
-}
+import {
+  createCartItemSnapshot,
+  pairForArgs,
+  selectedCartItems as selectedCartItemsCore,
+  validateCartItemsCanBeAdded as validateCartItemsCanBeAddedCore,
+  visibleCartItems as visibleCartItemsCore,
+  type CartValidationResult,
+} from '../../../core/intents/cart';
 
 function sourceLabelForCurrentAction(state: AppState, args: IntentArgs): string {
   const offered = state.assetInfo[state.forms.openOfferAssetKey];
@@ -34,37 +31,21 @@ function sourceLabelForCurrentAction(state: AppState, args: IntentArgs): string 
   return `${action} ${offerAmount || pair}${askAmount ? ` → ${askAmount}` : ''}`;
 }
 
-function pairForArgs(args: IntentArgs): CartItem['pair'] {
-  const offerPolicyId = args['offer-policy-id'];
-  const offerAssetName = args['offer-asset-name'];
-  const askPolicyId = args['ask-policy-id'];
-  const askAssetName = args['ask-asset-name'];
-  if (!offerPolicyId || !askPolicyId) return undefined;
-  return {
-    offer: { policyId: offerPolicyId, assetNameHex: offerAssetName || '' },
-    ask: { policyId: askPolicyId, assetNameHex: askAssetName || '' },
-  };
-}
-
 export function createCartItemFromCurrentIntent(state: AppState): CartItem {
   const args = {
     ...buildArgsForAction(state),
   };
   const intentId = args['intent-id'] || newIntentId(state.action);
-  args['intent-id'] = intentId;
   const pair = pairForArgs(args);
-  const item = {
-    id: `${state.action}-${intentId}`,
-    name: state.action,
+  return createCartItemSnapshot({
+    action: state.action,
     args,
-    selected: true,
-    status: 'draft',
+    intentId,
     createdAt: Date.now(),
     ...(state.selectedOrderId ? { sourceOfferId: state.selectedOrderId } : {}),
     sourceLabel: sourceLabelForCurrentAction(state, args),
     ...(pair ? { pair } : {}),
-  } satisfies CartItem;
-  return item;
+  });
 }
 
 function variedPrice(baseNumerator: string, baseDenominator: string, variancePercent: number) {
@@ -191,38 +172,13 @@ export function createSwapCartItems(state: AppState, quote: SwapQuote): CartItem
 }
 
 export function selectedCartItems(cart: CartState): CartItem[] {
-  return cart.items.filter((item) => item.selected);
+  return selectedCartItemsCore(cart);
 }
 
 export function visibleCartItems(cart: CartState): CartItem[] {
-  return cart.showConfirmedOnly
-    ? cart.items.filter((item) => item.status !== 'draft')
-    : cart.items.filter((item) => item.status === 'draft');
+  return visibleCartItemsCore(cart);
 }
 
 export function validateCartItemsCanBeAdded(cart: CartState, items: CartItem[]): CartValidationResult {
-  const existingIds = new Set(cart.items.map((item) => item.id));
-  for (const item of items) {
-    if (existingIds.has(item.id)) {
-      return { ok: false, message: `Intent ${item.id} is already in the Cart.` };
-    }
-    existingIds.add(item.id);
-  }
-
-  const activeRefs = new Map<string, string>();
-  for (const item of cart.items) {
-    if (item.status !== 'draft' || (item.name !== 'fill' && item.name !== 'close')) continue;
-    const ref = sourceRef(item);
-    if (ref) activeRefs.set(ref, item.id);
-  }
-  for (const item of items) {
-    if (item.name !== 'fill' && item.name !== 'close') continue;
-    const ref = sourceRef(item);
-    if (ref && activeRefs.has(ref)) {
-      return { ok: false, message: `Source UTxO ${ref} is already used by another draft Cart item.` };
-    }
-    if (ref) activeRefs.set(ref, item.id);
-  }
-
-  return { ok: true };
+  return validateCartItemsCanBeAddedCore(cart, items);
 }

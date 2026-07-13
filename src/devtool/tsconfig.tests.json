@@ -5,10 +5,11 @@
     "moduleResolution": "Node",
     "noEmit": false,
     "outDir": "/tmp/neonsoup-devtool-tests",
-    "rootDir": ".",
+    "rootDir": "..",
     "types": []
   },
   "include": [
+    "../core/**/*.ts",
     "src/domain/assetPolicy.ts",
     "src/domain/assetWarnings.ts",
     "src/domain/openBook.ts",
