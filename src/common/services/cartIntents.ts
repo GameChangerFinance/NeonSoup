@@ -9,10 +9,11 @@ import {
   createCartItemSnapshot,
   pairForArgs,
   selectedCartItems as selectedCartItemsCore,
+  sourceRef as sourceRefCore,
   validateCartItemsCanBeAdded as validateCartItemsCanBeAddedCore,
   visibleCartItems as visibleCartItemsCore,
   type CartValidationResult,
-} from '../../../core/intents/cart';
+} from '../../core/intents/cart';
 
 function sourceLabelForCurrentAction(state: AppState, args: IntentArgs): string {
   const offered = state.assetInfo[state.forms.openOfferAssetKey];
@@ -178,6 +179,10 @@ export function selectedCartItems(cart: CartState): CartItem[] {
 
 export function bookedSourceRefs(cart: CartState): Set<string> {
   return bookedSourceRefsCore(cart);
+}
+
+export function sourceRef(item: Pick<CartItem, 'args'>): string {
+  return sourceRefCore(item);
 }
 
 export function visibleCartItems(cart: CartState): CartItem[] {

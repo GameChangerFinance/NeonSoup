@@ -42,6 +42,7 @@ import { loadOpenOffers, loadPortfolio, loadTransactions } from './services/netw
 import { captureWalletReturn, consumeWalletReturn, openWalletCode } from './services/gcWallet';
 import { fillAskAmount } from './services/intents';
 import {
+  bookedSourceRefs,
   createBulkOpenCartItems,
   createCartItemFromCurrentIntent,
   createSwapCartItems,
@@ -187,6 +188,7 @@ export default function App() {
   const pairOffers = offers.filter((item) =>
     pairMatches(item, pairOfferKey, pairAskKey, assets),
   );
+  const excludedUtxoRefs = useMemo(() => bookedSourceRefs(state.cart), [state.cart]);
   const swapQuote = useMemo(
     () =>
       quoteSwap({
@@ -195,6 +197,7 @@ export default function App() {
         receiveAsset: ask,
         offerAmount: state.forms.swapOfferAmount,
         payUp: state.forms.swapPayUp,
+        excludedUtxoRefs,
         slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
         payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
       }),
@@ -203,6 +206,7 @@ export default function App() {
       offer,
       state.forms.swapOfferAmount,
       state.forms.swapPayUp,
+      excludedUtxoRefs,
       state.openOffers,
       state.options.swapPayUpPercent,
       state.options.swapSlippageTolerancePercent,
@@ -568,6 +572,7 @@ export default function App() {
       receiveAsset: ask,
       offerAmount: state.forms.swapOfferAmount,
       payUp: state.forms.swapPayUp,
+      excludedUtxoRefs,
       slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
       payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
     });

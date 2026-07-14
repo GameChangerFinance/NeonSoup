@@ -3,21 +3,21 @@
   "name": "neon-soup",
   "description": "Peer-to-peer execution layer for Cardano DeFi with a deep exploration for cypherpunk values",
   "scripts": {
-    "build":"pnpm run build:intents && pnpm run build:devtool",
-    "build:intents":"pnpm run build:open && pnpm run build:close && pnpm run build:swap",
-    "build:devtool":"tsc -p ./src/devtool/tsconfig.json && vite build --config ./src/devtool/vite.config.ts",
-    "test:devtool-assets":"node ./scripts/verify-devtool-assets.mjs",
-    "test:core-boundaries":"node ./scripts/verify-core-boundaries.mjs",
-    "test:swap-quote":"pnpm run test:core-boundaries && tsc -p ./src/devtool/tsconfig.tests.json && node /tmp/neonsoup-devtool-tests/devtool/tests/swapQuote.test.js && node /tmp/neonsoup-devtool-tests/devtool/tests/cartReconciliation.test.js && node /tmp/neonsoup-devtool-tests/devtool/tests/coreIntentCartReceipt.test.js",
+    "build": "pnpm run build:intents && pnpm run build:devtool && pnpm run build:frontend",
+    "build:frontend": "tsc -p ./src/frontend/tsconfig.json && vite build --config ./src/frontend/vite.config.ts",
+    "build:intents": "pnpm run build:open && pnpm run build:close && pnpm run build:swap",
+    "build:devtool": "tsc -p ./src/devtool/tsconfig.json && vite build --config ./src/devtool/vite.config.ts",
+    "test:devtool-assets": "node ./scripts/verify-devtool-assets.mjs",
+    "test:core-boundaries": "node ./scripts/verify-core-boundaries.mjs",
+    "test:swap-quote": "pnpm run test:core-boundaries && tsc -p ./src/devtool/tsconfig.tests.json && node /tmp/neonsoup-devtool-tests/devtool/tests/swapQuote.test.js && node /tmp/neonsoup-devtool-tests/devtool/tests/cartReconciliation.test.js && node /tmp/neonsoup-devtool-tests/devtool/tests/coreIntentCartReceipt.test.js",
     "dev": "nodemon --watch src/ --ext gcscript,json,jsonc,hl,txt --ignore examples/ --exec \"pnpm run build && pnpm run serve\"",
     "dev:devtool": "vite --config ./src/devtool/vite.config.ts",
-    "serve":"python3 -m http.server 8081 -d ./dist",
-
+    "dev:frontend": "vite --config ./src/frontend/vite.config.ts",
+    "serve": "python3 -m http.server 8081 -d ./dist",
     "build:open": "gamechanger-cli build -f ./src/intents/open.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/open.gcscript.json",
     "build:close": "gamechanger-cli build -f ./src/intents/close.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/close.gcscript.json",
     "build:swap": "gamechanger-cli build -f ./src/intents/swap.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/swap.gcscript.json",
     "build:cart": "gamechanger-cli build -f ./src/intents/cart.gcscript.jsonc --cwd ./src/intents/ -o ./dist/intents/cart.gcscript.json",
-
     "serve:autogen": "pnpm run prepare:autogen && gamechanger-cli preprod snippet react -v 2 -S -o ./dist/autogen.html -f ./dist/intents/open.gcscript.json --snippetArgsFile ./config/snippet-args.json",
     "prepare:autogen": "node ./scripts/generate-snippet-args.mjs ./config/snippet-args.json ./dist/intents/*.gcscript.json"
   },
@@ -27,10 +27,12 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "bootstrap": "^5.3.3",
+    "bootstrap-icons": "^1.13.1",
     "express": "^5.2.1",
     "nodemon": "^3.1.10",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.1",
     "typescript": "^5.7.3",
     "vite": "^6.0.7"
   }

@@ -89,6 +89,23 @@ export interface ProtocolTransaction {
   evidence?: 'chain' | 'wallet-receipt';
   participantStakeKeyHashes?: string[];
   outputOwnerStakeKeyHashes?: string[];
+  includedAtLabel?: string;
+  feeQuantity?: string;
+  details?: ProtocolTransactionDetail[];
+}
+
+export interface ProtocolTransactionDetail {
+  action: ActionMode | 'unknown';
+  inputRef?: string;
+  outputRef?: string;
+  offerPolicyId?: string;
+  offerAssetNameHex?: string;
+  askPolicyId?: string;
+  askAssetNameHex?: string;
+  offerQuantity?: string;
+  askQuantity?: string;
+  priceNumerator?: string;
+  priceDenominator?: string;
 }
 
 export type IntentArgs = Record<string, string>;
@@ -186,4 +203,5 @@ export interface WalletConnection {
   name: string;
   address: string;
   stakeKeyHash: string;
+  walletType?: string;
 }

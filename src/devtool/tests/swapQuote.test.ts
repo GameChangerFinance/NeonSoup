@@ -98,6 +98,44 @@ assert(basic.segments[1]?.makerRemainderBps === 8000, 'maker-side remainder perc
 assert(basic.segments[1]?.makerRemainderAskEquivalentQuantity === 12n, 'maker-side remainder has an input-equivalent display quantity');
 assert(basic.routeDisplayQuantity === 25n, 'route display denominator includes execution input plus maker-remainder input equivalent');
 
+const bookedExcluded = quoteSwap({
+  offers: [order('a', '2', '1', '5'), order('b', '3', '1', '5')],
+  offerAsset: offered,
+  receiveAsset: received,
+  offerAmount: '10',
+  payUp: false,
+  excludedUtxoRefs: new Set([`${'a'.padEnd(64, '0').slice(0, 64)}#0`]),
+});
+
+assert(bookedExcluded.rawCandidateCount === 1, 'booked UTxOs are excluded before raw route candidate math');
+assert(bookedExcluded.segments.length === 1, 'booked UTxOs are not routed as swap segments');
+assert(bookedExcluded.segments[0]?.offer.id.startsWith('b'), 'router skips booked UTxOs and routes through the next available order');
+assert(bookedExcluded.outputQuantity === 3n, 'route output is recalculated after booked UTxO exclusion');
+assert(bookedExcluded.effectivePrice?.numerator === 9n, 'effective price uses only the remaining routed liquidity');
+
+const boundaryBook = [order('ba', '1', '1', '100'), order('bb', '2', '1', '100'), order('bc', '3', '1', '100')];
+const bookedBoundaryRef = `${'ba'.padEnd(64, '0').slice(0, 64)}#0`;
+const excludedBoundary = quoteSwap({
+  offers: boundaryBook,
+  offerAsset: offered,
+  receiveAsset: { ...received, minMakerRemainderQuantity: '10' },
+  offerAmount: '95',
+  payUp: false,
+  excludedUtxoRefs: [bookedBoundaryRef],
+});
+const prefilteredBoundary = quoteSwap({
+  offers: boundaryBook.filter((item) => `${item.txHash}#${item.txIndex}` !== bookedBoundaryRef),
+  offerAsset: offered,
+  receiveAsset: { ...received, minMakerRemainderQuantity: '10' },
+  offerAmount: '95',
+  payUp: false,
+});
+
+assert(excludedBoundary.outputQuantity === prefilteredBoundary.outputQuantity, 'booked-UTxO exclusion matches prefiltered book output at route boundaries');
+assert(excludedBoundary.routeDisplayQuantity === prefilteredBoundary.routeDisplayQuantity, 'booked-UTxO exclusion matches prefiltered book route-bar denominator');
+assert(excludedBoundary.unfilledRequestedQuantity === prefilteredBoundary.unfilledRequestedQuantity, 'booked-UTxO exclusion matches prefiltered book unavailable input');
+assert(excludedBoundary.segments.map((segment) => segment.utxoRef).join(',') === prefilteredBoundary.segments.map((segment) => segment.utxoRef).join(','), 'booked-UTxO exclusion preserves normal route segment selection');
+
 const paidUp = quoteSwap({
   offers: [order('a', '100', '100', '100'), order('b', '1005', '1000', '100'), order('c', '102', '100', '100')],
   offerAsset: offered,

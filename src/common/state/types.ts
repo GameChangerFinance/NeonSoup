@@ -29,7 +29,7 @@ export type {
   ProtocolTransactionDetail,
   ResolvedAsset,
   WalletConnection,
-} from '../../../core/types';
+} from '../../core/types';
 
 import type {
   ActionMode,
@@ -47,7 +47,7 @@ import type {
   ProtocolTransaction,
   ResolvedAsset,
   WalletConnection,
-} from '../../../core/types';
+} from '../../core/types';
 
 export interface AppOptions {
   network: NetworkTag;

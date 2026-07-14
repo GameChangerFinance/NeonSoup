@@ -1,0 +1,2126 @@
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+import textLogoUrl from './assets/textLogo.png';
+import logoUrl from './assets/logo.png';
+import { APP_CONFIG } from '../../common/config/appConfig';
+import { useAppDispatch, useAppState } from '../../common/state/appState';
+import { assetMap, balanceOf, resolveAsset, visiblePortfolio } from '../../common/state/selectors';
+import { assetTitle, configuredAssets } from '../../common/domain/assets';
+import { createOpenBookSnapshot } from '../../common/domain/openBook';
+import { isCurrentOutputOwner } from '../../common/domain/ownership';
+import { fromBase, percent, ratioDecimal, toBase } from '../../common/domain/quantities';
+import { safeError, short } from '../../common/domain/text';
+import {
+  composeTransactionRows,
+  isConfirmedChainTransaction,
+  protocolTransactionFromChain,
+  transactionsFromReceipt,
+  type TransactionRow,
+} from '../../common/domain/transactions';
+import {
+  percentToBps,
+  quoteSwap,
+  severityForSlippage,
+  type SwapPrice,
+  type SwapQuote,
+  type SwapQuoteSeverity,
+} from '../../common/domain/swapQuote';
+import { loadAddressTransactions, loadOpenOffers, loadPortfolio, loadTransactions } from '../../common/services/networkProvider';
+import { cardanoscanTxUrl, openExternalUrl } from '../../common/services/explorers';
+import { captureWalletReturn, consumeWalletReturn, openWalletCode } from '../../common/services/gcWallet';
+import { connectIntent } from '../../common/services/intents';
+import {
+  buildBundledGcscriptIntent,
+  buildParallelGcscriptIntent,
+  executionReceiptFromWalletReturn,
+} from '../../common/services/intentExecution';
+import {
+  bookedSourceRefs,
+  createCartItemFromCurrentIntent,
+  createSwapCartItems,
+  selectedCartItems,
+  sourceRef,
+  validateCartItemsCanBeAdded,
+  visibleCartItems,
+} from '../../common/services/cartIntents';
+import { readWalletReturn } from '../../common/services/storage';
+import type {
+  AppState,
+  CartItem,
+  NeonSoupExecutionReceipt,
+  NoticeTone,
+  OpenOffer,
+  ResolvedAsset,
+  ProtocolTransactionDetail,
+  WalletConnection,
+} from '../../common/state/types';
+
+type ViewId = 'swap' | 'open' | 'markets' | 'orders' | 'portfolio' | 'history' | 'options';
+
+interface ToastState {
+  tone: NoticeTone;
+  title: string;
+  message: string;
+}
+
+const HELP = {
+  route: 'Shows how much of your swap can be matched right now and how smoothly the price moves across available offers.',
+  priceImpact: 'Shows how much the estimated price changes while matching your swap against available offers.',
+  cartMode:
+    'When Cart Mode is on, operations wait in Cart until you press Run. When it is off, the wallet opens immediately and the operation is still kept as history.',
+  parallel:
+    'An action intent is one NeonSoup operation, such as filling one offer. A transaction is the on-chain Cardano transaction that carries one or more action intents. Bundle mode packs action intents together. Best-effort parallel mode sends independent transactions so some actions can still land if another user fills one of the same shared order-book offers first.',
+  bundleActions:
+    'Controls how many NeonSoup action intents can be packed into each on-chain transaction in bundle mode. Higher values can reduce wallet prompts and fees, but one contested offer can make that bundled transaction fail. This is disabled in best-effort parallel mode because parallel mode intentionally uses independent transactions.',
+  payUp:
+    'NeonSoup has no backend batcher. Your device routes directly against the global P2P DeFi Kernel order book, where each offer UTxO can only be filled by one user at a time. Pay-up mode can skip the cheapest, most contested offers and choose slightly worse-priced offers to improve the chance that your transaction is accepted.',
+  payUpPremium:
+    'Maximum extra price, in percent, that the router may accept when Pay-up mode is enabled. For example, 1% lets NeonSoup choose an offer up to 1% worse than the cheapest local route when that may reduce UTxO contention.',
+  slippageTolerance:
+    'Percentage threshold used to warn about route-level price movement across multiple limit orders. This is not AMM curve slippage; it measures how much worse the selected order-book route is compared with the best executable price NeonSoup sees locally.',
+  provider:
+    'The provider only transports chain data. NeonSoup keeps swap semantics and routing on your device.',
+  pending:
+    'Wallet-submitted operations are not final until a provider confirms the transaction on-chain.',
+};
+
+function walletFromReturn(raw: unknown): WalletConnection | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const wallet = (raw as Record<string, unknown>).wallet;
+  return wallet && typeof wallet === 'object' ? (wallet as WalletConnection) : null;
+}
+
+function formatBps(bps: number): string {
+  return `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`;
+}
+
+function compareQuantityDesc(a: bigint, b: bigint): number {
+  if (a === b) return 0;
+  if (a === 0n) return 1;
+  if (b === 0n) return -1;
+  return a > b ? -1 : 1;
+}
+
+function priceText(price: SwapPrice | null, offerAsset: ResolvedAsset | undefined, receiveAsset: ResolvedAsset | undefined): string {
+  if (!price || !offerAsset || !receiveAsset || price.denominator <= 0n) return '-';
+  const numerator = price.numerator * 10n ** BigInt(receiveAsset.decimals);
+  const denominator = price.denominator * 10n ** BigInt(offerAsset.decimals);
+  return ratioDecimal(numerator, denominator, 8);
+}
+
+function shortHash(value: string): string {
+  return short(value, 4, 4);
+}
+
+function formatDateTime(value: number): string {
+  if (!value) return 'Pending';
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function txExplorerUrl(state: AppState, txHash: string): string {
+  const pattern = state.options.cardanoscanTxUrlPattern.trim();
+  if (pattern) {
+    return pattern
+      .replace(/\{txHash\}/g, encodeURIComponent(txHash))
+      .replace(/\{network\}/g, encodeURIComponent(state.options.network));
+  }
+  return cardanoscanTxUrl(state.options.network, txHash);
+}
+
+function detailAsset(state: AppState, policyId = '', assetNameHex = ''): ResolvedAsset {
+  return resolveAsset(state, policyId || 'ada', assetNameHex || 'ada');
+}
+
+function detailPrice(detail: ProtocolTransactionDetail, offerAsset: ResolvedAsset, askAsset: ResolvedAsset): string {
+  const numerator = BigInt(detail.priceNumerator || '0');
+  const denominator = BigInt(detail.priceDenominator || '0');
+  if (numerator <= 0n || denominator <= 0n) return 'Unknown price';
+  return `${priceText({ numerator, denominator }, askAsset, offerAsset)} ${assetTitle(askAsset)} / ${assetTitle(offerAsset)}`;
+}
+
+function actionTitle(action: ProtocolTransactionDetail['action']): string {
+  if (action === 'open') return 'Open offer';
+  if (action === 'fill') return 'Swap fill';
+  if (action === 'close') return 'Close offer';
+  return 'Order activity';
+}
+
+function amountLabels(action: ProtocolTransactionDetail['action']): { offer: string; ask: string } {
+  if (action === 'open') return { offer: 'Offered', ask: 'Requested' };
+  if (action === 'fill') return { offer: 'Filled', ask: 'Paid' };
+  if (action === 'close') return { offer: 'Returned', ask: 'Collected' };
+  return { offer: 'Offer side', ask: 'Ask side' };
+}
+
+function openPriceText(offerAmount: bigint, askAmount: bigint, offerAsset: ResolvedAsset, askAsset: ResolvedAsset): string {
+  if (offerAmount <= 0n || askAmount <= 0n) return '-';
+  const numerator = askAmount * 10n ** BigInt(offerAsset.decimals);
+  const denominator = offerAmount * 10n ** BigInt(askAsset.decimals);
+  return ratioDecimal(numerator, denominator, 8);
+}
+
+function orderLimitPriceText(offer: OpenOffer, offerAsset: ResolvedAsset, askAsset: ResolvedAsset): string {
+  const numerator = BigInt(offer.priceNumerator || '0') * 10n ** BigInt(offerAsset.decimals);
+  const denominator = BigInt(offer.priceDenominator || '1') * 10n ** BigInt(askAsset.decimals);
+  return ratioDecimal(numerator, denominator, 8);
+}
+
+function quotePreviewOutput(quote: SwapQuote): bigint {
+  if (quote.unfilledRequestedQuantity <= 0n) return quote.outputQuantity;
+  const lastPrice = quote.marginalPrice || quote.effectivePrice || quote.executableBestPrice;
+  if (!lastPrice || lastPrice.numerator <= 0n || lastPrice.denominator <= 0n) return quote.outputQuantity;
+  return quote.outputQuantity + (quote.unfilledRequestedQuantity * lastPrice.denominator) / lastPrice.numerator;
+}
+
+function formQuantity(value: string, asset: ResolvedAsset): bigint {
+  return toBase(value, asset.decimals);
+}
+
+function scaledDecimal(value: string, decimals = 8): bigint {
+  return toBase(value, decimals);
+}
+
+function askQuantityFromPrice(offerQuantity: bigint, price: string, offerAsset: ResolvedAsset, askAsset: ResolvedAsset): bigint {
+  const scaleDecimals = 8;
+  const priceScaled = scaledDecimal(price, scaleDecimals);
+  if (offerQuantity <= 0n || priceScaled <= 0n) return 0n;
+  return (offerQuantity * priceScaled * 10n ** BigInt(askAsset.decimals)) / (10n ** BigInt(scaleDecimals + offerAsset.decimals));
+}
+
+function filledOfferEquivalent(offer: OpenOffer): bigint {
+  const askQuantity = BigInt(offer.utxoAskQuantity || '0');
+  const numerator = BigInt(offer.priceNumerator || '0');
+  const denominator = BigInt(offer.priceDenominator || '0');
+  if (askQuantity <= 0n || numerator <= 0n || denominator <= 0n) return 0n;
+  return (askQuantity * denominator) / numerator;
+}
+
+function pendingTransactionHashes(state: AppState): string[] {
+  return [
+    ...state.transactions.filter((tx) => tx.status === 'submitted').map((tx) => tx.txHash),
+    ...state.cart.items.filter((item) => item.status === 'pending').map((item) => item.txHash || ''),
+  ].filter(Boolean);
+}
+
+function protocolRowsFromChainTransactions(state: AppState, transactions: Parameters<typeof protocolTransactionFromChain>[0][]) {
+  return transactions
+    .map((transaction) =>
+      protocolTransactionFromChain(
+        transaction,
+        APP_CONFIG.networks[state.options.network].beaconPolicy || APP_CONFIG.beaconPolicy,
+      ),
+    )
+    .filter((transaction) => transaction.status === 'failed' || Boolean(transaction.actions?.length));
+}
+
+function receiptToast(receipt: NeonSoupExecutionReceipt | null, raw: unknown): ToastState {
+  if (!receipt) {
+    return {
+      tone: 'success',
+      title: 'Wallet connected',
+      message: 'NeonSoup can now read your public wallet address and balances.',
+    };
+  }
+  const failed = receipt.txs.filter((tx) => tx.hasSubmitError).length;
+  const submitted = Math.max(0, receipt.txs.length - failed);
+  if (failed) {
+    return {
+      tone: 'warning',
+      title: 'Some transactions need attention',
+      message: `${submitted} transaction${submitted === 1 ? '' : 's'} submitted and ${failed} reported a tentative wallet submission error. Final amounts will update after chain confirmation.`,
+    };
+  }
+  return {
+    tone: 'success',
+    title: 'Wallet submitted',
+    message: `${receipt.itemCount} operation${receipt.itemCount === 1 ? '' : 's'} sent to the wallet. Chain confirmation is still authoritative.`,
+  };
+}
+
+function executionSummaryForItems(state: AppState, items: readonly CartItem[], receipt: NeonSoupExecutionReceipt | null): string {
+  if (!receipt) return '';
+  const failedGroups = new Set(receipt.txs.filter((tx) => tx.hasSubmitError).map((tx) => tx.groupIndex));
+  const successfulIds = new Set(
+    receipt.items.filter((item) => !failedGroups.has(item.groupIndex)).map((item) => item.itemId),
+  );
+  const totals = new Map<string, { expected: bigint; apparent: bigint; decimals: number; label: string }>();
+  items.forEach((item) => {
+    if (item.name !== 'fill' || !item.pair) return;
+    const quantity = BigInt(item.args['offer-quantity'] || '0');
+    if (quantity <= 0n) return;
+    const asset = resolveAsset(state, item.pair.offer.policyId, item.pair.offer.assetNameHex);
+    const previous = totals.get(asset.assetKey) || {
+      expected: 0n,
+      apparent: 0n,
+      decimals: asset.decimals,
+      label: assetTitle(asset),
+    };
+    totals.set(asset.assetKey, {
+      ...previous,
+      expected: previous.expected + quantity,
+      apparent: previous.apparent + (successfulIds.has(item.id) ? quantity : 0n),
+    });
+  });
+  const partial = [...totals.values()].filter((item) => item.expected > 0n && item.apparent < item.expected);
+  if (!partial.length) return '';
+  return partial
+    .map(
+      (item) =>
+        `Based on wallet submission status, you appear to have received at least ${fromBase(item.apparent, item.decimals)} ${item.label} out of the expected ${fromBase(item.expected, item.decimals)} ${item.label}.`,
+    )
+    .join(' ');
+}
+
+function HelpTooltip({ label, children }: { label: string; children: string }) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [position, setPosition] = useState<{ left: number; top: number; placement: 'above' | 'below' }>({
+    left: 16,
+    top: 16,
+    placement: 'above',
+  });
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+
+    function updatePosition() {
+      const button = buttonRef.current;
+      if (!button) return;
+      const rect = button.getBoundingClientRect();
+      const margin = 16;
+      const gap = 8;
+      const width = Math.min(420, window.innerWidth - margin * 2);
+      const left = Math.min(Math.max(rect.left + rect.width / 2 - width / 2, margin), window.innerWidth - width - margin);
+      const showBelow = rect.top < 96;
+      const top = showBelow ? rect.bottom + gap : Math.max(margin, rect.top - gap);
+      setPosition({ left, top, placement: showBelow ? 'below' : 'above' });
+    }
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open]);
+
+  return (
+    <span className="help-wrap">
+      <button
+        ref={buttonRef}
+        type="button"
+        className="help-btn"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        <i className="bi bi-question-lg" aria-hidden="true" />
+      </button>
+      {open
+        ? createPortal(
+            <span
+              className={`help-popover help-popover-floating help-popover-${position.placement}`}
+              style={{ left: position.left, top: position.top }}
+              role="tooltip"
+            >
+              {children}
+            </span>,
+            document.body,
+          )
+        : null}
+    </span>
+  );
+}
+
+function CopyIcon({ value, label = 'Copy value' }: { value: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return null;
+  async function copy() {
+    await navigator.clipboard?.writeText(value);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+  return (
+    <button type="button" className="copy-icon" onClick={copy} title={copied ? 'Copied' : label} aria-label={copied ? 'Copied' : label}>
+      <i className={`bi ${copied ? 'bi-check2' : 'bi-copy'}`} aria-hidden="true" />
+    </button>
+  );
+}
+
+function RefreshButton({ loading, disabled, onClick }: { loading?: boolean; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="panel-refresh-btn" onClick={onClick} disabled={disabled || loading} aria-label="Refresh">
+      <i className={`bi bi-arrow-clockwise${loading ? ' spin' : ''}`} aria-hidden="true" />
+      <span>{loading ? 'Refreshing' : 'Refresh'}</span>
+    </button>
+  );
+}
+
+function AmountShortcuts({
+  balance,
+  asset,
+  onSet,
+}: {
+  balance: bigint;
+  asset: ResolvedAsset;
+  onSet: (value: string) => void;
+}) {
+  const setFraction = (numerator: bigint, denominator: bigint) => {
+    const next = denominator > 0n ? (balance * numerator) / denominator : 0n;
+    onSet(fromBase(next, asset.decimals));
+  };
+  return (
+    <div className="amount-shortcuts" aria-label={`Available ${assetTitle(asset)} shortcuts`}>
+      <button type="button" onClick={() => onSet('')}>
+        Reset
+      </button>
+      <button type="button" disabled={balance <= 0n} onClick={() => setFraction(1n, 4n)}>
+        1/4
+      </button>
+      <button type="button" disabled={balance <= 0n} onClick={() => setFraction(1n, 2n)}>
+        1/2
+      </button>
+      <button type="button" disabled={balance <= 0n} onClick={() => setFraction(1n, 1n)}>
+        Max
+      </button>
+    </div>
+  );
+}
+
+function AssetIcon({ asset, size = 'md' }: { asset: ResolvedAsset | undefined; size?: 'sm' | 'md' | 'lg' }) {
+  const title = asset ? assetTitle(asset) : '?';
+  return (
+    <span className={`ns-asset-icon ns-asset-icon-${size}`} aria-hidden="true">
+      {title.slice(0, size === 'sm' ? 3 : 4)}
+    </span>
+  );
+}
+
+function AssetPairStack({ offerAsset, askAsset }: { offerAsset: ResolvedAsset | undefined; askAsset: ResolvedAsset | undefined }) {
+  return (
+    <span className="asset-stack" aria-hidden="true">
+      <AssetIcon asset={offerAsset} />
+      <AssetIcon asset={askAsset} />
+    </span>
+  );
+}
+
+function AssetPicker({
+  assets,
+  value,
+  exclude,
+  onChange,
+}: {
+  assets: Record<string, ResolvedAsset>;
+  value: string;
+  exclude: string;
+  onChange: (assetKey: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = assets[value];
+  const choices = Object.values(assets).filter((asset) => asset.known && asset.assetKey !== exclude);
+  return (
+    <div className="asset-picker">
+      <button type="button" className="asset-trigger" onClick={() => setOpen((next) => !next)}>
+        <AssetIcon asset={selected} size="lg" />
+        <span>{selected ? assetTitle(selected) : 'Select'}</span>
+        <i className="bi bi-chevron-down" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="asset-menu">
+          {choices.map((asset) => (
+            <button
+              type="button"
+              key={asset.assetKey}
+              onClick={() => {
+                onChange(asset.assetKey);
+                setOpen(false);
+              }}
+            >
+              <AssetIcon asset={asset} size="sm" />
+              <span>{assetTitle(asset)}</span>
+              {!asset.known ? <span className="asset-unknown">Unknown</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CompactRouteBar({ quote, offerAsset, receiveAsset }: { quote: SwapQuote; offerAsset: ResolvedAsset; receiveAsset: ResolvedAsset }) {
+  if (!quote.requestedInputQuantity) {
+    return (
+      <div className="route-empty">
+        Enter an amount to inspect the route. <HelpTooltip label="Route help">{HELP.route}</HelpTooltip>
+      </div>
+    );
+  }
+  if (!quote.segments.length) {
+    return <div className="route-empty">No available offers match this direction.</div>;
+  }
+  const displayTotal = quote.routeDisplayQuantity > 0n ? quote.routeDisplayQuantity : quote.requestedInputQuantity;
+  const share = (value: bigint) => {
+    if (value <= 0n || displayTotal <= 0n) return 0;
+    return Number((value * 10_000n) / displayTotal) / 100;
+  };
+  const segments = quote.segments.flatMap((segment) => {
+    const out: Array<{ key: string; className: string; displayQuantity: bigint; title: string }> = [];
+    if (segment.baseAskQuantity > 0n) {
+      out.push({
+        key: `fill-${segment.utxoRef}`,
+        className: `route-segment route-${segment.severity}`,
+        displayQuantity: segment.baseAskQuantity,
+        title: `${fromBase(segment.baseAskQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)} -> ${fromBase(segment.baseOfferQuantity, receiveAsset.decimals)} ${assetTitle(receiveAsset)}. ${formatBps(segment.cumulativeSlippageBps)} price movement.`,
+      });
+    }
+    if (segment.roundUpAskQuantity > 0n) {
+      out.push({
+        key: `round-${segment.utxoRef}`,
+        className: `route-segment route-round route-round-${segment.severity}`,
+        displayQuantity: segment.roundUpAskQuantity,
+        title: `${fromBase(segment.roundUpAskQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)} is included to keep the offer cleanly executable.`,
+      });
+    }
+    if (segment.makerRemainderQuantity > 0n) {
+      out.push({
+        key: `remain-${segment.utxoRef}`,
+        className: 'route-segment route-remainder',
+        displayQuantity: segment.makerRemainderAskEquivalentQuantity,
+        title: `${fromBase(segment.makerRemainderQuantity, receiveAsset.decimals)} ${assetTitle(receiveAsset)} stays available after this swap.`,
+      });
+    }
+    return out;
+  }).filter((segment) => segment.displayQuantity > 0n);
+  if (quote.unfilledRequestedQuantity > 0n) {
+    const blockedAtBoundary = quote.remainderBlockedCount > 0;
+    segments.push({
+      key: blockedAtBoundary ? 'unrouted' : 'unfilled',
+      className: blockedAtBoundary ? 'route-segment route-unrouted' : 'route-segment route-unfilled',
+      displayQuantity: quote.unfilledRequestedQuantity,
+      title: blockedAtBoundary
+        ? `${fromBase(quote.unfilledRequestedQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)} is not routed at this order boundary.`
+        : `${fromBase(quote.unfilledRequestedQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)} is above what is available right now.`,
+    });
+  }
+  return (
+    <div className="route-fill">
+      <div className="route-fill-head">
+        <span>
+          Available now <HelpTooltip label="Availability help">{HELP.route}</HelpTooltip>
+        </span>
+        <span>
+          {quote.segments.length} offer{quote.segments.length === 1 ? '' : 's'} - {formatBps(quote.weightedSlippageBps)} impact
+        </span>
+      </div>
+      <div className="route-track" aria-label="Swap route order fill plan">
+        {segments.map((segment) => (
+          <button
+            type="button"
+            key={segment.key}
+            className={segment.className}
+            style={{ flexBasis: `${Math.max(0.3, share(segment.displayQuantity))}%` }}
+            aria-label={segment.title}
+          >
+            <span className="route-tooltip">{segment.title}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AppToast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
+  const icon =
+    toast.tone === 'success'
+      ? 'bi-check-lg'
+      : toast.tone === 'danger'
+        ? 'bi-x-lg'
+        : toast.tone === 'warning'
+          ? 'bi-exclamation-triangle'
+          : 'bi-info-lg';
+  return (
+    <div className={`app-toast app-toast-${toast.tone}`} role="status" aria-live="polite">
+      <div className="toast-icon">
+        <i className={`bi ${icon}`} aria-hidden="true" />
+      </div>
+      <div>
+        <b>{toast.title}</b>
+        <p>{toast.message}</p>
+      </div>
+      <button type="button" className="toast-close" aria-label="Dismiss notification" onClick={onClose}>
+        <i className="bi bi-x-lg" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function ActionButtonSuffix({ cartMode, icon }: { cartMode: boolean; icon: string }) {
+  return cartMode ? (
+    <span className="cart-action-suffix" aria-hidden="true">
+      <i className="bi bi-plus-lg" />
+      <i className="bi bi-cart3" />
+    </span>
+  ) : (
+    <i className={`bi ${icon}`} aria-hidden="true" />
+  );
+}
+
+function Sidebar({ hideBrand = false }: { hideBrand?: boolean }) {
+  const items: Array<[ViewId, string, string, boolean?]> = [
+    ['swap', 'bi-arrow-left-right', 'Swap'],
+    ['open', 'bi-plus-circle', 'Open', true],
+    ['markets', 'bi-graph-up-arrow', 'Markets'],
+    ['orders', 'bi-clipboard-check', 'My Orders'],
+    ['portfolio', 'bi-person', 'Portfolio'],
+    ['history', 'bi-clock-history', 'History'],
+    ['options', 'bi-sliders', 'Options', true],
+  ];
+  return (
+    <aside className="sidebar">
+      {hideBrand ? null : (
+        <div className="brand">
+          <img src={textLogoUrl} alt="NeonSoup" />
+        </div>
+      )}
+      <nav className="nav-card" aria-label="Main navigation">
+        {items.map(([id, icon, label, hidden]) => (
+          <NavLink key={id} className={({ isActive }) => `${isActive ? 'active' : ''} ${hidden ? 'hidden-nav-item' : ''}`} to={`/${id}`}>
+            <i className={`bi ${icon}`} aria-hidden="true" />
+            <span>{label}</span>
+          </NavLink>
+        ))}
+      </nav>
+      <section className="kernel-card">
+        <img src={logoUrl} alt="" />
+        <div>
+          Powered by
+          <br />
+          Cardano P2P
+          <br />
+          DeFi Kernel
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function Topbar({
+  cartCount,
+  wallet,
+  theme,
+  onTheme,
+  onCart,
+  onConnect,
+  onDisconnect,
+  onOptions,
+  onMenu,
+}: {
+  cartCount: number;
+  wallet: WalletConnection | null;
+  theme: 'dark' | 'light';
+  onTheme: () => void;
+  onCart: () => void;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onOptions: () => void;
+  onMenu: () => void;
+}) {
+  return (
+    <header className="topbar">
+      <button type="button" className="icon-btn hamburger" aria-label="Open menu" onClick={onMenu}>
+        <i className="bi bi-list" aria-hidden="true" />
+      </button>
+      <button type="button" className="icon-btn" aria-label={`Cart with ${cartCount} queued operations`} onClick={onCart}>
+        <i className="bi bi-cart3" aria-hidden="true" />
+        {cartCount ? <span className="cart-badge">{cartCount}</span> : null}
+      </button>
+      <button type="button" className="icon-btn" aria-label="Toggle theme" onClick={onTheme}>
+        <i className={`bi ${theme === 'dark' ? 'bi-sun' : 'bi-moon-stars'}`} aria-hidden="true" />
+      </button>
+      {wallet ? (
+        <div className="wallet-group" aria-label="Connected wallet">
+          <span className="wallet-help-wrap wallet-widget-wrap">
+            <button type="button" className="wallet-btn wallet-connected" onClick={() => void navigator.clipboard?.writeText(wallet.address)}>
+              <i className="bi bi-wallet2" aria-hidden="true" />
+              <span className="wallet-text">
+                <span className="wallet-name">{wallet.name || 'Connected wallet'}</span>
+                <span className="wallet-address">{short(wallet.address, 16, 8)}</span>
+              </span>
+              {wallet.walletType ? <span className="wallet-type">{wallet.walletType}</span> : null}
+            </button>
+            <HelpTooltip label="Wallet widget help">Shows the connected wallet. Click it to copy the wallet address.</HelpTooltip>
+          </span>
+          <span className="wallet-help-wrap wallet-disconnect-wrap">
+            <button type="button" className="wallet-disconnect" aria-label="Disconnect wallet" onClick={onDisconnect}>
+              <i className="bi bi-x-lg" aria-hidden="true" />
+            </button>
+            <HelpTooltip label="Disconnect wallet help">Disconnect clears the local wallet connection from NeonSoup. It does not change the wallet itself.</HelpTooltip>
+          </span>
+        </div>
+      ) : (
+        <span className="wallet-help-wrap wallet-connect-wrap">
+          <button type="button" className="wallet-btn wallet-connect" onClick={onConnect}>
+            <i className="bi bi-wallet" aria-hidden="true" /> Connect Wallet
+          </button>
+          <HelpTooltip label="Connect wallet help">Connect through GameChanger Wallet. It supports CIP-30 browser extension wallets, hardware wallets, seed phrase wallets, QR wallets, and burner wallets.</HelpTooltip>
+        </span>
+      )}
+      <button type="button" className="icon-btn more-btn" aria-label="Open Options" onClick={onOptions}>
+        <i className="bi bi-three-dots" aria-hidden="true" />
+      </button>
+    </header>
+  );
+}
+
+function SwapScreen({
+  state,
+  quote,
+  assets,
+  offerAsset,
+  receiveAsset,
+  cartMode,
+  onSwap,
+  onFlip,
+  onRefresh,
+  refreshing,
+}: {
+  state: AppState;
+  quote: SwapQuote;
+  assets: Record<string, ResolvedAsset>;
+  offerAsset: ResolvedAsset;
+  receiveAsset: ResolvedAsset;
+  cartMode: boolean;
+  onSwap: () => void;
+  onFlip: () => void;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const dispatch = useAppDispatch();
+  const [flipRotation, setFlipRotation] = useState(0);
+  const payValue = state.forms.swapOfferAmount;
+  const requestedQuantity = formQuantity(payValue, offerAsset);
+  const output = fromBase(quotePreviewOutput(quote), receiveAsset.decimals);
+  const balance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
+  const balancePercent = percent(quote.requestedInputQuantity, balance);
+  const swapProblems = [
+    ...(!state.wallet ? ['Connect a wallet before swapping.'] : []),
+    ...(requestedQuantity <= 0n ? ['Enter an amount greater than zero.'] : []),
+    ...(requestedQuantity > balance
+      ? [`Your balance is ${fromBase(balance, offerAsset.decimals)} ${assetTitle(offerAsset)}, which is not enough for this swap.`]
+      : []),
+    ...(quote.unfilledRequestedQuantity > 0n
+      ? ['That amount is not available right now. Try a smaller swap.']
+      : []),
+    ...(requestedQuantity > 0n && !quote.segments.length
+      ? [`No available offers can sell ${assetTitle(receiveAsset)} for ${assetTitle(offerAsset)} right now.`]
+      : []),
+  ];
+  const swapDisabled = swapProblems.length > 0;
+  const severity: SwapQuoteSeverity = severityForSlippage(
+    quote.weightedSlippageBps,
+    percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
+  );
+  return (
+    <section className="panel-card swap-panel">
+      <div className="panel-head">
+        <h1>Swap</h1>
+        <RefreshButton loading={refreshing} onClick={onRefresh} />
+      </div>
+
+      <div className="token-box">
+        <div>
+          <label className="token-label" htmlFor="swap-pay-amount">
+            You pay
+          </label>
+          <AssetPicker
+            assets={assets}
+            value={state.forms.openOfferAssetKey}
+            exclude={state.forms.openAskAssetKey}
+            onChange={(assetKey) => dispatch({ type: 'set-forms', forms: { openOfferAssetKey: assetKey } })}
+          />
+        </div>
+        <div className="token-amount">
+          <input
+            id="swap-pay-amount"
+            className="amount-input"
+            type="number"
+            min="0"
+            step="0.1"
+            inputMode="decimal"
+            value={payValue}
+            onChange={(event) => dispatch({ type: 'set-forms', forms: { swapOfferAmount: event.target.value } })}
+          />
+          <AmountShortcuts
+            balance={balance}
+            asset={offerAsset}
+            onSet={(value) => dispatch({ type: 'set-forms', forms: { swapOfferAmount: value } })}
+          />
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="switch-btn"
+        aria-label="Flip swap assets"
+        onClick={() => {
+          setFlipRotation((rotation) => rotation + 180);
+          onFlip();
+        }}
+      >
+        <i className="bi bi-arrow-down-up" style={{ transform: `rotate(${flipRotation}deg)` }} aria-hidden="true" />
+      </button>
+
+      <div className="token-box">
+        <div>
+          <div className="token-label">You receive</div>
+          <AssetPicker
+            assets={assets}
+            value={state.forms.openAskAssetKey}
+            exclude={state.forms.openOfferAssetKey}
+            onChange={(assetKey) => dispatch({ type: 'set-forms', forms: { openAskAssetKey: assetKey } })}
+          />
+        </div>
+        <div className="token-amount">
+          <strong>{output}</strong>
+          <small>
+            Est. final price{' '}
+            {priceText(quote.effectivePrice || quote.marginalPrice || quote.executableBestPrice, offerAsset, receiveAsset)} {assetTitle(offerAsset)} /{' '}
+            {assetTitle(receiveAsset)}
+          </small>
+        </div>
+      </div>
+
+      <CompactRouteBar quote={quote} offerAsset={offerAsset} receiveAsset={receiveAsset} />
+
+      {swapProblems.length ? (
+        <div className="alert alert-warning validation-alert" role="alert">
+          {swapProblems[0]}
+        </div>
+      ) : null}
+
+      <button type="button" className="cta" onClick={onSwap} disabled={swapDisabled}>
+        Swap <ActionButtonSuffix cartMode={cartMode} icon="bi-arrow-right" />
+      </button>
+
+      <div className="stats">
+        <div>
+          Best executable price
+          <strong>
+            {priceText(quote.executableBestPrice, offerAsset, receiveAsset)} {assetTitle(offerAsset)}
+          </strong>
+        </div>
+        <div>
+          Price impact <HelpTooltip label="Price impact help">{HELP.priceImpact}</HelpTooltip>
+          <strong className={`severity-${severity}`}>{formatBps(quote.weightedSlippageBps)}</strong>
+        </div>
+        <div>
+          Balance used
+          <strong>{balance ? `${balancePercent}%` : 'Connect wallet'}</strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function OpenScreen({
+  state,
+  assets,
+  offerAsset,
+  askAsset,
+  cartMode,
+  onOpen,
+  onRefresh,
+  refreshing,
+}: {
+  state: AppState;
+  assets: Record<string, ResolvedAsset>;
+  offerAsset: ResolvedAsset;
+  askAsset: ResolvedAsset;
+  cartMode: boolean;
+  onOpen: () => void;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const dispatch = useAppDispatch();
+  const offerBalance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
+  const offerQuantity = formQuantity(state.forms.openOfferAmount, offerAsset);
+  const askQuantity = formQuantity(state.forms.openAskAmount, askAsset);
+  const priceValue = openPriceText(offerQuantity, askQuantity, offerAsset, askAsset);
+  const openProblems = [
+    ...(!state.wallet ? ['Connect a wallet before opening an offer.'] : []),
+    ...(offerAsset.assetKey === askAsset.assetKey ? ['Choose two different assets for the offer.'] : []),
+    ...(offerQuantity <= 0n ? ['Enter the amount you want to offer.'] : []),
+    ...(askQuantity <= 0n ? ['Enter the amount you want to receive.'] : []),
+    ...(offerQuantity > offerBalance
+      ? [`Your balance is ${fromBase(offerBalance, offerAsset.decimals)} ${assetTitle(offerAsset)}, which is not enough for this offer.`]
+      : []),
+  ];
+  const disabled = openProblems.length > 0;
+  return (
+    <section className="panel-card open-panel">
+      <div className="panel-head">
+        <h1>Open Offer</h1>
+        <RefreshButton loading={refreshing} disabled={!state.wallet} onClick={onRefresh} />
+      </div>
+
+      <div className="open-hero">
+        <AssetPairStack offerAsset={offerAsset} askAsset={askAsset} />
+        <div>
+          <b>
+            Offer {assetTitle(offerAsset)} for {assetTitle(askAsset)}
+          </b>
+          <small>
+            Create a one-way Cardano-Swaps offer. Other users can fill it partially or fully while your price stays fixed.
+            <HelpTooltip label="Open offer help">
+              Opening an offer locks the asset you offer at your personal P2P DeFi Kernel address. Fillers pay the requested asset according to your limit price.
+            </HelpTooltip>
+          </small>
+        </div>
+      </div>
+
+      <div className="open-grid">
+        <div className="offer-box">
+          <label className="token-label" htmlFor="open-offer-amount">
+            You offer
+          </label>
+          <AssetPicker
+            assets={assets}
+            value={state.forms.openOfferAssetKey}
+            exclude={state.forms.openAskAssetKey}
+            onChange={(assetKey) => dispatch({ type: 'set-forms', forms: { openOfferAssetKey: assetKey } })}
+          />
+          <input
+            id="open-offer-amount"
+            className="amount-input open-amount"
+            type="number"
+            min="0"
+            step="0.1"
+            inputMode="decimal"
+            value={state.forms.openOfferAmount}
+            onChange={(event) => dispatch({ type: 'set-forms', forms: { openOfferAmount: event.target.value } })}
+          />
+          <AmountShortcuts
+            balance={offerBalance}
+            asset={offerAsset}
+            onSet={(value) => dispatch({ type: 'set-forms', forms: { openOfferAmount: value } })}
+          />
+        </div>
+        <div className="offer-box request-box">
+          <label className="token-label" htmlFor="open-ask-amount">
+            You request
+          </label>
+          <AssetPicker
+            assets={assets}
+            value={state.forms.openAskAssetKey}
+            exclude={state.forms.openOfferAssetKey}
+            onChange={(assetKey) => dispatch({ type: 'set-forms', forms: { openAskAssetKey: assetKey } })}
+          />
+          <input
+            id="open-ask-amount"
+            className="amount-input open-amount"
+            type="number"
+            min="0"
+            step="0.1"
+            inputMode="decimal"
+            value={state.forms.openAskAmount}
+            onChange={(event) => dispatch({ type: 'set-forms', forms: { openAskAmount: event.target.value } })}
+          />
+          <small>Requested asset received as the offer is filled.</small>
+        </div>
+      </div>
+
+      <div className="open-summary">
+        <label htmlFor="open-price">Limit price</label>
+        <div className="price-input-wrap">
+          <input
+            id="open-price"
+            className="price-input"
+            type="number"
+            min="0"
+            step="0.000001"
+            inputMode="decimal"
+            value={priceValue === '-' ? '' : priceValue}
+            onChange={(event) => {
+              const nextAsk = askQuantityFromPrice(offerQuantity, event.target.value, offerAsset, askAsset);
+              dispatch({ type: 'set-forms', forms: { openAskAmount: nextAsk > 0n ? fromBase(nextAsk, askAsset.decimals) : '' } });
+            }}
+          />
+          <span>
+            {assetTitle(askAsset)} / {assetTitle(offerAsset)}
+          </span>
+        </div>
+      </div>
+
+      {openProblems.length ? (
+        <div className="alert alert-warning validation-alert" role="alert">
+          {openProblems[0]}
+        </div>
+      ) : null}
+
+      <button type="button" className="cta open-cta" onClick={onOpen} disabled={disabled}>
+        Open Offer <ActionButtonSuffix cartMode={cartMode} icon="bi-plus-circle" />
+      </button>
+    </section>
+  );
+}
+
+function MarketsScreen({
+  state,
+  assets,
+  onSelect,
+  onOffer,
+  onRefresh,
+  refreshing,
+}: {
+  state: AppState;
+  assets: Record<string, ResolvedAsset>;
+  onSelect: (payKey: string, receiveKey: string) => void;
+  onOffer: (assetKey: string) => void;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const excludedUtxoRefs = bookedSourceRefs(state.cart);
+  const rows = Object.values(assets)
+    .filter((asset) => asset.known && asset.assetKey !== state.forms.openOfferAssetKey)
+    .map((receiveAsset) => {
+      const offerAsset = assets[state.forms.openOfferAssetKey];
+      const balance = balanceOf(state, receiveAsset.policyId, receiveAsset.assetNameHex);
+      const quote = quoteSwap({
+        offers: state.openOffers,
+        offerAsset,
+        receiveAsset,
+        offerAmount: '1',
+        payUp: state.forms.swapPayUp,
+        excludedUtxoRefs,
+        slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
+        payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+      });
+      return { receiveAsset, offerAsset, quote, balance };
+    })
+    .sort((left, right) => {
+      const byBalance = compareQuantityDesc(left.balance, right.balance);
+      if (byBalance) return byBalance;
+      if (left.quote.rawCandidateCount !== right.quote.rawCandidateCount) {
+        return right.quote.rawCandidateCount - left.quote.rawCandidateCount;
+      }
+      return assetTitle(left.receiveAsset).localeCompare(assetTitle(right.receiveAsset));
+    });
+  return (
+    <section className="panel-card">
+      <div className="panel-head">
+        <h1>Markets</h1>
+        <RefreshButton loading={refreshing} onClick={onRefresh} />
+      </div>
+      <div className="table-list dex-table markets-table">
+        <div className="market-row table-head" role="row">
+          <span>Pair</span>
+          <span>Best price</span>
+          <span>Open offers</span>
+          <span>Your balance</span>
+          <span>Actions</span>
+        </div>
+        {rows.map(({ receiveAsset, offerAsset, quote, balance }) => (
+          <div className="market-row" key={receiveAsset.assetKey}>
+            <div className="pair-cell">
+              <AssetPairStack offerAsset={receiveAsset} askAsset={offerAsset} />
+              <span>
+                {assetTitle(receiveAsset)} / {offerAsset ? assetTitle(offerAsset) : '-'}
+              </span>
+            </div>
+            <span className="mono">{priceText(quote.executableBestPrice, offerAsset, receiveAsset)}</span>
+            <span>{quote.rawCandidateCount} orders</span>
+            <span className="mono">
+              {fromBase(balance, receiveAsset.decimals)} {assetTitle(receiveAsset)}
+            </span>
+            <span className="row-actions">
+              {balance > 0n ? (
+                <button type="button" className="mini-btn" onClick={() => onOffer(receiveAsset.assetKey)}>
+                  <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
+                </button>
+              ) : null}
+              <button type="button" className="mini-btn" onClick={() => onSelect(state.forms.openOfferAssetKey, receiveAsset.assetKey)}>
+                <i className="bi bi-arrow-left-right" aria-hidden="true" /> Swap
+              </button>
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function OrdersScreen({
+  state,
+  cartMode,
+  onCloseOrder,
+  onRefresh,
+  refreshing,
+}: {
+  state: AppState;
+  cartMode: boolean;
+  onCloseOrder: (offer: OpenOffer) => void;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const owned = state.openOffers
+    .filter((offer) => isCurrentOutputOwner(offer, state.wallet?.stakeKeyHash))
+    .sort((left, right) => {
+      const byFilled = compareQuantityDesc(BigInt(left.utxoAskQuantity || '0'), BigInt(right.utxoAskQuantity || '0'));
+      return byFilled || compareQuantityDesc(BigInt(left.utxoOfferQuantity || '0'), BigInt(right.utxoOfferQuantity || '0'));
+    });
+  return (
+    <section className="panel-card">
+      <div className="panel-head">
+        <h1>My Orders</h1>
+        <RefreshButton loading={refreshing} onClick={onRefresh} />
+      </div>
+      {state.wallet ? null : <div className="empty-state">Connect a wallet to show owned orders.</div>}
+      {state.wallet && !owned.length ? <div className="empty-state">No open NeonSoup orders found for this wallet.</div> : null}
+      <div className="grid2 orders-grid">
+        {owned.map((offer) => {
+          const offered = resolveAsset(state, offer.offerPolicyId, offer.offerAssetName);
+          const asked = resolveAsset(state, offer.askPolicyId, offer.askAssetName);
+          const hasAccumulatedAsk = BigInt(offer.utxoAskQuantity || '0') > 0n;
+          const remaining = BigInt(offer.utxoOfferQuantity || '0');
+          const accumulated = BigInt(offer.utxoAskQuantity || '0');
+          const filledOffer = filledOfferEquivalent(offer);
+          const totalOffer = remaining + filledOffer;
+          const filledPct =
+            totalOffer > 0n ? Number((filledOffer * 10_000n) / totalOffer) / 100 : 0;
+          const progressLabel = `${filledPct.toFixed(filledPct % 1 === 0 ? 0 : 2)}% filled: ${fromBase(filledOffer, offered.decimals)} ${assetTitle(offered)} of ${fromBase(totalOffer, offered.decimals)} ${assetTitle(offered)}. Received ${fromBase(accumulated, asked.decimals)} ${assetTitle(asked)} so far.`;
+          return (
+            <article className="order-card" key={offer.id}>
+              <div className="order-head">
+                <span className="pair-cell">
+                  <AssetPairStack offerAsset={offered} askAsset={asked} />
+                  <b>
+                    {assetTitle(offered)} / {assetTitle(asked)}
+                  </b>
+                </span>
+                <span className="pill">{offer.orderKind}</span>
+              </div>
+              <div className="order-fill-card">
+                <span>
+                  Filled / Total <HelpTooltip label="Order progress help">Filled is estimated from the requested asset accumulated in the order and the order limit price.</HelpTooltip>
+                </span>
+                <strong>
+                  {fromBase(filledOffer, offered.decimals)} / {fromBase(totalOffer, offered.decimals)} {assetTitle(offered)}
+                </strong>
+                <small>
+                  Received {fromBase(accumulated, asked.decimals)} {assetTitle(asked)} so far
+                </small>
+                <div className="bar order-progress" tabIndex={0} aria-label={progressLabel}>
+                  <i style={{ width: `${Math.min(100, Math.max(0, filledPct))}%` }} />
+                  <span className="route-tooltip">{progressLabel}</span>
+                </div>
+              </div>
+              <div className="order-meta">
+                <span>
+                  Limit price {orderLimitPriceText(offer, offered, asked)} {assetTitle(asked)} / {assetTitle(offered)}
+                </span>
+                <span>{hasAccumulatedAsk ? 'Partially filled' : 'Waiting for fills'}</span>
+              </div>
+              <button type="button" className="mini-btn" onClick={() => onCloseOrder(offer)}>
+                Close order <ActionButtonSuffix cartMode={cartMode} icon="bi-x-circle" />
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function PortfolioScreen({
+  state,
+  onSwapAsset,
+  onOfferAsset,
+  onRefresh,
+  refreshing,
+}: {
+  state: AppState;
+  onSwapAsset: (assetKey: string) => void;
+  onOfferAsset: (assetKey: string) => void;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const portfolio = [...visiblePortfolio(state)].sort((left, right) => {
+    const byQuantity = compareQuantityDesc(BigInt(left.quantity || '0'), BigInt(right.quantity || '0'));
+    return byQuantity || assetTitle(left).localeCompare(assetTitle(right));
+  });
+  return (
+    <section className="panel-card">
+      <div className="panel-head">
+        <h1>Portfolio</h1>
+        <RefreshButton loading={refreshing} disabled={!state.wallet} onClick={onRefresh} />
+      </div>
+      {state.wallet ? null : <div className="empty-state">Connect a wallet to load balances and operation history.</div>}
+      <div className="table-list dex-table portfolio-table">
+        <div className="market-row table-head" role="row">
+          <span>Asset</span>
+          <span>Balance</span>
+          <span>Actions</span>
+        </div>
+        {portfolio.map((asset) => (
+          <div className="market-row" key={asset.assetKey}>
+            <div className="pair-cell">
+              <AssetIcon asset={asset} />
+              <span>{assetTitle(asset)}</span>
+              {!asset.known ? <span className="asset-unknown">Unknown</span> : null}
+            </div>
+            <span className="mono">{fromBase(asset.quantity || '0', asset.decimals)}</span>
+            <span className="row-actions">
+              {BigInt(asset.quantity || '0') > 0n ? (
+                <button type="button" className="mini-btn" onClick={() => onOfferAsset(asset.assetKey)}>
+                  <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
+                </button>
+              ) : null}
+              <button type="button" className="mini-btn" onClick={() => onSwapAsset(asset.assetKey)}>
+                <i className="bi bi-arrow-left-right" aria-hidden="true" /> Swap
+              </button>
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HistoryScreen({
+  state,
+  loading,
+  onRefresh,
+  notice,
+}: {
+  state: AppState;
+  loading: boolean;
+  onRefresh: () => void;
+  notice: string;
+}) {
+  const [selectedTx, setSelectedTx] = useState<TransactionRow | null>(null);
+  const rows = composeTransactionRows(state.transactions, state.wallet?.stakeKeyHash).slice(0, state.options.historyFetchLimit);
+  return (
+    <section className="panel-card">
+      <div className="panel-head">
+        <h1>History</h1>
+        <RefreshButton loading={loading} disabled={!state.wallet} onClick={onRefresh} />
+      </div>
+      {notice ? (
+        <div className="alert alert-info validation-alert" role="status">
+          {notice}
+        </div>
+      ) : null}
+      {!state.wallet ? <div className="empty-state">Connect a wallet to show your order history.</div> : null}
+      <div className="table-list dex-table history-table">
+        <div className="market-row table-head" role="row">
+          <span>Status</span>
+          <span>Actions</span>
+          <span>Created at</span>
+          <span>Transaction</span>
+          <span>Open</span>
+        </div>
+        {rows.map((tx) => (
+          <div className={`market-row tx-row tx-${tx.status}`} key={tx.id}>
+            <span className={`tx-status tx-status-${tx.status}`}>{tx.status}</span>
+            <span>{tx.summary}</span>
+            <span>{formatDateTime(tx.at)}</span>
+            <span className="mono inline-copy">
+              {tx.txHash ? shortHash(tx.txHash) : 'Pending'}
+              <CopyIcon value={tx.txHash} label="Copy transaction hash" />
+            </span>
+            <span className="row-actions">
+              <button type="button" className="mini-btn" onClick={() => setSelectedTx(tx)}>
+                <i className="bi bi-eye" aria-hidden="true" /> View
+              </button>
+              {tx.txHash ? (
+                <button type="button" className="mini-btn" onClick={() => openExternalUrl(txExplorerUrl(state, tx.txHash))}>
+                  <i className="bi bi-link-45deg" aria-hidden="true" /> Explorer
+                </button>
+              ) : null}
+            </span>
+          </div>
+        ))}
+      </div>
+      {!rows.length ? <div className="empty-state">No order transactions found yet.</div> : null}
+      {selectedTx ? <TransactionDetailsModal state={state} tx={selectedTx} onClose={() => setSelectedTx(null)} /> : null}
+    </section>
+  );
+}
+
+function TransactionDetailsModal({ state, tx, onClose }: { state: AppState; tx: TransactionRow; onClose: () => void }) {
+  const details = tx.details || [];
+  return (
+    <AppModal title="Transaction details" onClose={onClose}>
+      <div className="tx-detail-head">
+        <span className={`tx-status tx-status-${tx.status}`}>{tx.status}</span>
+        <span>{formatDateTime(tx.at)}</span>
+        <span className="mono inline-copy">
+          {tx.txHash ? shortHash(tx.txHash) : 'Pending'}
+          <CopyIcon value={tx.txHash} label="Copy transaction hash" />
+        </span>
+      </div>
+      <p className="detail-note">Recognized order activity in this transaction.</p>
+      <div className="detail-grid tx-summary-grid">
+        <div>
+          <span>Actions</span>
+          <strong>{tx.summary}</strong>
+        </div>
+        <div>
+          <span>Network fee</span>
+          <strong>{tx.feeQuantity ? `${fromBase(tx.feeQuantity, 6)} tADA` : 'Fee unavailable'}</strong>
+        </div>
+      </div>
+      {details.length ? (
+        <div className="tx-operation-list">
+          {details.map((detail, index) => {
+            const offerAsset = detailAsset(state, detail.offerPolicyId, detail.offerAssetNameHex);
+            const askAsset = detailAsset(state, detail.askPolicyId, detail.askAssetNameHex);
+            const labels = amountLabels(detail.action);
+            const offerQuantity = BigInt(detail.offerQuantity || '0');
+            const askQuantity = BigInt(detail.askQuantity || '0');
+            return (
+              <article className="tx-operation-card" key={`${detail.inputRef || ''}-${detail.outputRef || ''}-${index}`}>
+                <div className="order-head">
+                  <div className="pair-cell">
+                    <AssetPairStack offerAsset={offerAsset} askAsset={askAsset} />
+                    <span>{actionTitle(detail.action)}</span>
+                  </div>
+                  <div className="tx-price">
+                    <span>Price</span>
+                    <strong>{detailPrice(detail, offerAsset, askAsset)}</strong>
+                  </div>
+                </div>
+                <div className="detail-grid tx-amount-grid">
+                  {offerQuantity > 0n ? (
+                    <div className="tx-amount-card">
+                      <span>{labels.offer}</span>
+                      <strong>
+                        {fromBase(offerQuantity, offerAsset.decimals)} {assetTitle(offerAsset)}
+                      </strong>
+                    </div>
+                  ) : null}
+                  {askQuantity > 0n ? (
+                    <div className="tx-amount-card">
+                      <span>{labels.ask}</span>
+                      <strong>
+                        {fromBase(askQuantity, askAsset.decimals)} {assetTitle(askAsset)}
+                      </strong>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="tx-ref-row">
+                  <div className="tx-ref-label">
+                    <span>Input</span>
+                    <strong className="mono inline-copy">
+                      {detail.inputRef ? shortHash(detail.inputRef) : 'New output'}
+                      <CopyIcon value={detail.inputRef || ''} label="Copy input reference" />
+                    </strong>
+                  </div>
+                  <div className="tx-ref-label">
+                    <span>Output</span>
+                    <strong className="mono inline-copy">
+                      {detail.outputRef ? shortHash(detail.outputRef) : 'Closed'}
+                      <CopyIcon value={detail.outputRef || ''} label="Copy output reference" />
+                    </strong>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="empty-state">No recognizable order details were found for this transaction.</div>
+      )}
+    </AppModal>
+  );
+}
+
+function OptionsScreen({
+  state,
+  cartMode,
+  setCartMode,
+  modal = false,
+  hideTitle = false,
+}: {
+  state: AppState;
+  cartMode: boolean;
+  setCartMode: (value: boolean) => void;
+  modal?: boolean;
+  hideTitle?: boolean;
+}) {
+  const dispatch = useAppDispatch();
+  const optionProblems = [
+    ...(state.options.swapPayUpPercent < 0 ? ['Pay-up premium cannot be negative.'] : []),
+    ...(state.options.swapSlippageTolerancePercent < 0 ? ['Slippage tolerance cannot be negative.'] : []),
+  ];
+  const parallelMode = state.cart.mode === 'parallel';
+  const payUpEnabled = state.forms.swapPayUp;
+  return (
+    <section className={modal ? 'options-modal-content' : 'panel-card'}>
+      {hideTitle ? null : (
+        <div className="panel-head">
+          <h1>Options</h1>
+          {/*<span className="tag">Execution</span>*/}
+        </div>
+      )}
+      {optionProblems.length ? (
+        <div className="alert alert-warning validation-alert" role="alert">
+          {optionProblems[0]}
+        </div>
+      ) : null}
+      <div className="options-grid">
+        <label className="option-line">
+          <span>
+            <b>Cart Mode</b> <HelpTooltip label="Cart Mode help">{HELP.cartMode}</HelpTooltip>
+            <small>Queue operations and launch the wallet from Cart.</small>
+          </span>
+          <input type="checkbox" checked={cartMode} onChange={(event) => setCartMode(event.target.checked)} />
+        </label>
+        <label className="option-line">
+          <span>
+            <b>Best-effort parallel mode</b> <HelpTooltip label="Parallel mode help">{HELP.parallel}</HelpTooltip>
+            <small>Use independent transactions so some action intents can still complete during offer contention.</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={parallelMode}
+            onChange={(event) => dispatch({ type: 'set-cart-mode', mode: event.target.checked ? 'parallel' : 'bundle' })}
+          />
+        </label>
+        <label className={`option-line ${parallelMode ? 'option-line-muted' : ''}`}>
+          <span>
+            <b>Bundle size</b> <HelpTooltip label="Bundle size help">{HELP.bundleActions}</HelpTooltip>
+            <small>Maximum action intents packed into one on-chain transaction in bundle mode.</small>
+          </span>
+          <span className="option-input-wrap">
+            <input
+              type="number"
+              className="option-input"
+              min="1"
+              step="1"
+              disabled={parallelMode}
+              value={state.cart.maxIntentsPerTransaction}
+              onChange={(event) =>
+                dispatch({ type: 'set-cart-max-intents-per-transaction', value: Number(event.target.value) || 1 })
+              }
+            />
+            <span className="option-input-suffix">actions</span>
+          </span>
+        </label>
+        <label className="option-line">
+          <span>
+            <b>Pay up for lower contention</b> <HelpTooltip label="Pay-up help">{HELP.payUp}</HelpTooltip>
+            <small>Let the local router choose slightly worse prices when that may avoid contested offers.</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={state.forms.swapPayUp}
+            onChange={(event) => dispatch({ type: 'set-forms', forms: { swapPayUp: event.target.checked } })}
+          />
+        </label>
+        <label className={`option-line ${payUpEnabled ? '' : 'option-line-muted'}`}>
+          <span>
+            <b>Pay-up premium</b>
+            <HelpTooltip label="Pay-up premium help">{HELP.payUpPremium}</HelpTooltip>
+            <small>Maximum extra price accepted for lower-contention routing.</small>
+          </span>
+          <span className="option-input-wrap">
+            <input
+              type="number"
+              className="option-input"
+              min="0"
+              step="0.1"
+              disabled={!payUpEnabled}
+              value={state.options.swapPayUpPercent}
+              onChange={(event) =>
+                dispatch({ type: 'set-options', options: { swapPayUpPercent: Math.max(0, Number(event.target.value) || 0) } })
+              }
+            />
+            <span className="option-input-suffix">%</span>
+          </span>
+        </label>
+        <label className="option-line">
+          <span>
+            <b>Slippage tolerance</b>
+            <HelpTooltip label="Slippage tolerance help">{HELP.slippageTolerance}</HelpTooltip>
+            <small>Warning threshold for order-book route price movement.</small>
+          </span>
+          <span className="option-input-wrap">
+            <input
+              type="number"
+              className="option-input"
+              min="0"
+              step="0.1"
+              value={state.options.swapSlippageTolerancePercent}
+              onChange={(event) =>
+                dispatch({
+                  type: 'set-options',
+                  options: { swapSlippageTolerancePercent: Math.max(0, Number(event.target.value) || 0) },
+                })
+              }
+            />
+            <span className="option-input-suffix">%</span>
+          </span>
+        </label>
+        <label className="option-line">
+          <span>
+            <b>Provider</b> <HelpTooltip label="Provider help">{HELP.provider}</HelpTooltip>
+            <small>Transport for chain data.</small>
+          </span>
+          <select
+            className="option-input"
+            value={state.options.provider}
+            onChange={(event) =>
+              dispatch({
+                type: 'set-options',
+                options: { provider: event.target.value === 'blockfrost' ? 'blockfrost' : 'graphqlMk2' },
+              })
+            }
+          >
+            <option value="graphqlMk2">GraphQL MKII</option>
+            <option value="blockfrost">Blockfrost</option>
+          </select>
+        </label>
+        <label className="option-line option-line-wide">
+          <span>
+            <b>API provider URL</b>
+            <HelpTooltip label="Provider URL help">Overrides the endpoint used by the selected API provider. Empty keeps the configured default.</HelpTooltip>
+            <small>Optional endpoint override. Empty uses the same default endpoint selection as DevTool.</small>
+          </span>
+          <input
+            type="url"
+            className="option-input option-input-wide"
+            placeholder="Use configured default"
+            value={state.options.providerUrl}
+            onChange={(event) => dispatch({ type: 'set-options', options: { providerUrl: event.target.value } })}
+          />
+        </label>
+      </div>
+    </section>
+  );
+}
+
+function AppModal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="modal-card" aria-modal="true" role="dialog" aria-labelledby="modal-title">
+        <div className="modal-head">
+          <h2 id="modal-title">{title}</h2>
+          <button type="button" className="modal-action-btn" onClick={onClose} aria-label={`Close ${title}`}>
+            <i className="bi bi-x-lg" aria-hidden="true" />
+          </button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function collisionSourceRefs(items: readonly CartItem[]): Set<string> {
+  const counts = new Map<string, number>();
+  items.forEach((item) => {
+    const ref = sourceRef(item);
+    if (ref) counts.set(ref, (counts.get(ref) || 0) + 1);
+  });
+  return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([ref]) => ref));
+}
+
+function CartModal({
+  state,
+  onClose,
+  onRun,
+  onRemove,
+}: {
+  state: AppState;
+  onClose: () => void;
+  onRun: () => void;
+  onRemove: (itemId: string) => void;
+}) {
+  const items = visibleCartItems(state.cart);
+  const collisionRefs = collisionSourceRefs(state.cart.items);
+  return (
+    <AppModal title="Operation Cart" onClose={onClose}>
+        {items.length ? (
+          <>
+            <div className="cart-list">
+              {items.map((item) => {
+                const ref = sourceRef(item);
+                const hasCollision = Boolean(ref && collisionRefs.has(ref));
+                return (
+                  <div className="cart-item" key={item.id}>
+                    <div>
+                      <div className="cart-item-title">
+                        <b>{item.name === 'fill' ? 'Swap' : item.name}</b>
+                        {hasCollision ? (
+                          <span className="cart-collision-badge">
+                            Collision
+                            <HelpTooltip label="Cart collision help">
+                              {`Source UTxO ${short(ref)} appears in more than one Cart item. Remove one of the colliding items before running the Cart.`}
+                            </HelpTooltip>
+                          </span>
+                        ) : null}
+                      </div>
+                      <small>{item.sourceLabel || item.id}</small>
+                      {item.status !== 'draft' ? (
+                        <small>
+                          {item.status} <HelpTooltip label="Pending help">{HELP.pending}</HelpTooltip>
+                        </small>
+                      ) : null}
+                    </div>
+                    <button type="button" className="modal-action-btn danger-action" aria-label={`Remove ${item.id}`} onClick={() => onRemove(item.id)}>
+                      <i className="bi bi-trash" aria-hidden="true" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="cart-actions">
+              <button type="button" className="secondary-btn" onClick={onClose}>
+                <i className="bi bi-x-lg" aria-hidden="true" /> Close
+              </button>
+              <button type="button" className="primary-btn" onClick={onRun}>
+                <i className="bi bi-play-fill" aria-hidden="true" /> Run {items.length}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">Your Cart has no draft operations.</div>
+        )}
+    </AppModal>
+  );
+}
+
+function Drawer({ close }: { close: () => void }) {
+  return (
+    <div className="mobile-drawer" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <div className="drawer">
+        <div className="drawer-head">
+          <img src={textLogoUrl} alt="NeonSoup" />
+          <button type="button" className="modal-action-btn" onClick={close} aria-label="Close menu">
+            <i className="bi bi-x-lg" aria-hidden="true" />
+          </button>
+        </div>
+        <div onClick={close}>
+          <Sidebar hideBrand />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const state = useAppState();
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const [cartMode, setCartMode] = useState(() => localStorage.getItem('neonsoup-frontend-cart-mode') !== 'off');
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [optionsModalOpen, setOptionsModalOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyNotice, setHistoryNotice] = useState('');
+  const assets = assetMap(state);
+  const configured = configuredAssets(state.options.network, state.customAssets);
+  const configuredValues = Object.values(configured);
+  const defaultAsset = configured['ada.ada'] || configuredValues[0];
+  if (!defaultAsset) {
+    return <main className="frontend-app">No configured assets are available for this network.</main>;
+  }
+  const offerAsset = assets[state.forms.openOfferAssetKey] || defaultAsset;
+  const receiveAsset = assets[state.forms.openAskAssetKey] || configuredValues[1] || defaultAsset;
+  const draftCartCount = state.cart.items.filter((item) => item.status === 'draft').length;
+  const pendingHashesKey = [...new Set(pendingTransactionHashes(state))].sort().join(',');
+  const excludedUtxoRefs = useMemo(() => bookedSourceRefs(state.cart), [state.cart]);
+
+  const quote = useMemo(
+    () =>
+      quoteSwap({
+        offers: state.openOffers,
+        offerAsset,
+        receiveAsset,
+        offerAmount: state.forms.swapOfferAmount,
+        payUp: state.forms.swapPayUp,
+        excludedUtxoRefs,
+        slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
+        payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+      }),
+    [
+      offerAsset,
+      receiveAsset,
+      state.forms.swapOfferAmount,
+      state.forms.swapPayUp,
+      excludedUtxoRefs,
+      state.openOffers,
+      state.options.swapPayUpPercent,
+      state.options.swapSlippageTolerancePercent,
+    ],
+  );
+
+  useEffect(() => {
+    localStorage.setItem('neonsoup-frontend-cart-mode', cartMode ? 'on' : 'off');
+  }, [cartMode]);
+
+  useEffect(() => {
+    captureWalletReturn()
+      .then(() => {
+        applyWalletReturn(readWalletReturn(), true);
+      })
+      .catch((error) => {
+        setToast({ tone: 'danger', title: 'Wallet return failed', message: safeError(error) });
+      });
+    applyWalletReturn(readWalletReturn(), true);
+    void refreshOffers();
+
+    function onStorage(event: StorageEvent) {
+      if (event.key !== APP_CONFIG.walletReturnKey || !event.newValue) return;
+      try {
+        applyWalletReturn(JSON.parse(event.newValue), true);
+      } catch (error) {
+        setToast({ tone: 'warning', title: 'Wallet return unreadable', message: safeError(error) });
+      }
+    }
+    function checkStoredReturn() {
+      applyWalletReturn(readWalletReturn(), true);
+    }
+    function onVisibilityChange() {
+      if (!document.hidden) checkStoredReturn();
+    }
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', checkStoredReturn);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', checkStoredReturn);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+    // Run once on boot. State refreshes are user or provider driven below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (state.wallet?.address) {
+      void refreshPortfolio();
+      void refreshWalletHistory();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.wallet?.address]);
+
+  useEffect(() => {
+    if (!pendingHashesKey) return;
+    const hashes = pendingHashesKey.split(',');
+    void reconcileChainTransactions(hashes);
+    const id = window.setInterval(() => {
+      void reconcileChainTransactions(hashes);
+    }, APP_CONFIG.confirmationPollingIntervalMs);
+    return () => window.clearInterval(id);
+    // Pending hashes define the confirmation subscription.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.options.network, state.options.provider, pendingHashesKey]);
+
+  useEffect(() => {
+    if (!toast || (toast.tone !== 'info' && toast.tone !== 'success')) return;
+    const timeout = window.setTimeout(() => setToast(null), state.options.toastAutoHideMs);
+    return () => window.clearTimeout(timeout);
+  }, [state.options.toastAutoHideMs, toast]);
+
+  async function refreshOffers(): Promise<OpenOffer[] | null> {
+    dispatch({ type: 'set-loading', key: 'offers', value: true });
+    try {
+      const loaded = await loadOpenOffers(state);
+      dispatch({
+        type: 'set-open-offers',
+        offers: loaded.data,
+        snapshot: createOpenBookSnapshot(state.options.provider, state.options.network, loaded.data.length),
+      });
+      dispatch({ type: 'set-asset-info', assets: loaded.assets });
+      await reconcileChainTransactions(pendingTransactionHashes(state));
+      return loaded.data;
+    } catch (error) {
+      setToast({ tone: 'warning', title: 'Order book unavailable', message: safeError(error) });
+      return null;
+    } finally {
+      dispatch({ type: 'set-loading', key: 'offers', value: false });
+    }
+  }
+
+  async function refreshPortfolio() {
+    if (!state.wallet?.address) return;
+    dispatch({ type: 'set-loading', key: 'portfolio', value: true });
+    try {
+      const loaded = await loadPortfolio(state, state.wallet.address);
+      dispatch({ type: 'set-portfolio', portfolio: loaded.data });
+      dispatch({ type: 'set-asset-info', assets: loaded.assets });
+    } catch (error) {
+      setToast({ tone: 'warning', title: 'Portfolio unavailable', message: safeError(error) });
+    } finally {
+      dispatch({ type: 'set-loading', key: 'portfolio', value: false });
+    }
+  }
+
+  async function refreshWalletHistory() {
+    if (!state.wallet?.address) return;
+    setHistoryLoading(true);
+    setHistoryNotice('');
+    try {
+      const chainTransactions = await loadAddressTransactions(state, state.wallet.address, state.options.historyFetchLimit);
+      const protocolTransactions = protocolRowsFromChainTransactions(state, chainTransactions);
+      dispatch({ type: 'merge-transactions', transactions: protocolTransactions });
+      setHistoryNotice(
+        protocolTransactions.length
+          ? `${protocolTransactions.length} order transaction${protocolTransactions.length === 1 ? '' : 's'} loaded for this wallet.`
+          : 'No recent order transactions found for this wallet.',
+      );
+    } catch (error) {
+      setHistoryNotice(`Could not refresh History: ${safeError(error)}`);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function reconcileChainTransactions(txHashes: readonly string[]): Promise<void> {
+    try {
+      const chainTransactions = await loadTransactions(state, txHashes);
+      const confirmedChainTransactions = chainTransactions.filter(isConfirmedChainTransaction);
+      if (!confirmedChainTransactions.length) return;
+      dispatch({
+        type: 'merge-transactions',
+        transactions: protocolRowsFromChainTransactions(state, confirmedChainTransactions),
+      });
+      dispatch({
+        type: 'reconcile-confirmed-transactions',
+        txHashes: confirmedChainTransactions
+          .filter((transaction) => transaction.validContract !== false)
+          .map((transaction) => transaction.hash),
+        failedTxHashes: confirmedChainTransactions
+          .filter((transaction) => transaction.validContract === false)
+          .map((transaction) => transaction.hash),
+        confirmedAt: Date.now(),
+      });
+    } catch {
+      // Retried by the polling loop; wallet-return history stays visible meanwhile.
+    }
+  }
+
+  function applyWalletReturn(raw: unknown, shouldConsume: boolean) {
+    if (!raw) return;
+    const wallet = shouldConsume ? consumeWalletReturn(raw) || walletFromReturn(raw) : walletFromReturn(raw);
+    const receipt = executionReceiptFromWalletReturn(raw);
+    const at = typeof raw === 'object' ? Number((raw as Record<string, unknown>).at) || Date.now() : Date.now();
+    if (wallet) dispatch({ type: 'set-wallet', wallet });
+    dispatch({ type: 'set-wallet-return', payload: raw });
+    if (receipt) {
+      dispatch({ type: 'apply-execution-receipt', receipt, at });
+      dispatch({ type: 'merge-transactions', transactions: transactionsFromReceipt(receipt, at) });
+    }
+    if (receipt || wallet) {
+      const summary = executionSummaryForItems(state, state.cart.items, receipt);
+      const notice = receiptToast(receipt, raw);
+      setToast(summary ? { ...notice, message: `${notice.message} ${summary}` } : notice);
+    }
+    void refreshOffers();
+    if (wallet?.address || state.wallet?.address) void refreshPortfolio();
+  }
+
+  function addItemsToCart(items: CartItem[]): { ok: boolean; openedEmptyCart: boolean } {
+    if (!items.length) {
+      setToast({ tone: 'warning', title: 'Nothing to queue', message: 'No executable operations were created for this route.' });
+      return { ok: false, openedEmptyCart: false };
+    }
+    const validation = validateCartItemsCanBeAdded(state.cart, items);
+    if (!validation.ok) {
+      setToast({ tone: 'warning', title: 'Cart conflict', message: validation.message || 'Operation cannot be added to Cart.' });
+      return { ok: false, openedEmptyCart: false };
+    }
+    const openedEmptyCart = state.cart.items.filter((item) => item.status === 'draft').length === 0;
+    dispatch(items.length === 1 && items[0] ? { type: 'add-cart-item', item: items[0] } : { type: 'add-cart-items', items });
+    return { ok: true, openedEmptyCart };
+  }
+
+  function openCartAfterFirstQueuedItem(result: { ok: boolean; openedEmptyCart: boolean }) {
+    if (cartMode && result.openedEmptyCart) {
+      dispatch({ type: 'set-cart-modal-open', open: true });
+    }
+  }
+
+  async function runItems(items: CartItem[]) {
+    if (!state.wallet) {
+      setToast({ tone: 'warning', title: 'Connect wallet first', message: 'NeonSoup needs public wallet data before transaction execution.' });
+      return;
+    }
+    if (!items.length) {
+      setToast({ tone: 'warning', title: 'Nothing selected', message: 'No draft or failed Cart operations are selected to run.' });
+      return;
+    }
+    try {
+      const code =
+        state.cart.mode === 'bundle'
+          ? await buildBundledGcscriptIntent({
+              state,
+              items,
+              maxIntentsPerTransaction: state.cart.maxIntentsPerTransaction,
+            })
+          : await buildParallelGcscriptIntent({ state, items });
+      await openWalletCode(state, code);
+      setToast({ tone: 'info', title: 'Wallet opened', message: 'Operations remain pending until the wallet returns submission data.' });
+    } catch (error) {
+      setToast({ tone: 'danger', title: 'Could not build wallet request', message: safeError(error) });
+    }
+  }
+
+  async function swap() {
+    const requestedQuantity = formQuantity(state.forms.swapOfferAmount, offerAsset);
+    const balance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
+    if (!state.wallet || requestedQuantity <= 0n || requestedQuantity > balance || quote.unfilledRequestedQuantity > 0n || !quote.segments.length) {
+      setToast({ tone: 'warning', title: 'Swap unavailable', message: 'Fix the highlighted swap amount before continuing.' });
+      return;
+    }
+    const refreshedOffers = await refreshOffers();
+    const freshQuote = quoteSwap({
+      offers: refreshedOffers || state.openOffers,
+      offerAsset,
+      receiveAsset,
+      offerAmount: state.forms.swapOfferAmount,
+      payUp: state.forms.swapPayUp,
+      excludedUtxoRefs,
+      slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
+      payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+    });
+    const items = createSwapCartItems(state, freshQuote);
+    const addResult = addItemsToCart(items);
+    if (!addResult.ok) return;
+    if (cartMode) {
+      openCartAfterFirstQueuedItem(addResult);
+      setToast({ tone: 'success', title: 'Queued in Cart', message: `${items.length} swap operation${items.length === 1 ? '' : 's'} added.` });
+    } else {
+      await runItems(items);
+    }
+  }
+
+  async function openOffer() {
+    const offerBalance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
+    const offerQuantity = formQuantity(state.forms.openOfferAmount, offerAsset);
+    const askQuantity = formQuantity(state.forms.openAskAmount, receiveAsset);
+    if (!state.wallet || offerAsset.assetKey === receiveAsset.assetKey || offerQuantity <= 0n || askQuantity <= 0n || offerQuantity > offerBalance) {
+      setToast({ tone: 'warning', title: 'Open offer unavailable', message: 'Fix the highlighted offer terms before continuing.' });
+      return;
+    }
+    const item = createCartItemFromCurrentIntent({ ...state, action: 'open' });
+    const addResult = addItemsToCart([item]);
+    if (!addResult.ok) return;
+    if (cartMode) {
+      openCartAfterFirstQueuedItem(addResult);
+      setToast({ tone: 'success', title: 'Offer queued', message: 'Open Offer was added to Cart.' });
+    } else {
+      await runItems([item]);
+    }
+  }
+
+  async function connectWallet() {
+    try {
+      await openWalletCode(state, connectIntent());
+      setToast({ tone: 'info', title: 'Wallet opened', message: 'Approve the public-data request to connect NeonSoup.' });
+    } catch (error) {
+      setToast({ tone: 'danger', title: 'Could not open wallet', message: safeError(error) });
+    }
+  }
+
+  function disconnectWallet() {
+    dispatch({ type: 'set-wallet', wallet: null });
+    setToast({ tone: 'info', title: 'Wallet disconnected', message: 'Local wallet connection data was cleared.' });
+  }
+
+  async function closeOrder(offer: OpenOffer) {
+    dispatch({ type: 'select-offer-for-close', offer });
+    const nextState = {
+      ...state,
+      action: 'close' as const,
+      selectedOrderId: offer.id,
+    };
+    const item = createCartItemFromCurrentIntent(nextState);
+    const addResult = addItemsToCart([item]);
+    if (!addResult.ok) return;
+    if (!cartMode) await runItems([item]);
+    else openCartAfterFirstQueuedItem(addResult);
+  }
+
+  function flipAssets() {
+    dispatch({
+      type: 'set-forms',
+      forms: {
+        openOfferAssetKey: state.forms.openAskAssetKey,
+        openAskAssetKey: state.forms.openOfferAssetKey,
+      },
+    });
+  }
+
+  function selectPair(payKey: string, receiveKey: string) {
+    dispatch({ type: 'set-forms', forms: { openOfferAssetKey: payKey, openAskAssetKey: receiveKey } });
+    navigate('/swap');
+  }
+
+  function startOffer(assetKey: string) {
+    dispatch({
+      type: 'set-forms',
+      forms: {
+        openOfferAssetKey: assetKey,
+        openAskAssetKey: state.forms.openAskAssetKey === assetKey ? state.forms.openOfferAssetKey : state.forms.openAskAssetKey,
+      },
+    });
+    navigate('/open');
+  }
+
+  return (
+    <main className="frontend-app">
+      <div className="shell">
+        <div className="layout">
+          <Sidebar />
+          <Topbar
+            cartCount={draftCartCount}
+            wallet={state.wallet}
+            theme={state.options.theme}
+            onTheme={() =>
+              dispatch({ type: 'set-options', options: { theme: state.options.theme === 'dark' ? 'light' : 'dark' } })
+            }
+            onCart={() => dispatch({ type: 'set-cart-modal-open', open: true })}
+            onConnect={() => void connectWallet()}
+            onDisconnect={disconnectWallet}
+            onOptions={() => setOptionsModalOpen(true)}
+            onMenu={() => setDrawerOpen(true)}
+          />
+          <main className="main-panel">
+            <Routes>
+              <Route path="/" element={<Navigate to="/swap" replace />} />
+              <Route
+                path="/swap"
+                element={
+                  <SwapScreen
+                    state={state}
+                    quote={quote}
+                    assets={assets}
+                    offerAsset={offerAsset}
+                    receiveAsset={receiveAsset}
+                    cartMode={cartMode}
+                    onSwap={() => void swap()}
+                    onFlip={flipAssets}
+                    onRefresh={() => void refreshOffers()}
+                    refreshing={state.loading.offers}
+                  />
+                }
+              />
+              <Route
+                path="/open"
+                element={
+                  <OpenScreen
+                    state={state}
+                    assets={assets}
+                    offerAsset={offerAsset}
+                    askAsset={receiveAsset}
+                    cartMode={cartMode}
+                    onOpen={() => void openOffer()}
+                    onRefresh={() => void refreshPortfolio()}
+                    refreshing={state.loading.portfolio}
+                  />
+                }
+              />
+              <Route
+                path="/markets"
+                element={
+                  <MarketsScreen
+                    state={state}
+                    assets={assets}
+                    onSelect={selectPair}
+                    onOffer={startOffer}
+                    onRefresh={() => void refreshOffers()}
+                    refreshing={state.loading.offers}
+                  />
+                }
+              />
+              <Route
+                path="/orders"
+                element={
+                  <OrdersScreen
+                    state={state}
+                    cartMode={cartMode}
+                    onCloseOrder={(offer) => void closeOrder(offer)}
+                    onRefresh={() => void refreshOffers()}
+                    refreshing={state.loading.offers}
+                  />
+                }
+              />
+              <Route
+                path="/portfolio"
+                element={
+                  <PortfolioScreen
+                    state={state}
+                    onOfferAsset={startOffer}
+                    onSwapAsset={(assetKey) => {
+                      selectPair(state.forms.openOfferAssetKey, assetKey);
+                    }}
+                    onRefresh={() => void refreshPortfolio()}
+                    refreshing={state.loading.portfolio}
+                  />
+                }
+              />
+              <Route
+                path="/history"
+                element={
+                  <HistoryScreen
+                    state={state}
+                    loading={historyLoading}
+                    notice={historyNotice}
+                    onRefresh={() => void refreshWalletHistory()}
+                  />
+                }
+              />
+              <Route path="/options" element={<OptionsScreen state={state} cartMode={cartMode} setCartMode={setCartMode} />} />
+              <Route path="*" element={<Navigate to="/swap" replace />} />
+            </Routes>
+          </main>
+          <footer className="footer">
+            <span>by </span>
+            <b>GameChanger</b>
+            <span>Finance</span>
+          </footer>
+        </div>
+      </div>
+      {state.cart.modalOpen ? (
+        <CartModal
+          state={state}
+          onClose={() => dispatch({ type: 'set-cart-modal-open', open: false })}
+          onRemove={(itemId) => dispatch({ type: 'remove-cart-item', itemId })}
+          onRun={() =>
+            void runItems(selectedCartItems(state.cart).filter((item) => item.status === 'draft' || item.status === 'failed'))
+          }
+        />
+      ) : null}
+      {optionsModalOpen ? (
+        <AppModal title="Options" onClose={() => setOptionsModalOpen(false)}>
+          <OptionsScreen state={state} cartMode={cartMode} setCartMode={setCartMode} modal hideTitle />
+        </AppModal>
+      ) : null}
+      {drawerOpen ? <Drawer close={() => setDrawerOpen(false)} /> : null}
+      {toast ? <AppToast toast={toast} onClose={() => setToast(null)} /> : null}
+    </main>
+  );
+}

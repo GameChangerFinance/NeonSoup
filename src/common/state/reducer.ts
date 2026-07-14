@@ -4,7 +4,7 @@ import { fromBase } from '../domain/quantities';
 import { APP_CONFIG } from '../config/appConfig';
 import { mergeProtocolTransactions } from '../domain/transactions';
 import { reconcileCartItemsByTransactionStatus } from './cartReconciliation';
-import { cartItemsWithoutSourceCollisions } from '../../../core/intents/cart';
+import { cartItemsWithoutSourceCollisions } from '../../core/intents/cart';
 import type { AppAction, AppOptions, AppState, AssetMetadata, CartState, NetworkTag } from './types';
 
 export const defaultOptions: AppOptions = {

@@ -2,6 +2,8 @@ import {
   buildCloseIntentArgs,
   buildFillIntentArgsForQuantity,
   buildOpenIntentArgs,
+  bookedSourceRefs,
+  cartItemsWithoutSourceCollisions,
   createCartItemSnapshot,
   createBundledGcscriptSource,
   createParallelGcscriptSource,
@@ -118,9 +120,10 @@ assert(cartItem.sourceOfferId === 'source-offer', 'Cart item snapshots preserve 
 assert(cartItem.pair?.offer.policyId === offerAsset.policyId, 'Cart item snapshots derive pair from args');
 
 const pendingItem: CartItem = { ...cartItem, id: 'pending', status: 'pending', txHash: 'submitted' };
+const confirmedItem: CartItem = { ...cartItem, id: 'confirmed', status: 'confirmed', selected: false, txHash: 'confirmed' };
 const draftDuplicate: CartItem = { ...cartItem, id: 'draft-duplicate', status: 'draft' };
 const cart = {
-  items: [cartItem, pendingItem],
+  items: [cartItem, pendingItem, confirmedItem],
   mode: 'bundle' as const,
   maxIntentsPerTransaction: 20,
   modalOpen: false,
@@ -129,9 +132,14 @@ const cart = {
 
 assert(selectedCartItems(cart).length === 2, 'selected Cart helper keeps current selection semantics');
 assert(visibleCartItems(cart).length === 1, 'visible Cart helper shows draft items by default');
+assert(bookedSourceRefs(cart).has(`${fillArgs['utxo-tx-hash']}#${fillArgs['utxo-tx-index']}`), 'Cart booked-source helper returns consumed UTxOs from all Cart item states');
 assert(
   !validateCartItemsCanBeAdded(cart, [draftDuplicate]).ok,
-  'Cart validation rejects duplicate draft fill source UTxOs',
+  'Cart validation rejects duplicate fill source UTxOs already booked by the Cart',
+);
+assert(
+  cartItemsWithoutSourceCollisions(cart, [draftDuplicate]).length === 0,
+  'Cart source-collision filter drops duplicate fill source UTxOs before reducer mutation',
 );
 assert(
   visibleCartItems({ ...cart, showConfirmedOnly: true }).every((item) => item.status !== 'draft'),

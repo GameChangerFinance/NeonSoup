@@ -149,6 +149,19 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
               <div className="form-text">{providerHelp}</div>
             </div>
             <div className="col-12">
+              <label className="form-label" htmlFor="providerUrl">
+                API provider URL override
+              </label>
+              <input
+                id="providerUrl"
+                className="form-control"
+                value={state.options.providerUrl}
+                placeholder="Use configured default for selected provider"
+                onChange={(event) => dispatch({ type: 'set-options', options: { providerUrl: event.target.value } })}
+              />
+              <div className="form-text">Overrides the selected provider endpoint. Empty keeps the configured default.</div>
+            </div>
+            <div className="col-12">
               <label className="form-label" htmlFor="blockfrostUrl">
                 Blockfrost URL override
               </label>
