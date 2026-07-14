@@ -13,37 +13,44 @@ Inspect the recipe. Fork it. Compose your own flavors. Deploy kitchens on your o
 ---
 ## 🍿 Try it live
 
-- **🥣 Neon Soup dapp:**  In development
-- **[🛠️ Development dapp](https://neonsoup-dev.netlify.app/):** Tool used for development - WIP
+- **[🥣 Neon Soup Dapp](https://neonsoup-dapp.netlify.app/):** NeonSoup user-facing dapp 
+- **[🛠️ Development dapp](https://neonsoup-dev.netlify.app/):** Internal tool used for development 
 
 **Not production ready yet! Use only on testnet.**
 
-## 🛠️ Devtool Dapp
+## 🥣 Frontend And DevTool
 
-The current frontend is a developer tool for testing the P2P DeFi Kernel order
-book, GameChanger Wallet intents, and protocol UX before the production
-NeonSoup frontend lands. It is a Vite + React + TypeScript app under
-[`src/devtool/`](src/devtool/) and builds to `dist/index.html`.
+The repo now contains two Vite + React + TypeScript shells:
 
-See [`src/devtool/README.md`](src/devtool/README.md) for setup, env variables,
-and UI notes.
+- **User Frontend** in [`src/frontend/`](src/frontend/): the production-target
+  DEX shell with a simplified AMM-like UX over the P2P DeFi Kernel order book.
+  It builds to `dist/frontend/`.
+- **DevTool** in [`src/devtool/`](src/devtool/): the advanced development shell
+  for inspecting protocol state, wallet intents, provider data, and execution
+  behavior. It builds to `dist/index.html`.
 
-Provider defaults are configured through Vite env variables. Copy
+Both shells consume shared app state, domain helpers, providers, wallet
+adapters, and Cart composition code from [`src/common/`](src/common/), plus
+UI-agnostic protocol helpers from [`src/core/`](src/core/). Frontend and DevTool
+must not import from each other.
+
+Common commands:
+
+```bash
+pnpm run dev:frontend
+pnpm run dev:devtool
+pnpm run build:frontend
+pnpm run build:devtool
+pnpm run build
+pnpm run test:swap-quote
+```
+
+Provider defaults are configured through shared Vite env variables. Copy
 [`.env.example`](.env.example) to `.env` for local development and keep private
-provider URLs/API tokens out of commits.
-The devtool app version uses SemVer build metadata:
-`package.json` version + `VITE_NEONSOUP_BUILD_TAG`, for example
+provider URLs/API tokens out of commits. The shared app version uses SemVer
+build metadata: `package.json` version + `VITE_NEONSOUP_BUILD_TAG`, for example
 `0.0.1+local`. Changing the build tag intentionally prompts users to
 update/reset incompatible browser state.
-
-Recent devtool work made Cart execution explicitly evidence-based. Wallet
-submission receipts and provider-visible transaction hashes are treated as
-tentative hints; Cart items are only marked confirmed after normalized chain
-data provides confirmation evidence. The Cart also distinguishes draft
-preparation from execution history, and fill/close accounting now tracks the
-consumed UTxO's accumulated ask-side value separately from new fill deltas.
-See [`docs/SWAP.md`](docs/SWAP.md) for the swap-routing and value-accounting
-rules behind those flows.
 
 ## 🚀 Overview
 
@@ -102,11 +109,22 @@ rules behind those flows.
 ### 💻 Off-chain (User Device)
 
 
-* **Neon Soup Frontend**
+* **NeonSoup User Frontend**
 
-  * Intent creation
-  * Manual/automatic matching coordination
+  * Simplified Swap/Open/Portfolio/History UX
+  * Local routing against the shared P2P order book
+  * Cart-mode execution and wallet return handling
   * UDC online/air-gapped connection
+
+* **NeonSoup DevTool**
+
+  * Advanced protocol, provider, wallet, and Cart inspection
+  * Developer-facing controls and diagnostics
+
+* **Shared app layer**
+
+  * Provider adapters, app state, domain normalization, Cart composition
+  * Reused by both Frontend and DevTool
 
 * **GameChanger Wallet**
 
@@ -177,6 +195,7 @@ For the same liquidity, NeonSoup exposes
 
 ## 🌐 Links
 
+* See [`docs/SWAP.md`](docs/SWAP.md) for swap-routing, booked-UTxO, and value-accounting rules.
 * P2P DeFi Kernel hashes: https://github.com/fallen-icarus/cardano-swaps/blob/main/VERSIONS.md
 * Github: https://github.com/GameChangerFinance/NeonSoup
 * Website: https://gamechanger.finance
