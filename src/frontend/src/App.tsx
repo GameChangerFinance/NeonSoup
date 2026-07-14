@@ -86,6 +86,55 @@ const HELP = {
     'Wallet-submitted operations are not final until a provider confirms the transaction on-chain.',
 };
 
+const UI_ASSETS = {
+  route: '/assets/cybernekos/lens-inspection_U.png',
+  tooltip: '/assets/cybernekos/peeking-counter_A.png',
+  tablet: '/assets/cybernekos/order-tablet_O.png',
+  scale: '/assets/cybernekos/soup-scale_J.png',
+  ladle: '/assets/cybernekos/ladle-stir_X.png',
+  wallet: '/assets/cybernekos/order-complete_P.png',
+  receipt: '/assets/cybernekos/receipt-sorting_S.png',
+  cloche: '/assets/cybernekos/serving-cloche_AQ.png',
+  success: '/assets/cybernekos/confetti-happy_AC.png',
+  warning: '/assets/cybernekos/worried-sweat_E.png',
+  danger: '/assets/cybernekos/crying-error_F.png',
+  info: '/assets/cybernekos/order-tablet_O.png',
+  empty: '/assets/cybernekos/sitting-calm_D.png',
+  cart: '/assets/cybernekos/delivery-cart_AW.png',
+  open: '/assets/cybernekos/specials-board_AU.png',
+  menu: '/assets/cybernekos/menu-pointer_R.png',
+  data: '/assets/cybernekos/data-wall_AY.png',
+  history: '/assets/cybernekos/receipt-sorting_S.png',
+  options: '/assets/cybernekos/pantry-terminal_AM.png',
+  bundle: '/assets/kitchen/bento_cube_A.png',
+  measure: '/assets/kitchen/measuring_spoon_A.png',
+  strainer: '/assets/kitchen/strainer_ladle_A.png',
+  coin: '/assets/kitchen/coin_bowl_A.png',
+} as const;
+
+type UiAsset = keyof typeof UI_ASSETS;
+
+function VisualAsset({ asset, className = '' }: { asset: UiAsset; className?: string }) {
+  return <img className={`ns-helper-art ${className}`} src={UI_ASSETS[asset]} alt="" aria-hidden="true" />;
+}
+
+function tooltipAssetForLabel(label: string): UiAsset {
+  if (/route|availability/i.test(label)) return 'route';
+  if (/price impact|slippage/i.test(label)) return 'scale';
+  if (/wallet|connect|disconnect/i.test(label)) return 'wallet';
+  if (/open offer/i.test(label)) return 'open';
+  if (/order progress/i.test(label)) return 'data';
+  if (/cart mode|cart collision/i.test(label)) return 'cart';
+  if (/parallel/i.test(label)) return 'strainer';
+  if (/bundle/i.test(label)) return 'bundle';
+  if (/pay-up premium/i.test(label)) return 'measure';
+  if (/pay-up/i.test(label)) return 'ladle';
+  if (/provider url/i.test(label)) return 'menu';
+  if (/provider/i.test(label)) return 'tablet';
+  if (/pending/i.test(label)) return 'receipt';
+  return 'tooltip';
+}
+
 function walletFromReturn(raw: unknown): WalletConnection | null {
   if (!raw || typeof raw !== 'object') return null;
   const wallet = (raw as Record<string, unknown>).wallet;
@@ -279,7 +328,7 @@ function executionSummaryForItems(state: AppState, items: readonly CartItem[], r
     .join(' ');
 }
 
-function HelpTooltip({ label, children }: { label: string; children: string }) {
+function HelpTooltip({ label, children, asset }: { label: string; children: ReactNode; asset?: UiAsset }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [position, setPosition] = useState<{ left: number; top: number; placement: 'above' | 'below' }>({
@@ -336,12 +385,22 @@ function HelpTooltip({ label, children }: { label: string; children: string }) {
               style={{ left: position.left, top: position.top }}
               role="tooltip"
             >
-              {children}
+              <VisualAsset asset={asset || tooltipAssetForLabel(label)} className="ns-tooltip-art" />
+              <span className="help-popover-content">{children}</span>
             </span>,
             document.body,
           )
         : null}
     </span>
+  );
+}
+
+function EmptyState({ children, asset = 'empty' }: { children: ReactNode; asset?: UiAsset }) {
+  return (
+    <div className="empty-state ns-art-surface">
+      <VisualAsset asset={asset} />
+      <span>{children}</span>
+    </div>
   );
 }
 
@@ -465,12 +524,12 @@ function CompactRouteBar({ quote, offerAsset, receiveAsset }: { quote: SwapQuote
   if (!quote.requestedInputQuantity) {
     return (
       <div className="route-empty">
-        Enter an amount to inspect the route. <HelpTooltip label="Route help">{HELP.route}</HelpTooltip>
+        Enter an amount to inspect the route. <HelpTooltip label="Route help" asset="route">{HELP.route}</HelpTooltip>
       </div>
     );
   }
   if (!quote.segments.length) {
-    return <div className="route-empty">No available offers match this direction.</div>;
+    return <EmptyState asset="route">No available offers match this direction.</EmptyState>;
   }
   const displayTotal = quote.routeDisplayQuantity > 0n ? quote.routeDisplayQuantity : quote.requestedInputQuantity;
   const share = (value: bigint) => {
@@ -520,7 +579,7 @@ function CompactRouteBar({ quote, offerAsset, receiveAsset }: { quote: SwapQuote
     <div className="route-fill">
       <div className="route-fill-head">
         <span>
-          Available now <HelpTooltip label="Availability help">{HELP.route}</HelpTooltip>
+          Available now <HelpTooltip label="Availability help" asset="route">{HELP.route}</HelpTooltip>
         </span>
         <span>
           {quote.segments.length} offer{quote.segments.length === 1 ? '' : 's'} - {formatBps(quote.weightedSlippageBps)} impact
@@ -554,6 +613,10 @@ function AppToast({ toast, onClose }: { toast: ToastState; onClose: () => void }
           : 'bi-info-lg';
   return (
     <div className={`app-toast app-toast-${toast.tone}`} role="status" aria-live="polite">
+      <VisualAsset
+        asset={toast.tone === 'success' ? 'success' : toast.tone === 'danger' ? 'danger' : toast.tone === 'warning' ? 'warning' : 'info'}
+        className="toast-helper-art"
+      />
       <div className="toast-icon">
         <i className={`bi ${icon}`} aria-hidden="true" />
       </div>
@@ -662,13 +725,13 @@ function Topbar({
               </span>
               {wallet.walletType ? <span className="wallet-type">{wallet.walletType}</span> : null}
             </button>
-            <HelpTooltip label="Wallet widget help">Shows the connected wallet. Click it to copy the wallet address.</HelpTooltip>
+            <HelpTooltip label="Wallet widget help" asset="wallet">Shows the connected wallet. Click it to copy the wallet address.</HelpTooltip>
           </span>
           <span className="wallet-help-wrap wallet-disconnect-wrap">
             <button type="button" className="wallet-disconnect" aria-label="Disconnect wallet" onClick={onDisconnect}>
               <i className="bi bi-x-lg" aria-hidden="true" />
             </button>
-            <HelpTooltip label="Disconnect wallet help">Disconnect clears the local wallet connection from NeonSoup. It does not change the wallet itself.</HelpTooltip>
+            <HelpTooltip label="Disconnect wallet help" asset="wallet">Disconnect clears the local wallet connection from NeonSoup. It does not change the wallet itself.</HelpTooltip>
           </span>
         </div>
       ) : (
@@ -676,7 +739,7 @@ function Topbar({
           <button type="button" className="wallet-btn wallet-connect" onClick={onConnect}>
             <i className="bi bi-wallet" aria-hidden="true" /> Connect Wallet
           </button>
-          <HelpTooltip label="Connect wallet help">Connect through GameChanger Wallet. It supports CIP-30 browser extension wallets, hardware wallets, seed phrase wallets, QR wallets, and burner wallets.</HelpTooltip>
+          <HelpTooltip label="Connect wallet help" asset="wallet">Connect through GameChanger Wallet. It supports CIP-30 browser extension wallets, hardware wallets, seed phrase wallets, QR wallets, and burner wallets.</HelpTooltip>
         </span>
       )}
       <button type="button" className="icon-btn more-btn" aria-label="Open Options" onClick={onOptions}>
@@ -1088,8 +1151,8 @@ function OrdersScreen({
         <h1>My Orders</h1>
         <RefreshButton loading={refreshing} onClick={onRefresh} />
       </div>
-      {state.wallet ? null : <div className="empty-state">Connect a wallet to show owned orders.</div>}
-      {state.wallet && !owned.length ? <div className="empty-state">No open NeonSoup orders found for this wallet.</div> : null}
+      {state.wallet ? null : <EmptyState>Connect a wallet to show owned orders.</EmptyState>}
+      {state.wallet && !owned.length ? <EmptyState asset="open">No open NeonSoup orders found for this wallet.</EmptyState> : null}
       <div className="grid2 orders-grid">
         {owned.map((offer) => {
           const offered = resolveAsset(state, offer.offerPolicyId, offer.offerAssetName);
@@ -1168,7 +1231,7 @@ function PortfolioScreen({
         <h1>Portfolio</h1>
         <RefreshButton loading={refreshing} disabled={!state.wallet} onClick={onRefresh} />
       </div>
-      {state.wallet ? null : <div className="empty-state">Connect a wallet to load balances and operation history.</div>}
+      {state.wallet ? null : <EmptyState>Connect a wallet to load balances and operation history.</EmptyState>}
       <div className="table-list dex-table portfolio-table">
         <div className="market-row table-head" role="row">
           <span>Asset</span>
@@ -1224,7 +1287,7 @@ function HistoryScreen({
           {notice}
         </div>
       ) : null}
-      {!state.wallet ? <div className="empty-state">Connect a wallet to show your order history.</div> : null}
+      {!state.wallet ? <EmptyState asset="history">Connect a wallet to show your order history.</EmptyState> : null}
       <div className="table-list dex-table history-table">
         <div className="market-row table-head" role="row">
           <span>Status</span>
@@ -1255,7 +1318,7 @@ function HistoryScreen({
           </div>
         ))}
       </div>
-      {!rows.length ? <div className="empty-state">No order transactions found yet.</div> : null}
+      {!rows.length ? <EmptyState asset="history">No order transactions found yet.</EmptyState> : null}
       {selectedTx ? <TransactionDetailsModal state={state} tx={selectedTx} onClose={() => setSelectedTx(null)} /> : null}
     </section>
   );
@@ -1264,7 +1327,7 @@ function HistoryScreen({
 function TransactionDetailsModal({ state, tx, onClose }: { state: AppState; tx: TransactionRow; onClose: () => void }) {
   const details = tx.details || [];
   return (
-    <AppModal title="Transaction details" onClose={onClose}>
+    <AppModal title="Transaction details" onClose={onClose} asset="history">
       <div className="tx-detail-head">
         <span className={`tx-status tx-status-${tx.status}`}>{tx.status}</span>
         <span>{formatDateTime(tx.at)}</span>
@@ -1343,7 +1406,7 @@ function TransactionDetailsModal({ state, tx, onClose }: { state: AppState; tx: 
           })}
         </div>
       ) : (
-        <div className="empty-state">No recognizable order details were found for this transaction.</div>
+        <EmptyState asset="history">No recognizable order details were found for this transaction.</EmptyState>
       )}
     </AppModal>
   );
@@ -1518,14 +1581,17 @@ function AppModal({
   title,
   children,
   onClose,
+  asset,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  asset?: UiAsset;
 }) {
   return (
     <div className="backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="modal-card" aria-modal="true" role="dialog" aria-labelledby="modal-title">
+        {asset ? <VisualAsset asset={asset} className="modal-helper-art" /> : null}
         <div className="modal-head">
           <h2 id="modal-title">{title}</h2>
           <button type="button" className="modal-action-btn" onClick={onClose} aria-label={`Close ${title}`}>
@@ -1561,7 +1627,7 @@ function CartModal({
   const items = visibleCartItems(state.cart);
   const collisionRefs = collisionSourceRefs(state.cart.items);
   return (
-    <AppModal title="Operation Cart" onClose={onClose}>
+    <AppModal title="Operation Cart" onClose={onClose} asset="cart">
         {items.length ? (
           <>
             <div className="cart-list">
@@ -1676,6 +1742,11 @@ export default function App() {
       state.options.swapSlippageTolerancePercent,
     ],
   );
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-bs-theme', state.options.theme);
+    document.documentElement.setAttribute('data-theme', state.options.theme);
+  }, [state.options.theme]);
 
   useEffect(() => {
     localStorage.setItem('neonsoup-frontend-cart-mode', cartMode ? 'on' : 'off');
@@ -2115,7 +2186,7 @@ export default function App() {
         />
       ) : null}
       {optionsModalOpen ? (
-        <AppModal title="Options" onClose={() => setOptionsModalOpen(false)}>
+        <AppModal title="Options" onClose={() => setOptionsModalOpen(false)} asset="options">
           <OptionsScreen state={state} cartMode={cartMode} setCartMode={setCartMode} modal hideTitle />
         </AppModal>
       ) : null}

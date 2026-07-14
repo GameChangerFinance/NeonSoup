@@ -1,0 +1,3429 @@
+<!doctype html>
+<html lang="en" data-theme="dark"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NeonSoup | Cardano DeFi, the Cypherpunk Way</title>
+  <meta name="description" content="NeonSoup is a peer-to-peer Cardano DeFi execution layer for shared liquidity, open intents, and user-signed wallet execution.">
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Archivo+Black&family=Rajdhani:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap");
+
+    :root,
+    [data-theme="dark"] {
+      --site-gutter: 16px;
+      --ns-bg: oklch(10% 0.045 282);
+      --ns-surface: oklch(16% 0.055 282 / 0.78);
+      --ns-surface-strong: oklch(20% 0.06 282 / 0.88);
+      --ns-fg: oklch(96% 0.018 215);
+      --ns-muted: oklch(74% 0.055 238);
+      --ns-border: oklch(75% 0.14 210 / 0.34);
+      --ns-accent: oklch(82% 0.18 195);
+      --ns-accent-2: oklch(72% 0.24 326);
+      --ns-violet: oklch(56% 0.18 285);
+      --ns-success: oklch(78% 0.18 154);
+      --ns-warning: oklch(84% 0.17 82);
+      --ns-danger: oklch(68% 0.24 24);
+      --ns-info: oklch(78% 0.16 220);
+      --ns-shadow-cyan: 0 0 24px oklch(82% 0.18 195 / 0.44), 0 0 64px oklch(82% 0.18 195 / 0.18);
+      --ns-shadow-pink: 0 0 24px oklch(72% 0.24 326 / 0.38), 0 0 72px oklch(72% 0.24 326 / 0.14);
+      --ns-shadow-riot: 0 0 28px oklch(82% 0.18 195 / 0.5), 0 0 90px oklch(72% 0.24 326 / 0.32), 0 0 150px oklch(56% 0.18 285 / 0.22);
+      --ns-bg-image: url("assets/images/dark-bg.png");
+      --ns-glass: oklch(100% 0 0 / 0.1);
+      --ns-overlay: oklch(7% 0.045 282 / 0.72);
+      --ns-font-display: "Archivo Black", "Arial Black", Impact, system-ui, sans-serif;
+      --ns-font-body: "Rajdhani", "Sohne", "Avenir Next", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      --ns-font-mono: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+    }
+
+    [data-theme="light"] {
+      --ns-bg: oklch(98% 0.028 170);
+      --ns-surface: oklch(100% 0.018 170 / 0.78);
+      --ns-surface-strong: oklch(100% 0.014 170 / 0.94);
+      --ns-fg: oklch(23% 0.08 282);
+      --ns-muted: oklch(42% 0.09 226);
+      --ns-border: oklch(76% 0.17 176 / 0.58);
+      --ns-accent: oklch(72% 0.22 178);
+      --ns-accent-2: oklch(70% 0.22 326);
+      --ns-violet: oklch(60% 0.18 286);
+      --ns-success: oklch(67% 0.23 151);
+      --ns-info: oklch(72% 0.21 190);
+      --ns-shadow-cyan: 0 0 24px oklch(72% 0.22 178 / 0.42), 0 0 68px oklch(72% 0.22 178 / 0.22);
+      --ns-shadow-pink: 0 0 24px oklch(70% 0.22 326 / 0.32), 0 0 66px oklch(70% 0.22 326 / 0.14);
+      --ns-shadow-riot: 0 0 28px oklch(72% 0.22 178 / 0.44), 0 0 84px oklch(70% 0.22 326 / 0.26), 0 0 136px oklch(67% 0.23 151 / 0.18);
+      --ns-bg-image: url("assets/images/light-bg.png");
+      --ns-glass: oklch(100% 0.014 170 / 0.56);
+      --ns-overlay: oklch(98% 0.028 170 / 0.5);
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      color: var(--ns-fg);
+      background: var(--ns-bg);
+      font-family: var(--ns-font-body);
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 18% 10%, oklch(82% 0.18 195 / 0.26), transparent 34vw),
+        radial-gradient(circle at 84% 18%, oklch(72% 0.24 326 / 0.34), transparent 32vw),
+        radial-gradient(circle at 50% 0%, oklch(56% 0.18 285 / 0.28), transparent 46vw),
+        linear-gradient(180deg, var(--ns-overlay), var(--ns-bg) 42%, var(--ns-bg) 100%),
+        var(--ns-bg-image) center top / cover fixed;
+      color: var(--ns-fg);
+      font-size: 18px;
+      line-height: 1.5;
+      text-wrap: pretty;
+    }
+
+    [data-theme="light"] body {
+      background:
+        radial-gradient(circle at 18% 10%, oklch(72% 0.22 178 / 0.38), transparent 34vw),
+        radial-gradient(circle at 84% 18%, oklch(70% 0.22 326 / 0.3), transparent 32vw),
+        radial-gradient(circle at 52% 0%, oklch(67% 0.23 151 / 0.28), transparent 44vw),
+        linear-gradient(180deg, var(--ns-overlay), var(--ns-bg) 44%, var(--ns-bg) 100%),
+        var(--ns-bg-image) center top / cover fixed;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      background:
+        linear-gradient(90deg, oklch(82% 0.18 195 / 0.16) 1px, transparent 1px),
+        linear-gradient(180deg, oklch(72% 0.24 326 / 0.12) 1px, transparent 1px),
+        radial-gradient(circle at 50% 18%, oklch(82% 0.18 195 / 0.16), transparent 30%);
+      background-size: 64px 64px, 64px 64px, 100% 100%;
+      mask-image: linear-gradient(to bottom, black 0%, transparent 76%);
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      background:
+        linear-gradient(115deg, transparent 0 18%, oklch(82% 0.18 195 / 0.16) 18% 18.4%, transparent 18.4% 42%, oklch(72% 0.24 326 / 0.15) 42% 42.35%, transparent 42.35%),
+        repeating-linear-gradient(180deg, oklch(100% 0 0 / 0.035) 0 1px, transparent 1px 5px);
+      mix-blend-mode: screen;
+    }
+
+    .holo-field {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      background:
+        conic-gradient(from 70deg at 76% 20%, transparent 0 18%, oklch(82% 0.18 195 / 0.12) 19%, transparent 23% 55%, oklch(72% 0.24 326 / 0.12) 56%, transparent 62%),
+        linear-gradient(150deg, transparent 0 44%, oklch(82% 0.18 195 / 0.1) 44.2% 44.55%, transparent 44.7%),
+        linear-gradient(28deg, transparent 0 60%, oklch(72% 0.24 326 / 0.12) 60.2% 60.5%, transparent 60.7%);
+      mix-blend-mode: screen;
+      opacity: 0.95;
+    }
+
+    [data-theme="light"] .holo-field {
+      background:
+        conic-gradient(from 70deg at 76% 20%, transparent 0 18%, oklch(72% 0.22 178 / 0.18) 19%, transparent 23% 55%, oklch(70% 0.22 326 / 0.13) 56%, transparent 62%),
+        linear-gradient(150deg, transparent 0 44%, oklch(67% 0.23 151 / 0.14) 44.2% 44.55%, transparent 44.7%),
+        linear-gradient(28deg, transparent 0 60%, oklch(70% 0.22 326 / 0.13) 60.2% 60.5%, transparent 60.7%);
+      opacity: 0.9;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    button, input, select { font: inherit; }
+
+    .shell {
+      width: min(1280px, calc(100% - (var(--site-gutter) * 2)));
+      margin: 0 auto;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 16px;
+      top: -80px;
+      z-index: 20;
+      padding: 12px 16px;
+      border-radius: 999px;
+      color: var(--ns-bg);
+      background: var(--ns-accent);
+    }
+
+    .skip-link:focus { top: 16px; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid color-mix(in oklch, var(--ns-border), transparent 42%);
+      background: color-mix(in oklch, var(--ns-surface-strong), transparent 4%);
+      box-shadow: 0 14px 52px oklch(10% 0.045 282 / 0.32);
+      backdrop-filter: blur(26px) saturate(180%);
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 78px;
+      gap: 18px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      box-shadow: var(--ns-shadow-riot);
+    }
+
+    .brand-wordmark {
+      width: min(190px, 46vw);
+      height: auto;
+      filter: drop-shadow(0 0 16px oklch(82% 0.18 195 / 0.38));
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px;
+      border: 1px solid color-mix(in oklch, var(--ns-border), transparent 48%);
+      border-radius: 999px;
+      background: var(--ns-glass);
+    }
+
+    .nav-links a {
+      padding: 9px 12px;
+      border-radius: 999px;
+      color: var(--ns-muted);
+      font-size: 0.86rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .nav-links a:hover,
+    .nav-links a:focus-visible {
+      color: var(--ns-fg);
+      background: color-mix(in oklch, var(--ns-accent), transparent 86%);
+      outline: none;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      min-height: 48px;
+      border: 1px solid var(--ns-border);
+      border-radius: 18px 6px 18px 10px;
+      padding: 12px 18px;
+      cursor: pointer;
+      color: var(--ns-fg);
+      background: linear-gradient(135deg, oklch(100% 0 0 / 0.09), oklch(100% 0 0 / 0.02));
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+
+    .btn:hover,
+    .btn:focus-visible {
+      transform: translateY(-2px);
+      border-color: var(--ns-accent);
+      outline: none;
+      box-shadow: var(--ns-shadow-cyan);
+    }
+
+    .btn-primary {
+      color: oklch(10% 0.04 282);
+      background:
+        linear-gradient(135deg, color-mix(in oklch, var(--ns-accent-2), white 14%), var(--ns-accent-2));
+      border-color: color-mix(in oklch, var(--ns-accent-2), white 10%);
+      box-shadow: 0 0 18px oklch(72% 0.24 326 / 0.62), 0 0 58px oklch(72% 0.24 326 / 0.28), inset 0 0 18px oklch(100% 0 0 / 0.22);
+    }
+
+    .btn-ghost {
+      color: var(--ns-accent);
+      border-color: color-mix(in oklch, var(--ns-accent), transparent 30%);
+      background: color-mix(in oklch, var(--ns-surface-strong), transparent 18%);
+      box-shadow: var(--ns-shadow-cyan);
+    }
+
+    .icon-btn {
+      width: 48px;
+      padding: 0;
+      display: inline-grid;
+      place-items: center;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(52px, 8vw, 110px) 0 76px;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -12vw;
+      top: 12%;
+      width: min(720px, 58vw);
+      height: min(720px, 58vw);
+      border: 1px solid oklch(82% 0.18 195 / 0.26);
+      border-radius: 50%;
+      background: radial-gradient(circle, oklch(82% 0.18 195 / 0.13), transparent 58%);
+      filter: blur(2px);
+      opacity: 0.72;
+      pointer-events: none;
+    }
+
+    .hero-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.78fr);
+      gap: clamp(28px, 5vw, 64px);
+      align-items: center;
+    }
+
+    .eyebrow,
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 30px;
+      border: 1px solid color-mix(in oklch, var(--ns-border), transparent 42%);
+      border-radius: 999px;
+      padding: 6px 11px;
+      color: var(--ns-accent);
+      background: color-mix(in oklch, var(--ns-surface-strong), transparent 24%);
+      font-family: var(--ns-font-mono);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .punk-mark {
+      display: inline-flex;
+      align-items: center;
+      margin-top: 14px;
+      padding: 8px 13px;
+      color: oklch(10% 0.045 282);
+      background: var(--ns-accent-2);
+      box-shadow: var(--ns-shadow-pink);
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 6px 100%, 0 calc(100% - 8px));
+      font-family: var(--ns-font-mono);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .punk-mark::before {
+      content: "///";
+      margin-right: 9px;
+      color: var(--ns-bg);
+      opacity: 0.72;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      font-family: var(--ns-font-display);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      position: relative;
+      max-width: 900px;
+      margin-top: 18px;
+      font-size: clamp(3.25rem, 9vw, 8.2rem);
+      background: linear-gradient(110deg, var(--ns-fg) 0%, var(--ns-accent) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 28px oklch(82% 0.18 195 / 0.34));
+    }
+
+    .punk-sigil {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .punk-sigil .chip {
+      border-color: color-mix(in oklch, var(--ns-accent-2), transparent 32%);
+      color: var(--ns-accent-2);
+      background: color-mix(in oklch, var(--ns-surface-strong), transparent 10%);
+      box-shadow: var(--ns-shadow-pink);
+    }
+
+    .punk-sigil .chip:last-child {
+      color: var(--ns-accent);
+      border-color: color-mix(in oklch, var(--ns-accent), transparent 34%);
+      box-shadow: var(--ns-shadow-cyan);
+    }
+
+    h2 {
+      font-size: clamp(2.25rem, 5vw, 4.9rem);
+    }
+
+    h3 {
+      font-size: clamp(1.2rem, 2.6vw, 1.7rem);
+    }
+
+    .lead {
+      max-width: 760px;
+      margin: 22px 0 0;
+      color: color-mix(in oklch, var(--ns-fg), var(--ns-muted) 38%);
+      font-size: clamp(1.15rem, 2.2vw, 1.42rem);
+      font-family: var(--ns-font-body);
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 30px;
+    }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 34px;
+      max-width: 780px;
+    }
+
+    .status-tile {
+      position: relative;
+      overflow: hidden;
+      min-height: 112px;
+      padding: 18px;
+      border: 1px solid color-mix(in oklch, var(--ns-border), transparent 28%);
+      border-radius: 26px 10px 30px 14px;
+      background:
+        linear-gradient(135deg, oklch(100% 0 0 / 0.13), oklch(100% 0 0 / 0.04)),
+        color-mix(in oklch, var(--ns-surface), transparent 4%);
+      box-shadow: inset 0 0 28px oklch(82% 0.18 195 / 0.1), 0 16px 44px oklch(10% 0.045 282 / 0.28);
+      backdrop-filter: blur(24px) saturate(170%);
+    }
+
+    .status-tile::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, oklch(82% 0.18 195 / 0.18), transparent);
+      transform: translateX(-100%);
+      transition: transform 500ms ease;
+    }
+
+    .status-tile::after,
+    .module::after,
+    .punk-sticker::after,
+    .flow-item::after {
+      content: "";
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      width: 34px;
+      height: 20px;
+      pointer-events: none;
+      border-top: 2px solid color-mix(in oklch, var(--ns-accent), transparent 8%);
+      border-right: 2px solid color-mix(in oklch, var(--ns-accent), transparent 8%);
+      filter: drop-shadow(0 0 8px oklch(82% 0.18 195 / 0.42));
+      opacity: 0.8;
+    }
+
+    .status-tile:hover::before {
+      transform: translateX(100%);
+    }
+
+    .status-tile strong {
+      display: block;
+      font-family: var(--ns-font-mono);
+      color: var(--ns-accent);
+      font-size: clamp(1.35rem, 3vw, 2rem);
+      line-height: 1;
+    }
+
+    .status-tile span {
+      display: block;
+      margin-top: 8px;
+      color: var(--ns-muted);
+      font-weight: 750;
+    }
+
+    .hud-card {
+      position: relative;
+      overflow: visible;
+      border: 1px solid color-mix(in oklch, var(--ns-border), white 8%);
+      border-radius: 34px 10px 38px 16px;
+      background:
+        linear-gradient(145deg, oklch(100% 0 0 / 0.17), oklch(82% 0.18 195 / 0.08) 42%, oklch(72% 0.24 326 / 0.1)),
+        color-mix(in oklch, var(--ns-surface-strong), transparent 5%);
+      box-shadow: var(--ns-shadow-riot), inset 0 0 48px oklch(82% 0.18 195 / 0.1);
+      backdrop-filter: blur(28px) saturate(185%);
+    }
+
+    .hud-card::before {
+      content: "";
+      position: absolute;
+      inset: 9px;
+      pointer-events: none;
+      border: 1px solid color-mix(in oklch, var(--ns-accent), transparent 54%);
+      border-radius: inherit;
+    }
+
+    .hud-card::after,
+    .module::before,
+    .punk-sticker::before,
+    .quote-band::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        repeating-linear-gradient(180deg, oklch(100% 0 0 / 0.055) 0 1px, transparent 1px 7px),
+        linear-gradient(115deg, transparent 0 35%, oklch(82% 0.18 195 / 0.16) 35.2% 35.6%, transparent 36%);
+      mix-blend-mode: screen;
+      opacity: 0.64;
+      border-radius: inherit;
+    }
+
+    .kitchen {
+      position: relative;
+      padding: 24px;
+    }
+
+    .kitchen-head {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 150px;
+      padding-right: clamp(126px, 13vw, 190px);
+      padding-bottom: 18px;
+      border-bottom: 1px solid color-mix(in oklch, var(--ns-border), transparent 54%);
+    }
+
+    .kitchen-head p,
+    .module p {
+      margin: 6px 0 0;
+      color: var(--ns-muted);
+      font-weight: 700;
+    }
+
+    .neko {
+      width: 112px;
+      height: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 0 18px oklch(72% 0.24 326 / 0.28));
+    }
+
+    .route-icon-breakout {
+      position: absolute;
+      right: clamp(-42px, -3vw, -18px);
+      top: clamp(-30px, -2vw, -10px);
+      z-index: 4;
+      width: min(236px, 22vw);
+      max-width: none;
+      height: auto;
+      object-fit: contain;
+      filter:
+        drop-shadow(0 16px 26px oklch(7% 0.04 282 / 0.34))
+        drop-shadow(0 0 26px oklch(82% 0.18 195 / 0.36))
+        drop-shadow(0 0 34px oklch(72% 0.24 326 / 0.26));
+      pointer-events: none;
+      transform: rotate(7deg);
+    }
+
+    .neko-squad {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      max-width: 520px;
+      margin-top: 24px;
+    }
+
+    .neko-signal {
+      position: relative;
+      overflow: visible;
+      display: grid;
+      grid-template-columns: 96px 1fr;
+      gap: 12px;
+      align-items: center;
+      min-height: 132px;
+      padding: 12px 14px 12px 8px;
+      border: 1px solid color-mix(in oklch, var(--ns-border), transparent 36%);
+      border-radius: 24px 8px 28px 12px;
+      background:
+        linear-gradient(135deg, oklch(100% 0 0 / 0.14), oklch(100% 0 0 / 0.04)),
+        color-mix(in oklch, var(--ns-surface-strong), transparent 8%);
+      box-shadow: inset 0 0 34px oklch(82% 0.18 195 / 0.12), 0 18px 54px oklch(72% 0.24 326 / 0.14);
+      backdrop-filter: blur(20px) saturate(180%);
+    }
+
+    .neko-signal img {
+      width: 150px;
+      height: auto;
+      object-fit: contain;
+      margin-left: -44px;
+      margin-top: -28px;
+      margin-bottom: -22px;
+      filter: drop-shadow(0 0 20px oklch(82% 0.18 195 / 0.35));
+    }
+
+    .neko-signal strong {
+      display: block;
+      font-family: var(--ns-font-display);
+      font-size: 0.92rem;
+      line-height: 1.05;
+      text-transform: uppercase;
+    }
+
+    .neko-signal span {
+      display: block;
+      margin-top: 5px;
+      color: var(--ns-muted);
+      font-family: var(--ns-font-mono);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .field-grid {
+      display: grid;
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      color: var(--ns-muted);
+      font-family: var(--ns-font-mono);
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    input,
+    select {
+      min-height: 54px;
+      width: 100%;
+      border: 1px solid var(--ns-border);
+      border-radius: 16px;
+      padding: 12px 14px;
+      color: var(--ns-fg);
+      background: oklch(100% 0 0 / 0.08);
+      font-weight: 800;
+    }
+
+    input:focus,
+    select:focus {
+      outline: 2px solid color-mix(in oklch, var(--ns-accent), transparent 30%);
+      outline-offset: 2px;
+    }
+
+    .native-select {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .cyber-select {
+      position: relative;
+      z-index: 8;
+    }
+
+    .cyber-select.is-open {
+      z-index: 30;
+    }
+
+    .cyber-select-trigger {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      min-height: 56px;
+      width: 100%;
+      border: 1px solid color-mix(in oklch, var(--ns-accent), transparent 6%);
+      border-radius: 22px 8px 22px 10px;
+      padding: 13px 16px;
+      color: var(--ns-fg);
+      background:
+        repeating-linear-gradient(180deg, oklch(100% 0 0 / 0.05) 0 1px, transparent 1px 6px),
+        linear-gradient(135deg, oklch(82% 0.18 195 / 0.16), oklch(72% 0.24 326 / 0.1)),
+        color-mix(in oklch, var(--ns-surface-strong), transparent 4%);
+      box-shadow: inset 0 0 26px oklch(82% 0.18 195 / 0.14), 0 0 22px oklch(82% 0.18 195 / 0.18);
+      font-family: var(--ns-font-mono);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .cyber-select-trigger::after {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-right: 2px solid var(--ns-accent);
+      border-bottom: 2px solid var(--ns-accent);
+      transform: rotate(45deg) translateY(-3px);
+      filter: drop-shadow(0 0 6px oklch(82% 0.18 195 / 0.6));
+      transition: transform 160ms ease;
+    }
+
+    .cyber-select.is-open .cyber-select-trigger::after {
+      transform: rotate(225deg) translate(-2px, -1px);
+    }
+
+    .cyber-options {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 8px);
+      display: grid;
+      gap: 4px;
+      padding: 8px;
+      border: 1px solid color-mix(in oklch, var(--ns-accent-2), transparent 10%);
+      border-radius: 22px 8px 24px 12px;
+      background:
+        repeating-linear-gradient(180deg, oklch(100% 0 0 / 0.055) 0 1px, transparent 1px 6px),
+        linear-gradient(145deg, color-mix(in oklch, var(--ns-bg), var(--ns-accent) 12%), color-mix(in oklch, var(--ns-bg), var(--ns-accent-2) 16%));
+      box-shadow: var(--ns-shadow-riot), inset 0 0 26px oklch(82% 0.18 195 / 0.12);
+      backdrop-filter: blur(24px) saturate(180%);
+      opacity: 0;
+      transform: translateY(-6px);
+      pointer-events: none;
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .cyber-select.is-open .cyber-options {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .cyber-option {
+      min-height: 40px;
+      border: 0;
+      border-radius: 14px 6px 14px 8px;
+      padding: 10px 12px;
+      color: var(--ns-muted);
+      background: transparent;
+      font-family: var(--ns-font-mono);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .cyber-option:hover,
+    .cyber-option:focus-visible,
+    .cyber-option[aria-selected="true"] {
+      color: oklch(9% 0.04 282);
+      outline: none;
+      background: linear-gradient(135deg, var(--ns-accent), color-mix(in oklch, var(--ns-accent-2), white 8%));
+      box-shadow: 0 0 18px oklch(82% 0.18 195 / 0.34);
+    }
+
+    .route-output {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: end;
+      margin: 18px 0;
+      padding: 16px;
+      border: 1px solid color-mix(in oklch, var(--ns-success), transparent 52%);
+      border-radius: 22px;
+      background: color-mix(in oklch, var(--ns-success), transparent 90%);
+    }
+
+    .route-output strong {
+      display: block;
+      font-family: var(--ns-font-mono);
+      font-size: clamp(1.55rem, 3vw, 2.35rem);
+      line-height: 1;
+      color: var(--ns-success);
+    }
+
+    .meter {
+      overflow: hidden;
+      height: 14px;
+      border: 1px solid color-mix(in oklch, var(--ns-border), transparent 38%);
+      border-radius: 999px;
+      background: oklch(100% 0 0 / 0.08);
+    }
+
+    .meter span {
+      display: block;
+      height: 100%;
+      width: 68%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--ns-accent), var(--ns-accent-2));
+      box-shadow: var(--ns-shadow-cyan);
+      transition: width 220ms ease;
+    }
+
+    .route-id {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 18px;
+      padding: 12px 14px;
+      border: 1px solid color-mix(in oklch, var(--ns-border), transparent 50%);
+      border-radius: 18px;
+      background: oklch(100% 0 0 / 0.06);
+      font-family: var(--ns-font-mono);
+      font-size: 0.8rem;
+      color: var(--ns-muted);
+      word-break: break-word;
+    }
+
+    .copy-btn {
+      flex: 0 0 auto;
+      min-height: 36px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 0.72rem;
+    }
+
+    section {
+      padding: clamp(58px, 8vw, 104px) 0;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 28px;
+      align-items: end;
+      margin-bottom: 28px;
+    }
+
+    .section-head p {
+      max-width: 520px;
+      margin: 0;
+      color: var(--ns-muted);
+      font-size: 1.12rem;
+      font-weight: 700;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      position: relative;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      position: relative;
+    }
+
+    .module {
+      position: relative;
+      z-index: 1;
+      overflow: visible;
+      min-height: 230px;
+      padding: 24px;
+      border: 1px solid color-mix(in oklch, var(--ns-border), transparent 32%);
+      border-radius: 30px 9px 36px 14px;
+      background:
+        radial-gradient(circle at 84% 18%, oklch(72% 0.24 326 / 0.18), transparent 32%),
+        linear-gradient(145deg, oklch(100% 0 0 / 0.13), oklch(100% 0 0 / 0.035)),
+        color-mix(in oklch, var(--ns-surface-strong), transparent 6%);
+      box-shadow: inset 0 0 38px oklch(82% 0.18 195 / 0.1), 0 20px 58px oklch(10% 0.045 282 / 0.24);
+      backdrop-filter: blur(24px) saturate(170%);
+    }
+
+    .module > * {
+      position: relative;
+      z-index: 2;
+    }
+
+    .module h3 {
+      margin-top: 18px;
+      max-width: 72%;
+    }
+
+    .module p {
+      max-width: 78%;
+    }
+
+    .module .chip {
+      color: var(--ns-fg);
+      background: color-mix(in oklch, var(--ns-accent), transparent 86%);
+    }
+
+    .module.rebel {
+      border-color: color-mix(in oklch, var(--ns-accent-2), transparent 24%);
+      background:
+        radial-gradient(circle at 85% 20%, oklch(72% 0.24 326 / 0.24), transparent 32%),
+        linear-gradient(145deg, oklch(100% 0 0 / 0.14), oklch(100% 0 0 / 0.04)),
+        color-mix(in oklch, var(--ns-surface-strong), transparent 5%);
+    }
+
+    .grid-3 .module.rebel:nth-child(1) {
+      z-index: 30;
+    }
+
+    .grid-3 .module.rebel:nth-child(2) {
+      z-index: 20;
+    }
+
+    .grid-3 .module.rebel:nth-child(3) {
+      z-index: 10;
+    }
+
+    .module-neko,
+    .module-kitchen {
+      position: absolute;
+      height: auto;
+      object-fit: contain;
+      opacity: 0.9;
+      filter: drop-shadow(0 0 22px oklch(72% 0.24 326 / 0.38));
+      pointer-events: none;
+      z-index: 40;
+    }
+
+    .module-neko {
+      right: -96px;
+      bottom: -58px;
+      width: min(286px, 70%);
+    }
+
+    .module-kitchen {
+      right: -40px;
+      bottom: -34px;
+      width: min(176px, 48%);
+    }
+
+    .module.rebel:nth-child(1) .module-neko,
+    .module.rebel:nth-child(1) .module-kitchen {
+      z-index: 46;
+    }
+
+    .module.rebel:nth-child(2) .module-neko,
+    .module.rebel:nth-child(2) .module-kitchen {
+      z-index: 45;
+    }
+
+    .module.rebel:nth-child(3) .module-neko,
+    .module.rebel:nth-child(3) .module-kitchen {
+      z-index: 44;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: 0.78fr 1.22fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .architecture-art {
+      min-height: 560px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background:
+        radial-gradient(circle at 50% 60%, oklch(82% 0.18 195 / 0.24), transparent 40%),
+        color-mix(in oklch, var(--ns-surface-strong), transparent 6%);
+    }
+
+    .architecture-art img {
+      width: min(360px, 88%);
+      height: auto;
+      object-fit: contain;
+      align-self: center;
+      filter: drop-shadow(0 0 32px oklch(82% 0.18 195 / 0.34));
+    }
+
+    .flow-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .flow-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 16px;
+      align-items: start;
+      min-height: 118px;
+      padding: 18px;
+      border: 1px solid color-mix(in oklch, var(--ns-border), transparent 50%);
+      border-radius: 24px 8px 24px 12px;
+      background: color-mix(in oklch, var(--ns-surface), transparent 14%);
+    }
+
+    .manifesto {
+      padding-top: 0;
+    }
+
+    .manifesto-band {
+      position: relative;
+      overflow: visible;
+      border: 1px solid color-mix(in oklch, var(--ns-accent-2), transparent 24%);
+      border-radius: 36px 10px 42px 16px;
+      padding: clamp(24px, 5vw, 46px);
+      background:
+        radial-gradient(circle at 20% 16%, oklch(72% 0.24 326 / 0.24), transparent 28%),
+        radial-gradient(circle at 84% 66%, oklch(82% 0.18 195 / 0.18), transparent 30%),
+        color-mix(in oklch, var(--ns-surface-strong), transparent 6%);
+      box-shadow: var(--ns-shadow-riot), inset 0 0 64px oklch(72% 0.24 326 / 0.12);
+      backdrop-filter: blur(26px) saturate(190%);
+    }
+
+    .manifesto-head {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 22px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    .manifesto-head p {
+      max-width: 610px;
+      margin: 14px 0 0;
+      color: var(--ns-muted);
+      font-weight: 750;
+    }
+
+    .manifesto-neko {
+      width: min(280px, 28vw);
+      height: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 0 34px oklch(72% 0.24 326 / 0.45));
+      margin-right: -46px;
+      margin-top: -38px;
+    }
+
+    .sticker-wall {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .punk-sticker {
+      position: relative;
+      overflow: hidden;
+      min-height: 142px;
+      padding: 18px;
+      border: 1px solid color-mix(in oklch, var(--ns-border), transparent 28%);
+      border-radius: 26px 6px 28px 12px;
+      background:
+        linear-gradient(145deg, oklch(100% 0 0 / 0.14), oklch(100% 0 0 / 0.04)),
+        color-mix(in oklch, var(--ns-bg), transparent 24%);
+      box-shadow: inset 0 0 32px oklch(82% 0.18 195 / 0.1);
+    }
+
+    .punk-sticker strong {
+      display: block;
+      font-family: var(--ns-font-display);
+      font-size: 1.05rem;
+      line-height: 1.05;
+      text-transform: uppercase;
+    }
+
+    .punk-sticker span {
+      display: block;
+      margin-top: 10px;
+      color: var(--ns-muted);
+      font-weight: 750;
+    }
+
+    .punk-sticker b {
+      display: inline-flex;
+      margin-bottom: 12px;
+      color: var(--ns-accent-2);
+      font-family: var(--ns-font-mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    .step {
+      display: inline-grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 15px;
+      color: oklch(9% 0.04 282);
+      background: var(--ns-accent);
+      box-shadow: var(--ns-shadow-cyan);
+      font-family: var(--ns-font-mono);
+      font-weight: 900;
+    }
+
+    .flow-item h3 {
+      margin-bottom: 6px;
+      font-size: 1.15rem;
+    }
+
+    .flow-item p {
+      margin: 0;
+      color: var(--ns-muted);
+      font-weight: 700;
+    }
+
+    .quote-band {
+      position: relative;
+      overflow: visible;
+      border: 1px solid var(--ns-border);
+      border-radius: 36px 10px 40px 16px;
+      padding: clamp(28px, 6vw, 58px);
+      background:
+        radial-gradient(circle at 85% 55%, oklch(82% 0.18 195 / 0.28), transparent 28%),
+        linear-gradient(135deg, color-mix(in oklch, var(--ns-accent), transparent 72%), color-mix(in oklch, var(--ns-accent-2), transparent 76%)),
+        color-mix(in oklch, var(--ns-surface-strong), transparent 6%);
+      box-shadow: var(--ns-shadow-riot);
+    }
+
+    .quote-neko {
+      position: absolute;
+      right: clamp(-18px, 2vw, 28px);
+      bottom: -58px;
+      width: min(330px, 32vw);
+      height: auto;
+      object-fit: contain;
+      opacity: 0.94;
+      filter: drop-shadow(0 0 34px oklch(82% 0.18 195 / 0.34));
+    }
+
+    .quote-band blockquote {
+      margin: 0;
+      max-width: min(900px, calc(100% - 230px));
+      font-family: var(--ns-font-display);
+      font-size: clamp(2.2rem, 5.2vw, 5.4rem);
+      line-height: 1.05;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .quote-band p {
+      max-width: min(670px, calc(100% - 240px));
+      margin: 22px 0 0;
+      color: var(--ns-muted);
+      font-size: 1.16rem;
+      font-weight: 720;
+    }
+
+    .icon-quote-section {
+      padding-top: clamp(38px, 6vw, 78px);
+      padding-bottom: clamp(34px, 6vw, 74px);
+    }
+
+    .icon-quote {
+      position: relative;
+      overflow: visible;
+      min-height: 330px;
+      display: block;
+      border: 1px solid color-mix(in oklch, var(--ns-accent-2), transparent 20%);
+      border-radius: 42px 12px 46px 18px;
+      padding: clamp(34px, 6vw, 76px) clamp(250px, 24vw, 380px) clamp(34px, 6vw, 76px) clamp(28px, 6vw, 70px);
+      background:
+        repeating-linear-gradient(180deg, oklch(100% 0 0 / 0.055) 0 1px, transparent 1px 7px),
+        radial-gradient(circle at 18% 50%, oklch(72% 0.24 326 / 0.24), transparent 30%),
+        radial-gradient(circle at 74% 30%, oklch(82% 0.18 195 / 0.2), transparent 36%),
+        color-mix(in oklch, var(--ns-surface-strong), transparent 4%);
+      box-shadow: var(--ns-shadow-riot), inset 0 0 68px oklch(82% 0.18 195 / 0.12);
+      backdrop-filter: blur(28px) saturate(190%);
+    }
+
+    .icon-quote::after {
+      content: "";
+      position: absolute;
+      right: 18px;
+      top: 18px;
+      width: 74px;
+      height: 36px;
+      border-top: 2px solid var(--ns-accent);
+      border-right: 2px solid var(--ns-accent);
+      filter: drop-shadow(0 0 10px oklch(82% 0.18 195 / 0.5));
+    }
+
+    .icon-quote-kitchen {
+      position: absolute;
+      right: clamp(-168px, -8vw, -80px);
+      bottom: clamp(-74px, -4vw, -36px);
+      z-index: 2;
+      width: min(460px, 36vw);
+      max-width: none;
+      height: auto;
+      object-fit: contain;
+      opacity: 0.92;
+      filter: drop-shadow(0 0 32px oklch(72% 0.24 326 / 0.45)) drop-shadow(0 0 18px oklch(82% 0.18 195 / 0.35));
+      pointer-events: none;
+      transform: rotate(4deg);
+    }
+
+    .icon-quote-copy {
+      position: relative;
+      z-index: 4;
+      max-width: min(1080px, 100%);
+    }
+
+    .icon-quote blockquote {
+      margin: 16px 0 0;
+      max-width: 100%;
+      font-family: var(--ns-font-display);
+      font-size: clamp(2.2rem, 5.2vw, 5.8rem);
+      line-height: 0.98;
+      letter-spacing: -0.05em;
+      text-transform: uppercase;
+    }
+
+    .icon-quote p {
+      max-width: 100%;
+      margin: 20px 0 0;
+      color: var(--ns-muted);
+      font-size: clamp(1.08rem, 2vw, 1.34rem);
+      font-weight: 750;
+    }
+
+    .p2p_soup_fluid-section {
+      --p2p-progress: 0;
+      --p2p-local: 0;
+      --p2p-dir: 1;
+      --p2p-source-rotate: -28deg;
+      --p2p-receiver-rotate: 14deg;
+      position: relative;
+      min-height: 230vh;
+      margin-block: clamp(10px, 4vw, 48px);
+      overflow: visible;
+      z-index: 7;
+    }
+
+    .p2p_soup_fluid-sticky {
+      position: sticky;
+      top: clamp(66px, 11vh, 108px);
+      min-height: min(780px, 78vh);
+      display: grid;
+      align-items: center;
+      padding-block: clamp(22px, 4vw, 46px);
+    }
+
+    .p2p_soup_fluid-card {
+      position: relative;
+      overflow: visible;
+      border: 1px solid color-mix(in oklch, var(--ns-accent), transparent 28%);
+      border-radius: 44px 12px 48px 16px;
+      padding: clamp(20px, 4vw, 40px);
+      background:
+        repeating-linear-gradient(180deg, oklch(100% 0 0 / 0.052) 0 1px, transparent 1px 7px),
+        linear-gradient(135deg, color-mix(in oklch, var(--ns-surface-strong), transparent 4%), color-mix(in oklch, var(--ns-bg), transparent 8%));
+      box-shadow: var(--ns-shadow-riot), inset 0 0 70px oklch(82% 0.18 195 / 0.1);
+      backdrop-filter: blur(26px) saturate(180%);
+    }
+
+    .p2p_soup_fluid-copy {
+      position: relative;
+      z-index: 6;
+      max-width: 720px;
+      margin-bottom: clamp(18px, 3vw, 30px);
+      pointer-events: none;
+    }
+
+    .p2p_soup_fluid-copy h2 {
+      margin: 14px 0 0;
+      max-width: 13ch;
+      font-family: var(--ns-font-display);
+      font-size: clamp(2rem, 5.2vw, 5rem);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+      text-transform: uppercase;
+    }
+
+    .p2p_soup_fluid-copy p {
+      max-width: 620px;
+      margin: 18px 0 0;
+      color: var(--ns-muted);
+      font-size: clamp(1.02rem, 1.8vw, 1.24rem);
+      font-weight: 750;
+    }
+
+    .p2p_soup_fluid-progress {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+      color: var(--ns-accent);
+      font-family: var(--ns-font-mono);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .p2p_soup_fluid-progress::before {
+      content: "";
+      width: min(220px, 42vw);
+      height: 7px;
+      border: 1px solid color-mix(in oklch, var(--ns-accent), transparent 20%);
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, var(--ns-accent), var(--ns-accent-2), var(--ns-violet)) 0 0 / var(--p2p-progress-percent, 0%) 100% no-repeat,
+        color-mix(in oklch, var(--ns-bg), white 3%);
+      box-shadow: inset 0 0 16px oklch(82% 0.18 195 / 0.22);
+    }
+
+    .p2p_soup_fluid-stage {
+      position: relative;
+      z-index: 3;
+      min-height: clamp(360px, 46vw, 560px);
+      overflow: visible;
+      transform: translateZ(0);
+    }
+
+    .p2p_soup_fluid-stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 12% 49%, oklch(82% 0.18 195 / 0.3), transparent 20%),
+        radial-gradient(circle at 88% 49%, oklch(72% 0.24 326 / 0.28), transparent 20%);
+      filter: blur(2px);
+    }
+
+    .p2p_soup_fluid-ribbon {
+      position: absolute;
+      inset: 7% 7% 5%;
+      z-index: 4;
+      width: 86%;
+      height: 82%;
+      overflow: visible;
+      pointer-events: none;
+      filter: drop-shadow(0 0 20px oklch(82% 0.18 195 / 0.38)) drop-shadow(0 0 36px oklch(72% 0.24 326 / 0.28));
+      transform: scaleX(var(--p2p-dir));
+      transform-origin: 50% 50%;
+    }
+
+    .p2p_soup_fluid-stream-main,
+    .p2p_soup_fluid-stream-hot,
+    .p2p_soup_fluid-stream-cool {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: var(--p2p-main-array, 0 900);
+      stroke-dashoffset: var(--p2p-main-dash, 900);
+    }
+
+    .p2p_soup_fluid-stream-main {
+      stroke: url("#p2p_soup_fluid_grad_main");
+      stroke-width: 82;
+      opacity: var(--p2p-main-opacity, 0.08);
+    }
+
+    .p2p_soup_fluid-stream-hot {
+      stroke: url("#p2p_soup_fluid_grad_hot");
+      stroke-width: 28;
+      stroke-dasharray: var(--p2p-hot-array, 0 680);
+      stroke-dashoffset: var(--p2p-hot-dash, 680);
+      opacity: var(--p2p-hot-opacity, 0.04);
+      transform: translateY(-18px);
+    }
+
+    .p2p_soup_fluid-stream-cool {
+      stroke: url("#p2p_soup_fluid_grad_cool");
+      stroke-width: 34;
+      stroke-dasharray: var(--p2p-cool-array, 0 740);
+      stroke-dashoffset: var(--p2p-cool-dash, 740);
+      opacity: var(--p2p-cool-opacity, 0.04);
+      transform: translateY(24px);
+    }
+
+    .p2p_soup_fluid-pot {
+      position: absolute;
+      top: 49%;
+      z-index: 3;
+      width: clamp(138px, 18vw, 250px);
+      aspect-ratio: 1 / 1;
+      transform-origin: 50% 76%;
+      pointer-events: none;
+      filter: drop-shadow(0 18px 32px oklch(7% 0.04 282 / 0.44)) drop-shadow(0 0 28px oklch(82% 0.18 195 / 0.28));
+    }
+
+    .p2p_soup_fluid-pot-source {
+      left: clamp(-28px, 2vw, 32px);
+      transform: translateY(-50%) rotate(var(--p2p-source-rotate));
+    }
+
+    .p2p_soup_fluid-pot-receiver {
+      right: clamp(-28px, 2vw, 32px);
+      transform: translateY(-50%) rotate(var(--p2p-receiver-rotate));
+    }
+
+    .p2p_soup_fluid-pot-layers {
+      position: absolute;
+      inset: 0;
+      transform-origin: center;
+    }
+
+    .p2p_soup_fluid-pot-source .p2p_soup_fluid-pot-layers {
+      transform: scaleX(-1);
+    }
+
+    .p2p_soup_fluid-pot-bg,
+    .p2p_soup_fluid-pot-fg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      object-fit: contain;
+      user-select: none;
+    }
+
+    .p2p_soup_fluid-pot-bg {
+      z-index: 1;
+    }
+
+    .p2p_soup_fluid-pot-fg {
+      display: none;
+    }
+
+    .p2p_soup_fluid-pot-front {
+      position: absolute;
+      top: 49%;
+      z-index: 6;
+      width: clamp(138px, 18vw, 250px);
+      aspect-ratio: 1 / 1;
+      transform-origin: 50% 76%;
+      pointer-events: none;
+      filter: drop-shadow(0 18px 32px oklch(7% 0.04 282 / 0.44)) drop-shadow(0 0 28px oklch(82% 0.18 195 / 0.28));
+    }
+
+    .p2p_soup_fluid-pot-front-source {
+      left: clamp(-28px, 2vw, 32px);
+      transform: translateY(-50%) rotate(var(--p2p-source-rotate));
+    }
+
+    .p2p_soup_fluid-pot-front-receiver {
+      right: clamp(-28px, 2vw, 32px);
+      transform: translateY(-50%) rotate(var(--p2p-receiver-rotate));
+    }
+
+    .p2p_soup_fluid-pot-front-source .p2p_soup_fluid-pot-front-img {
+      transform: scaleX(-1);
+    }
+
+    .p2p_soup_fluid-pot-front-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      object-fit: contain;
+      user-select: none;
+    }
+
+    .p2p_soup_fluid-pot-glow {
+      position: absolute;
+      inset: 18% 18% 10%;
+      z-index: 2;
+      border-radius: 999px;
+      background: radial-gradient(circle, oklch(82% 0.18 195 / 0.38), oklch(72% 0.24 326 / 0.2) 42%, transparent 72%);
+      opacity: var(--p2p-pot-glow, 0.2);
+      filter: blur(10px);
+    }
+
+    .p2p_soup_fluid-pot-mouth {
+      position: absolute;
+      left: 18%;
+      top: 23%;
+      z-index: 3;
+      width: 64%;
+      height: 30%;
+      border-radius: 50%;
+      background:
+        radial-gradient(ellipse at 52% 42%, oklch(100% 0 0 / 0.58), transparent 18%),
+        linear-gradient(115deg, var(--ns-accent), var(--ns-accent-2) 52%, var(--ns-violet));
+      opacity: var(--p2p-mouth-opacity, 0);
+      filter: blur(0.4px) drop-shadow(0 0 22px oklch(82% 0.18 195 / 0.42));
+      transform: rotate(-8deg) scaleX(1.1);
+      mix-blend-mode: screen;
+    }
+
+    .p2p_soup_fluid-pot-source .p2p_soup_fluid-pot-mouth {
+      opacity: var(--p2p-source-mouth, 0);
+    }
+
+    .p2p_soup_fluid-pot-receiver .p2p_soup_fluid-pot-mouth {
+      opacity: var(--p2p-receiver-mouth, 0);
+    }
+
+    .p2p_soup_fluid-payload-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .p2p_soup_fluid-payload {
+      position: absolute;
+      left: 0;
+      top: 0;
+      display: grid;
+      place-items: center;
+      min-width: 34px;
+      min-height: 34px;
+      opacity: 0;
+      transform: translate3d(-999px, -999px, 0);
+      will-change: transform, opacity;
+    }
+
+    .p2p_soup_fluid-payload img {
+      width: var(--p2p-size, 74px);
+      max-width: none;
+      height: auto;
+      filter: drop-shadow(0 10px 18px oklch(7% 0.04 282 / 0.5)) drop-shadow(0 0 16px oklch(82% 0.18 195 / 0.28));
+    }
+
+    .p2p_soup_fluid-token {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 42px;
+      min-height: 42px;
+      border-radius: 999px;
+      border: 1px solid oklch(100% 0 0 / 0.58);
+      padding: 8px 13px;
+      font-family: var(--ns-font-mono);
+      font-size: var(--p2p-font-size, 0.76rem);
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      box-shadow: 0 8px 16px oklch(7% 0.04 282 / 0.42), 0 0 20px oklch(82% 0.18 195 / 0.34);
+    }
+
+    .p2p_soup_fluid-token {
+      color: oklch(12% 0.03 282);
+      background: linear-gradient(135deg, var(--ns-accent), var(--ns-accent-2), var(--ns-violet));
+    }
+
+    .p2p_soup_fluid-caption {
+      position: absolute;
+      left: 50%;
+      bottom: clamp(8px, 2vw, 22px);
+      z-index: 6;
+      width: min(620px, calc(100% - 42px));
+      transform: translateX(-50%);
+      border: 1px solid color-mix(in oklch, var(--ns-accent), transparent 28%);
+      border-radius: 18px 6px 20px 8px;
+      padding: 12px 16px;
+      color: var(--ns-muted);
+      background: color-mix(in oklch, var(--ns-bg), transparent 12%);
+      font-family: var(--ns-font-mono);
+      font-size: clamp(0.7rem, 1.4vw, 0.86rem);
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-align: center;
+      backdrop-filter: blur(16px);
+    }
+
+    @media (max-width: 760px) {
+      .p2p_soup_fluid-section {
+        min-height: 200vh;
+      }
+
+      .p2p_soup_fluid-sticky {
+        top: 72px;
+        min-height: 78vh;
+      }
+
+      .p2p_soup_fluid-card {
+        padding: 22px 16px;
+      }
+
+      .p2p_soup_fluid-copy h2 {
+        max-width: 10ch;
+      }
+
+      .p2p_soup_fluid-stage {
+        min-height: 390px;
+      }
+
+      .p2p_soup_fluid-stage::before {
+        background:
+          radial-gradient(circle at 13% 55%, oklch(82% 0.18 195 / 0.3), transparent 24%),
+          radial-gradient(circle at 87% 55%, oklch(72% 0.24 326 / 0.28), transparent 24%);
+      }
+
+      .p2p_soup_fluid-pot {
+        width: clamp(105px, 30vw, 150px);
+        top: 55%;
+      }
+
+      .p2p_soup_fluid-pot-front {
+        width: clamp(105px, 30vw, 150px);
+        top: 55%;
+      }
+
+      .p2p_soup_fluid-ribbon {
+        inset: 26% 4% 8%;
+        width: 92%;
+        height: 58%;
+      }
+
+      .p2p_soup_fluid-stream-main {
+        stroke-width: 58;
+      }
+
+      .p2p_soup_fluid-stream-hot {
+        stroke-width: 18;
+      }
+
+      .p2p_soup_fluid-stream-cool {
+        stroke-width: 20;
+      }
+
+      .p2p_soup_fluid-payload img {
+        width: calc(var(--p2p-size, 70px) * 0.72);
+      }
+
+    }
+
+    /* P2P soup fluid separator module: reusable scroll-linked pot-to-pot animation. */
+    .p2p_soup_fluid_separator_defs {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
+    .p2p_soup_fluid_separator {
+      --p2p-separator-progress: 0;
+      --p2p-separator-dir: 1;
+      --p2p-separator-track-scale: 0.86;
+      --p2p-separator-track-opacity: 0;
+      --p2p-separator-left-rotate: 0deg;
+      --p2p-separator-right-rotate: 0deg;
+      --p2p-separator-left-fluid: 0.16;
+      --p2p-separator-right-fluid: 0.16;
+      --p2p-separator-left-mouth: 0;
+      --p2p-separator-right-mouth: 0;
+      --p2p-separator-keyword-opacity: 0;
+      --p2p-separator-keyword-scale: 0.92;
+      --p2p-separator-track-left: 0px;
+      --p2p-separator-track-top: 0px;
+      --p2p-separator-track-width: 100%;
+      --p2p-separator-track-height: 260px;
+      --p2p-separator-stream-start: 0%;
+      --p2p-separator-stream-end: 0%;
+      position: relative;
+      min-height: clamp(220px, 29vw, 430px);
+      margin-block: clamp(28px, 5vw, 88px);
+      padding-block: clamp(16px, 2.4vw, 42px);
+      overflow: visible;
+      z-index: 8;
+      pointer-events: none;
+    }
+
+    .p2p_soup_fluid_separator-stage {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(calc(100vw - (var(--site-gutter) * 2)), 1680px);
+      height: clamp(178px, 24vw, 352px);
+      transform: translate(-50%, -50%);
+      overflow: visible;
+    }
+
+    .p2p_soup_fluid_separator-stage::before {
+      content: "";
+      position: absolute;
+      inset: -38% -14%;
+      z-index: 1;
+      background:
+        radial-gradient(ellipse at 12% 52%, oklch(82% 0.18 195 / calc(0.16 + var(--p2p-separator-track-opacity) * 0.34)), transparent 26%),
+        radial-gradient(ellipse at 88% 52%, oklch(72% 0.24 326 / calc(0.14 + var(--p2p-separator-track-opacity) * 0.32)), transparent 26%),
+        radial-gradient(ellipse at 50% 52%, oklch(82% 0.18 195 / calc(0.08 + var(--p2p-separator-track-opacity) * 0.18)), transparent 48%);
+      border-radius: 999px;
+      filter: blur(30px);
+      opacity: calc(0.34 + var(--p2p-separator-track-opacity) * 0.58);
+    }
+
+    [data-theme="light"] .p2p_soup_fluid_separator-stage::before {
+      background:
+        radial-gradient(ellipse at 12% 52%, oklch(72% 0.22 178 / calc(0.2 + var(--p2p-separator-track-opacity) * 0.34)), transparent 26%),
+        radial-gradient(ellipse at 88% 52%, oklch(70% 0.22 326 / calc(0.15 + var(--p2p-separator-track-opacity) * 0.3)), transparent 26%),
+        radial-gradient(ellipse at 50% 52%, oklch(67% 0.23 151 / calc(0.1 + var(--p2p-separator-track-opacity) * 0.18)), transparent 48%);
+    }
+
+    .p2p_soup_fluid_separator-track {
+      position: absolute;
+      left: var(--p2p-separator-track-left);
+      top: var(--p2p-separator-track-top);
+      width: var(--p2p-separator-track-width);
+      height: var(--p2p-separator-track-height);
+      z-index: 4;
+      opacity: var(--p2p-separator-track-opacity);
+      transform:
+        scaleX(calc(var(--p2p-separator-track-scale) * var(--p2p-separator-dir)));
+      transform-origin: 50% 50%;
+      filter:
+        drop-shadow(0 0 18px oklch(82% 0.18 195 / 0.58))
+        drop-shadow(0 0 34px oklch(72% 0.24 326 / 0.4))
+        drop-shadow(0 0 72px oklch(82% 0.18 195 / 0.18));
+      will-change: opacity, transform;
+    }
+
+    [data-theme="light"] .p2p_soup_fluid_separator-track {
+      filter:
+        drop-shadow(0 0 18px oklch(72% 0.22 178 / 0.64))
+        drop-shadow(0 0 34px oklch(70% 0.22 326 / 0.38))
+        drop-shadow(0 0 70px oklch(67% 0.23 151 / 0.22));
+    }
+
+    .p2p_soup_fluid_separator-wave {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .p2p_soup_fluid_separator-wave-body,
+    .p2p_soup_fluid_separator-wave-hot,
+    .p2p_soup_fluid_separator-wave-cool {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-miterlimit: 1;
+      stroke-dasharray: 0.001 1;
+      stroke-dashoffset: 0;
+      transition: stroke-dasharray 90ms linear, stroke-dashoffset 90ms linear;
+    }
+
+    .p2p_soup_fluid_separator-wave-body {
+      stroke: url("#p2p_soup_fluid_separator_grad_body");
+      stroke-width: 84;
+      opacity: 0.58;
+      filter: drop-shadow(0 0 18px oklch(82% 0.18 195 / 0.28));
+    }
+
+    .p2p_soup_fluid_separator-wave-hot {
+      stroke: url("#p2p_soup_fluid_separator_grad_hot");
+      stroke-width: 30;
+      opacity: 0.74;
+      transform: translateY(-18px);
+    }
+
+    .p2p_soup_fluid_separator-wave-cool {
+      stroke: url("#p2p_soup_fluid_separator_grad_cool");
+      stroke-width: 34;
+      opacity: 0.64;
+      transform: translateY(22px);
+    }
+
+    .p2p_soup_fluid_separator-pot-back,
+    .p2p_soup_fluid_separator-pot-front {
+      position: absolute;
+      top: 50%;
+      width: clamp(104px, 13vw, 218px);
+      aspect-ratio: 1 / 1;
+      transform-origin: 50% 76%;
+      filter:
+        drop-shadow(0 16px 30px oklch(7% 0.04 282 / 0.48))
+        drop-shadow(0 0 24px oklch(82% 0.18 195 / 0.25));
+      pointer-events: none;
+    }
+
+    .p2p_soup_fluid_separator-pot-back {
+      z-index: 3;
+    }
+
+    .p2p_soup_fluid_separator-pot-front {
+      z-index: 7;
+    }
+
+    .p2p_soup_fluid_separator-pot-left {
+      left: clamp(6px, 3.8vw, 68px);
+      transform: translateY(-50%) rotate(var(--p2p-separator-left-rotate));
+    }
+
+    .p2p_soup_fluid_separator-pot-right {
+      right: clamp(6px, 3.8vw, 68px);
+      transform: translateY(-50%) rotate(var(--p2p-separator-right-rotate));
+    }
+
+    .p2p_soup_fluid_separator-pot-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      object-fit: contain;
+      user-select: none;
+    }
+
+    .p2p_soup_fluid_separator-pot-left .p2p_soup_fluid_separator-pot-img {
+      transform: scaleX(-1);
+    }
+
+    .p2p_soup_fluid_separator-pot-fluid,
+    .p2p_soup_fluid_separator-pot-mouth,
+    .p2p_soup_fluid_separator-pot-glow {
+      position: absolute;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .p2p_soup_fluid_separator-pot-glow {
+      inset: 28% 25% 20%;
+      z-index: 2;
+      border-radius: 999px;
+      background: radial-gradient(circle, oklch(82% 0.18 195 / 0.44), oklch(72% 0.24 326 / 0.22) 42%, transparent 68%);
+      filter: blur(7px);
+      opacity: calc(0.14 + var(--p2p-separator-track-opacity) * 0.62);
+    }
+
+    [data-theme="light"] .p2p_soup_fluid_separator-pot-glow {
+      background: radial-gradient(circle, oklch(72% 0.22 178 / 0.52), oklch(67% 0.23 151 / 0.2) 42%, transparent 68%);
+    }
+
+    .p2p_soup_fluid_separator-pot-fluid {
+      left: 20%;
+      top: 42%;
+      z-index: 3;
+      width: 60%;
+      height: 36%;
+      border-radius: 42% 48% 54% 46%;
+      background:
+        radial-gradient(ellipse at 42% 28%, oklch(100% 0 0 / 0.42), transparent 22%),
+        linear-gradient(145deg, oklch(82% 0.18 195 / 0.68), oklch(72% 0.24 326 / 0.5), oklch(58% 0.23 286 / 0.42));
+      filter: blur(0.6px) drop-shadow(0 0 18px oklch(82% 0.18 195 / 0.38));
+      transform: rotate(-7deg) scaleY(calc(0.72 + var(--p2p-separator-track-opacity) * 0.18));
+    }
+
+    .p2p_soup_fluid_separator-pot-left .p2p_soup_fluid_separator-pot-fluid {
+      opacity: var(--p2p-separator-left-fluid);
+    }
+
+    .p2p_soup_fluid_separator-pot-right .p2p_soup_fluid_separator-pot-fluid {
+      opacity: var(--p2p-separator-right-fluid);
+    }
+
+    .p2p_soup_fluid_separator-pot-mouth {
+      left: 18%;
+      top: 29%;
+      z-index: 4;
+      width: 64%;
+      height: 29%;
+      border-radius: 50%;
+      background:
+        radial-gradient(ellipse at 52% 42%, oklch(100% 0 0 / 0.54), transparent 18%),
+        linear-gradient(115deg, var(--ns-accent), var(--ns-accent-2) 54%, var(--ns-violet));
+      filter: blur(0.4px) drop-shadow(0 0 20px oklch(82% 0.18 195 / 0.44));
+      transform: rotate(-8deg) scaleX(1.1);
+    }
+
+    .p2p_soup_fluid_separator-pot-left .p2p_soup_fluid_separator-pot-mouth {
+      opacity: var(--p2p-separator-left-mouth);
+    }
+
+    .p2p_soup_fluid_separator-pot-right .p2p_soup_fluid_separator-pot-mouth {
+      opacity: var(--p2p-separator-right-mouth);
+    }
+
+    .p2p_soup_fluid_separator-payload-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .p2p_soup_fluid_separator-bubble-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .p2p_soup_fluid_separator-keyword-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    .p2p_soup_fluid_separator-keyword {
+      max-width: min(82vw, 1080px);
+      padding: clamp(10px, 1.4vw, 18px) clamp(16px, 2.8vw, 46px);
+      font-family: var(--ns-font-display);
+      font-size: clamp(1.35rem, 4.8vw, 5.2rem);
+      font-weight: 900;
+      line-height: 0.95;
+      letter-spacing: -0.035em;
+      text-align: center;
+      text-transform: uppercase;
+      color: oklch(72% 0.24 326 / calc(0.2 + var(--p2p-separator-keyword-opacity) * 0.8));
+      opacity: var(--p2p-separator-keyword-opacity);
+      transform: translateY(calc((1 - var(--p2p-separator-keyword-opacity)) * 10px)) scale(var(--p2p-separator-keyword-scale));
+      text-shadow:
+        0 4px 18px oklch(7% 0.04 282 / 0.92),
+        0 0 28px oklch(7% 0.04 282 / 0.84),
+        0 0 56px oklch(82% 0.18 195 / 0.5),
+        0 0 84px oklch(72% 0.24 326 / 0.34);
+      filter: drop-shadow(0 12px 28px oklch(7% 0.04 282 / 0.6));
+      mix-blend-mode: screen;
+      will-change: opacity, transform;
+    }
+
+    .p2p_soup_fluid_separator-rider {
+      position: absolute;
+      left: 0;
+      top: 0;
+      display: grid;
+      place-items: center;
+      min-width: 32px;
+      min-height: 32px;
+      opacity: 0;
+      transform: translate3d(-999px, -999px, 0);
+      will-change: transform, opacity;
+    }
+
+    .p2p_soup_fluid_separator-rider img {
+      width: var(--p2p-separator-rider-size, 82px);
+      max-width: none;
+      height: auto;
+      filter:
+        drop-shadow(0 8px 16px oklch(7% 0.04 282 / 0.5))
+        drop-shadow(0 0 16px oklch(82% 0.18 195 / 0.28));
+    }
+
+    .p2p_soup_fluid_separator-rider.is-kitchen img {
+      width: calc(var(--p2p-separator-rider-size, 58px) * 0.88);
+      filter:
+        drop-shadow(0 8px 15px oklch(7% 0.04 282 / 0.46))
+        drop-shadow(0 0 15px oklch(82% 0.18 195 / 0.26))
+        drop-shadow(0 0 20px oklch(72% 0.24 326 / 0.16));
+    }
+
+    .p2p_soup_fluid_separator-bubble {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: var(--p2p-separator-bubble-size, 14px);
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      border: 1px solid oklch(100% 0 0 / 0.54);
+      opacity: 0;
+      background:
+        radial-gradient(circle at 30% 28%, oklch(100% 0 0 / 0.72), transparent 18%),
+        radial-gradient(circle at 62% 72%, oklch(72% 0.24 326 / 0.26), transparent 34%),
+        oklch(82% 0.18 195 / 0.44);
+      box-shadow:
+        inset 0 0 10px oklch(100% 0 0 / 0.24),
+        0 0 14px oklch(82% 0.18 195 / 0.44),
+        0 0 24px oklch(72% 0.24 326 / 0.18);
+      mix-blend-mode: screen;
+      transform: translate3d(-999px, -999px, 0);
+      will-change: transform, opacity;
+    }
+
+    [data-theme="light"] .p2p_soup_fluid_separator-bubble {
+      background:
+        radial-gradient(circle at 30% 28%, oklch(100% 0 0 / 0.74), transparent 18%),
+        radial-gradient(circle at 62% 72%, oklch(70% 0.22 326 / 0.24), transparent 34%),
+        oklch(72% 0.22 178 / 0.54);
+      box-shadow:
+        inset 0 0 10px oklch(100% 0 0 / 0.28),
+        0 0 14px oklch(72% 0.22 178 / 0.5),
+        0 0 24px oklch(67% 0.23 151 / 0.2);
+    }
+
+    .p2p_soup_fluid_separator-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      isolation: isolate;
+      width: var(--p2p-separator-rider-size, 58px);
+      height: var(--p2p-separator-rider-size, 58px);
+      min-width: 0;
+      min-height: 0;
+      padding: 0;
+      border-radius: 50%;
+      border: 1px solid oklch(100% 0 0 / 0.44);
+      font-family: var(--ns-font-mono);
+      font-size: var(--p2p-separator-chip-size, 0.62rem);
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: oklch(12% 0.03 282);
+      background:
+        radial-gradient(circle at 32% 24%, oklch(100% 0 0 / 0.6), transparent 18%),
+        radial-gradient(circle at 68% 78%, oklch(72% 0.24 326 / 0.24), transparent 34%),
+        var(--ns-accent);
+      box-shadow:
+        inset -5px -7px 10px oklch(12% 0.04 282 / 0.18),
+        inset 4px 5px 10px oklch(100% 0 0 / 0.28),
+        0 0 18px oklch(82% 0.18 195 / 0.5),
+        0 7px 14px oklch(7% 0.04 282 / 0.48);
+    }
+
+    .p2p_soup_fluid_separator-chip::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .p2p_soup_fluid_separator-chip::after {
+      inset: 10%;
+      z-index: 0;
+      border-top: 1px solid oklch(100% 0 0 / 0.62);
+      transform: rotate(-18deg);
+      opacity: 0.72;
+    }
+
+    .p2p_soup_fluid_separator-chip.tok-a {
+      background:
+        radial-gradient(circle at 32% 24%, oklch(100% 0 0 / 0.6), transparent 18%),
+        radial-gradient(circle at 68% 78%, oklch(72% 0.24 326 / 0.24), transparent 34%),
+        var(--ns-accent);
+    }
+
+    .p2p_soup_fluid_separator-chip.tok-b {
+      background:
+        radial-gradient(circle at 32% 24%, oklch(100% 0 0 / 0.6), transparent 18%),
+        radial-gradient(circle at 68% 78%, oklch(82% 0.18 195 / 0.22), transparent 34%),
+        var(--ns-accent-2);
+      box-shadow:
+        inset -5px -7px 10px oklch(12% 0.04 282 / 0.2),
+        inset 4px 5px 10px oklch(100% 0 0 / 0.26),
+        0 0 18px oklch(72% 0.24 326 / 0.52),
+        0 7px 14px oklch(7% 0.04 282 / 0.48);
+    }
+
+    @media (max-width: 760px) {
+      .p2p_soup_fluid_separator {
+        min-height: clamp(172px, 52vw, 232px);
+        margin-block: clamp(18px, 7vw, 36px);
+        padding-block: 12px;
+      }
+
+      .p2p_soup_fluid_separator-stage {
+        width: calc(100vw - 14px);
+        height: clamp(146px, 45vw, 206px);
+      }
+
+      .p2p_soup_fluid_separator-pot-back,
+      .p2p_soup_fluid_separator-pot-front {
+        width: clamp(74px, 24vw, 112px);
+      }
+
+      .p2p_soup_fluid_separator-pot-left {
+        left: clamp(-56px, -13vw, -34px);
+      }
+
+      .p2p_soup_fluid_separator-pot-right {
+        right: clamp(-56px, -13vw, -34px);
+      }
+
+      .p2p_soup_fluid_separator-wave-body {
+        stroke-width: 58;
+      }
+
+      .p2p_soup_fluid_separator-wave-hot,
+      .p2p_soup_fluid_separator-wave-cool {
+        stroke-width: 20;
+      }
+
+      .p2p_soup_fluid_separator-rider[data-mobile-hide="true"] {
+        display: none;
+      }
+
+      .p2p_soup_fluid_separator-keyword {
+        max-width: 92vw;
+        font-size: clamp(1.15rem, 7vw, 2.8rem);
+        letter-spacing: -0.025em;
+      }
+    }
+
+    .cta {
+      padding-bottom: clamp(80px, 9vw, 126px);
+    }
+
+    .cta-card {
+      position: relative;
+      overflow: visible;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 28px;
+      align-items: center;
+      padding: clamp(26px, 5vw, 54px) clamp(260px, 26vw, 420px) clamp(34px, 5vw, 64px) clamp(26px, 5vw, 54px);
+    }
+
+    .cta-card > div {
+      position: relative;
+      z-index: 2;
+    }
+
+    .cta-card p {
+      max-width: 720px;
+      margin: 16px 0 0;
+      color: var(--ns-muted);
+      font-size: 1.16rem;
+      font-weight: 700;
+    }
+
+    .cta-art {
+      position: absolute;
+      right: clamp(-82px, -5vw, -24px);
+      bottom: -54px;
+      z-index: 12;
+      width: min(380px, 31vw);
+      max-width: none;
+      margin-right: 0;
+      height: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 0 44px oklch(72% 0.24 326 / 0.42));
+    }
+
+    .holo-punk-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .footer {
+      padding: 28px 0 38px;
+      border-top: 1px solid color-mix(in oklch, var(--ns-border), transparent 50%);
+      color: var(--ns-muted);
+      font-family: var(--ns-font-mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+    }
+
+    .footer .shell {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 420ms ease, transform 420ms ease;
+    }
+
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (min-width: 1440px) {
+      .shell {
+        width: min(1480px, calc(100% - 96px));
+      }
+
+      .hero {
+        padding-top: clamp(72px, 6vw, 132px);
+      }
+
+      .hero-grid {
+        grid-template-columns: minmax(620px, 1fr) minmax(420px, 0.62fr);
+        gap: clamp(56px, 5vw, 112px);
+      }
+
+      h1 {
+        max-width: 1040px;
+        font-size: clamp(6rem, 6.2vw, 9.2rem);
+      }
+
+      .lead {
+        max-width: 840px;
+      }
+
+      .status-strip {
+        max-width: 900px;
+      }
+    }
+
+    @media (min-width: 1800px) {
+      .shell {
+        width: min(1660px, calc(100% - 128px));
+      }
+
+      .hero {
+        min-height: min(1120px, calc(100svh - 78px));
+        display: grid;
+        align-items: center;
+      }
+
+      .hero-grid {
+        grid-template-columns: minmax(760px, 1fr) minmax(460px, 0.54fr);
+        gap: clamp(72px, 6vw, 140px);
+      }
+
+      h1 {
+        max-width: 1180px;
+      }
+
+      .p2p_soup_fluid_separator-stage {
+        width: min(calc(100vw - 72px), 1840px);
+      }
+    }
+
+    @media (max-width: 980px) {
+      :root,
+      [data-theme="dark"] {
+        --site-gutter: 24px;
+      }
+
+      .hero-grid,
+      .architecture,
+      .manifesto-head,
+      .cta-card {
+        grid-template-columns: 1fr;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .kitchen {
+        max-width: 620px;
+        margin: 0 auto;
+      }
+
+      .architecture-art {
+        min-height: auto;
+      }
+
+      .sticker-wall {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .icon-quote {
+        min-height: auto;
+        padding: clamp(34px, 6vw, 62px) clamp(160px, 26vw, 260px) clamp(34px, 6vw, 62px) 28px;
+      }
+
+      .icon-quote-kitchen {
+        right: -54px;
+        bottom: -42px;
+        width: min(260px, 40vw);
+        opacity: 0.72;
+      }
+
+      .icon-quote-copy {
+        max-width: 100%;
+      }
+
+      .module-neko {
+        right: -30px;
+        bottom: -22px;
+        width: min(190px, 46%);
+      }
+
+      .module-kitchen {
+        right: -18px;
+        bottom: -16px;
+        width: min(146px, 38%);
+      }
+
+      .manifesto-neko {
+        margin-right: 0;
+        margin-top: 0;
+      }
+
+      .cta-art {
+        right: -30px;
+        bottom: -30px;
+        width: min(240px, 34vw);
+      }
+    }
+
+    @media (min-width: 761px) and (max-width: 980px) {
+      .p2p_soup_fluid_separator {
+        min-height: clamp(192px, 33vw, 280px);
+        margin-block: clamp(20px, 5vw, 48px);
+      }
+
+      .p2p_soup_fluid_separator-stage {
+        width: calc(100vw - (var(--site-gutter) * 2));
+        height: clamp(164px, 30vw, 252px);
+      }
+
+      .p2p_soup_fluid_separator-pot-back,
+      .p2p_soup_fluid_separator-pot-front {
+        width: clamp(92px, 18vw, 148px);
+      }
+
+      .p2p_soup_fluid_separator-pot-left {
+        left: clamp(-72px, -8vw, -40px);
+      }
+
+      .p2p_soup_fluid_separator-pot-right {
+        right: clamp(-72px, -8vw, -40px);
+      }
+    }
+
+    @media (max-width: 760px) {
+      :root,
+      [data-theme="dark"] {
+        --site-gutter: 18px;
+      }
+
+      body {
+        font-size: 16px;
+        background-attachment: scroll;
+      }
+
+      .shell {
+        width: min(100% - (var(--site-gutter) * 2), 1180px);
+      }
+
+      .nav {
+        min-height: 68px;
+      }
+
+      .brand-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+      }
+
+      .brand-wordmark {
+        width: min(150px, 42vw);
+      }
+
+      .nav-actions .btn-primary {
+        display: none;
+      }
+
+      .hero {
+        padding-top: 38px;
+      }
+
+      .hero::after {
+        display: none;
+      }
+
+      .hero-actions,
+      .nav-actions {
+        width: auto;
+      }
+
+      .neko-squad {
+        grid-template-columns: 1fr;
+        max-width: none;
+      }
+
+      .hero-actions .btn,
+      .field-grid .btn {
+        width: 100%;
+      }
+
+      .status-strip,
+      .grid-3,
+      .grid-2,
+      .sticker-wall {
+        grid-template-columns: 1fr;
+      }
+
+      .icon-quote {
+        padding: 30px 24px 156px;
+      }
+
+      .icon-quote blockquote {
+        font-size: clamp(2rem, 12vw, 3.7rem);
+      }
+
+      .cta-card {
+        padding: 26px;
+      }
+
+      .section-head {
+        display: grid;
+        align-items: start;
+      }
+
+      .kitchen-head {
+        align-items: start;
+        min-height: 126px;
+        padding-right: 104px;
+      }
+
+      .neko {
+        width: 88px;
+      }
+
+      .route-icon-breakout {
+        right: -28px;
+        top: -18px;
+        width: 132px;
+        opacity: 0.92;
+      }
+
+      .route-output {
+        grid-template-columns: 1fr;
+      }
+
+      .cta-art {
+        position: relative;
+        right: auto;
+        bottom: auto;
+        width: 190px;
+        margin: 18px auto -8px;
+      }
+
+      .quote-neko {
+        position: relative;
+        right: auto;
+        bottom: auto;
+        width: 180px;
+        margin-top: 18px;
+      }
+
+      .quote-band blockquote,
+      .quote-band p {
+        max-width: 100%;
+      }
+
+      .manifesto-neko {
+        width: 180px;
+      }
+
+      .module-neko {
+        width: 132px;
+        right: -12px;
+        bottom: -10px;
+        opacity: 0.58;
+      }
+
+      .module-kitchen {
+        width: 104px;
+        right: -10px;
+        bottom: -8px;
+        opacity: 0.54;
+      }
+
+      .module h3,
+      .module p {
+        max-width: calc(100% - 76px);
+      }
+
+      .punk-mark {
+        max-width: 100%;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition: none !important;
+        animation: none !important;
+      }
+
+      .reveal {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="holo-field" aria-hidden="true"></div>
+  <a class="skip-link" href="#main" data-od-id="skip-link">Skip to content</a>
+
+  <header class="topbar" data-od-id="site-header">
+    <div class="shell nav">
+      <a class="brand" href="#main" aria-label="NeonSoup home" data-od-id="brand-link">
+        
+        <img class="brand-wordmark" src="assets/logo/logo.png" alt="NeonSoup" width="380" height="90">
+      </a>
+      <nav class="nav-links" aria-label="Primary" data-od-id="primary-nav">
+        <a href="#principles" data-od-id="nav-principles">Principles</a>
+        <a href="#architecture" data-od-id="nav-architecture">Architecture</a>
+        <a href="#composability" data-od-id="nav-composability">Composability</a>
+      </nav>
+      <div class="nav-actions">
+        <button class="btn icon-btn" type="button" id="themeToggle" aria-label="Toggle light theme" data-od-id="theme-toggle">☼</button>
+        <a class="btn btn-primary" href="https://neonsoup-dev.netlify.app/" data-od-id="nav-dev-dapp">Dev dapp</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" data-od-id="main-content">
+    <section class="hero" aria-labelledby="hero-title" data-od-id="hero-section">
+      <div class="shell hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow" data-od-id="hero-eyebrow">Cardano DeFi, the cypherpunk way</span>
+          <span class="punk-mark" data-od-id="hero-punk-mark">Fork the frontends. Feed the people.</span>
+          <h1 id="hero-title" data-od-id="hero-title">Open liquidity riot. Cooked peer-to-peer.</h1>
+          <div class="punk-sigil" aria-label="Cypherpunk cues" data-od-id="hero-punk-sigil">
+            <span class="chip">No silos</span>
+            <span class="chip">User signed</span>
+            <span class="chip">Forkable</span>
+          </div>
+          <p class="lead" data-od-id="hero-lead">NeonSoup turns Cardano DeFi into a glowing user-owned kitchen: open intents created on local devices, reviewed in wallets, and served without centralized order books, batchers, or exclusive frontends.</p>
+          <div class="hero-actions" data-od-id="hero-actions">
+            <a class="btn btn-primary" href="https://neonsoup-dev.netlify.app/" data-od-id="hero-primary-cta">Try the devtool</a>
+            <a class="btn btn-ghost" href="https://github.com/GameChangerFinance/NeonSoup" data-od-id="hero-secondary-cta">Inspect the recipe</a>
+          </div>
+          <div class="status-strip" aria-label="NeonSoup promises" data-od-id="promise-strip">
+            <div class="status-tile" data-od-id="promise-user-device">
+              <strong>User device</strong>
+              <span>Protocol execution starts where the user controls the keys.</span>
+            </div>
+            <div class="status-tile" data-od-id="promise-shared-liquidity">
+              <strong>Shared soup</strong>
+              <span>Liquidity is not trapped inside competing silos.</span>
+            </div>
+            <div class="status-tile" data-od-id="promise-forkable">
+              <strong>Forkable</strong>
+              <span>Inspect, compose, and redeploy the frontend anywhere.</span>
+            </div>
+          </div>
+          <div class="neko-squad" aria-label="CyberNeko protocol helpers" data-od-id="hero-neko-squad">
+            <div class="neko-signal" data-od-id="hero-neko-peeking">
+              <img src="assets/cybernekos/peeking-counter_A.png" alt="CyberNeko peeking over a counter" width="894" height="666">
+              <div>
+                <strong>Street-level access</strong>
+                <span>Zero onboarding barriers</span>
+              </div>
+            </div>
+            <div class="neko-signal" data-od-id="hero-neko-hologram">
+              <img src="assets/cybernekos/hologram-wave_AO.png" alt="CyberNeko waving through a hologram" width="894" height="666">
+              <div>
+                <strong>Composable intents</strong>
+                <span>UDC-ready handoff</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="hud-card kitchen" aria-label="Route kitchen simulator" data-od-id="route-kitchen">
+          <div class="kitchen-head">
+          <div>
+            <span class="chip" data-od-id="route-chip">Open intent prep</span>
+            <span class="punk-mark" data-od-id="route-punk-mark">Wallet signs last</span>
+            <h2 style="font-size: clamp(1.65rem, 3.5vw, 2.45rem); margin-top: 12px;" data-od-id="route-title">Cook a route</h2>
+            <p id="routeStatus" data-od-id="route-status">Draft intent ready for wallet review.</p>
+          </div>
+            <img class="route-icon-breakout" src="assets/logo/icon.png" alt="NeonSoup glowing soup pot icon" width="1024" height="1024" data-od-id="route-icon">
+          </div>
+
+          <div class="field-grid">
+            <label for="amount" data-od-id="amount-label">Input amount
+              <input id="amount" inputmode="decimal" value="1250" aria-describedby="routeStatus" data-od-id="amount-input">
+            </label>
+            <label for="priority" data-od-id="priority-label">Route priority
+              <select id="priority" class="native-select" data-od-id="priority-select" tabindex="-1" aria-hidden="true">
+                <option value="balanced">Balanced liquidity</option>
+                <option value="direct">Direct user match</option>
+                <option value="inspectable">Inspectable recipe</option>
+              </select>
+              <div class="cyber-select" data-select="priority" data-od-id="priority-custom-select">
+                <button class="cyber-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" data-od-id="priority-select-trigger">
+                  <span id="prioritySelected">Balanced liquidity</span>
+                </button>
+                <div class="cyber-options" role="listbox" aria-label="Route priority options" data-od-id="priority-select-options">
+                  <button class="cyber-option" type="button" role="option" data-value="balanced" aria-selected="true">Balanced liquidity</button>
+                  <button class="cyber-option" type="button" role="option" data-value="direct" aria-selected="false">Direct user match</button>
+                  <button class="cyber-option" type="button" role="option" data-value="inspectable" aria-selected="false">Inspectable recipe</button>
+                </div>
+              </div>
+            </label>
+            <button class="btn btn-primary" type="button" id="cookRoute" data-od-id="cook-route-button">Cook route</button>
+          </div>
+
+          <div class="route-output" data-od-id="route-output">
+            <div>
+              <label>Estimated served output</label>
+              <strong id="estimate" data-od-id="route-estimate">1,237.50</strong>
+            </div>
+            <span class="chip" id="routeBadge" data-od-id="route-badge">Simulation</span>
+          </div>
+
+          <div class="meter" aria-label="Route readiness" data-od-id="readiness-meter">
+            <span id="readinessBar"></span>
+          </div>
+          <div class="route-id" data-od-id="route-id-panel">
+            <span id="routeId">UDC://neonsoup/open-intent/7F21-C0OK</span>
+            <button class="btn copy-btn" type="button" id="copyRoute" data-od-id="copy-route-button">Copy</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <svg class="p2p_soup_fluid_separator_defs" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="p2p_soup_fluid_separator_grad_body" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="var(--ns-accent)"/>
+          <stop offset="50%" stop-color="var(--ns-accent-2)"/>
+          <stop offset="100%" stop-color="var(--ns-violet)"/>
+        </linearGradient>
+        <linearGradient id="p2p_soup_fluid_separator_grad_hot" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="var(--ns-accent-2)"/>
+          <stop offset="52%" stop-color="var(--ns-violet)"/>
+          <stop offset="100%" stop-color="var(--ns-accent)"/>
+        </linearGradient>
+        <linearGradient id="p2p_soup_fluid_separator_grad_cool" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="var(--ns-violet)"/>
+          <stop offset="48%" stop-color="var(--ns-accent)"/>
+          <stop offset="100%" stop-color="var(--ns-accent-2)"/>
+        </linearGradient>
+      </defs>
+    </svg>
+
+    <section class="p2p_soup_fluid_separator" data-p2p-soup-fluid-separator data-direction="ltr" data-variant="a" aria-label="Peer-to-peer soup fluid separator" data-od-id="p2p-soup-fluid-separator-1">
+      <div class="p2p_soup_fluid_separator-stage" data-p2p-soup-fluid-separator-stage>
+        <div class="p2p_soup_fluid_separator-pot-back p2p_soup_fluid_separator-pot-left" aria-hidden="true">
+          <img class="p2p_soup_fluid_separator-pot-img" src="assets/images/empty_pot_bg.png" alt="">
+          <span class="p2p_soup_fluid_separator-pot-glow"></span>
+          <span class="p2p_soup_fluid_separator-pot-fluid"></span>
+          <span class="p2p_soup_fluid_separator-pot-mouth"></span>
+        </div>
+        <div class="p2p_soup_fluid_separator-pot-back p2p_soup_fluid_separator-pot-right" aria-hidden="true">
+          <img class="p2p_soup_fluid_separator-pot-img" src="assets/images/empty_pot_bg.png" alt="">
+          <span class="p2p_soup_fluid_separator-pot-glow"></span>
+          <span class="p2p_soup_fluid_separator-pot-fluid"></span>
+          <span class="p2p_soup_fluid_separator-pot-mouth"></span>
+        </div>
+        <div class="p2p_soup_fluid_separator-track" aria-hidden="true">
+          <svg class="p2p_soup_fluid_separator-wave" viewBox="0 0 1200 300" preserveAspectRatio="none" focusable="false">
+            <path class="p2p_soup_fluid_separator-wave-body" pathLength="1" d="M 0 164 C 94 78 166 82 244 145 S 398 254 522 160 S 716 50 842 145 S 1040 250 1200 116"/>
+            <path class="p2p_soup_fluid_separator-wave-hot" pathLength="1" d="M 0 141 C 114 54 188 76 270 132 S 402 224 544 138 S 730 42 858 126 S 1038 222 1200 96"/>
+            <path class="p2p_soup_fluid_separator-wave-cool" pathLength="1" d="M 0 190 C 114 112 190 116 286 170 S 428 278 558 186 S 748 86 878 168 S 1034 276 1200 146"/>
+          </svg>
+        </div>
+        <div class="p2p_soup_fluid_separator-bubble-layer" data-p2p-soup-fluid-separator-bubble-layer aria-hidden="true"></div>
+        <div class="p2p_soup_fluid_separator-keyword-layer" data-p2p-soup-fluid-separator-keyword-layer aria-hidden="true">
+          <span class="p2p_soup_fluid_separator-keyword" data-p2p-soup-fluid-separator-keyword>peer to peer</span>
+        </div>
+        <div class="p2p_soup_fluid_separator-payload-layer" data-p2p-soup-fluid-separator-payload-layer aria-hidden="true"></div>
+        <div class="p2p_soup_fluid_separator-pot-front p2p_soup_fluid_separator-pot-left" aria-hidden="true">
+          <img class="p2p_soup_fluid_separator-pot-img" src="assets/images/empty_pot_fg.png" alt="">
+        </div>
+        <div class="p2p_soup_fluid_separator-pot-front p2p_soup_fluid_separator-pot-right" aria-hidden="true">
+          <img class="p2p_soup_fluid_separator-pot-img" src="assets/images/empty_pot_fg.png" alt="">
+        </div>
+      </div>
+    </section>
+
+    <section id="principles" aria-labelledby="principles-title" data-od-id="principles-section">
+      <div class="shell">
+        <div class="section-head reveal">
+          <h2 id="principles-title" data-od-id="principles-title">Core kitchen rules</h2>
+          <p data-od-id="principles-copy">The README frames NeonSoup as a user-first, community-owned counterweight to siloed DeFi. These are the principles that shape the landing page and the product promise.</p>
+        </div>
+        <div class="grid-3">
+          <article class="module rebel reveal" data-od-id="principle-shared-liquidity">
+            <span class="chip">Shared liquidity</span>
+            <h3>No isolated pots</h3>
+            <p>Liquidity should be unified across participants instead of trapped inside separate venues and frontends.</p>
+            <img class="module-kitchen" src="assets/kitchen/soup_bowl_A.png" alt="" width="1024" height="1024" aria-hidden="true" data-od-id="principle-shared-liquidity-kitchen">
+            <img class="module-neko" src="assets/cybernekos/peeking-counter_A.png" alt="" width="894" height="666">
+          </article>
+          <article class="module rebel reveal" data-od-id="principle-zero-batchers">
+            <span class="chip">Zero batchers</span>
+            <h3>No sequencer waiter</h3>
+            <p>Users interact directly. There is no centralized order book or middle layer taking custody of the flow.</p>
+            <img class="module-kitchen" src="assets/kitchen/strainer_ladle_A.png" alt="" width="1024" height="1024" aria-hidden="true" data-od-id="principle-zero-batchers-kitchen">
+            <img class="module-neko" src="assets/cybernekos/hologram-wave_AO.png" alt="" width="894" height="666">
+          </article>
+          <article class="module rebel reveal" data-od-id="principle-user-first">
+            <span class="chip">User first</span>
+            <h3>The owner decides</h3>
+            <p>The dapp can suggest routes, but the user customizes, reviews, and signs the last-mile transaction.</p>
+            <img class="module-kitchen" src="assets/kitchen/timer_hat_A.png" alt="" width="1024" height="1024" aria-hidden="true" data-od-id="principle-user-first-kitchen">
+            <img class="module-neko" src="assets/cybernekos/order-tablet_O.png" alt="" width="894" height="666">
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="p2p_soup_fluid_separator" data-p2p-soup-fluid-separator data-direction="rtl" data-variant="b" aria-label="Peer-to-peer soup fluid separator" data-od-id="p2p-soup-fluid-separator-2">
+      <span data-p2p-soup-fluid-separator-keyword>no middlemen</span>
+    </section>
+
+    <section class="manifesto" aria-labelledby="manifesto-title" data-od-id="manifesto-section">
+      <div class="shell">
+          <div class="manifesto-band reveal">
+            <div class="manifesto-head">
+              <div>
+                <span class="eyebrow" data-od-id="manifesto-eyebrow">Cypherpunk kitchen manifesto</span>
+                <div class="holo-punk-row" aria-label="Manifesto protocol labels" data-od-id="manifesto-punk-labels">
+                  <span class="punk-mark">Anti-silo</span>
+                  <span class="punk-mark">Self-sovereign</span>
+                </div>
+                <h2 id="manifesto-title" data-od-id="manifesto-title">Rebel protocol, kawaii counter-service.</h2>
+                <p data-od-id="manifesto-copy">NeonSoup should feel like a street food stall run by cypherpunks: friendly at the counter, hostile to capture, and built so anyone can inspect or fork the recipe.</p>
+              </div>
+              <img class="manifesto-neko" src="assets/cybernekos/hologram-wave_AO.png" alt="CyberNeko projecting a cypherpunk hologram" width="894" height="666" data-od-id="manifesto-neko">
+            </div>
+          <div class="sticker-wall" aria-label="Cypherpunk values" data-od-id="manifesto-stickers">
+            <article class="punk-sticker" data-od-id="sticker-no-silos">
+              <b>01 / no silos</b>
+              <strong>Liquidity belongs in the global soup.</strong>
+              <span>Venues should not trap access behind exclusive frontends.</span>
+            </article>
+            <article class="punk-sticker" data-od-id="sticker-no-middlemen">
+              <b>02 / no middlemen</b>
+              <strong>Execution starts with the user.</strong>
+              <span>Routes can be suggested, but signatures stay at the last mile.</span>
+            </article>
+            <article class="punk-sticker" data-od-id="sticker-forkable">
+              <b>03 / forkable</b>
+              <strong>Frontends are recipes, not kingdoms.</strong>
+              <span>Inspect, remix, redeploy, and keep the protocol portable.</span>
+            </article>
+            <article class="punk-sticker" data-od-id="sticker-street-ready">
+              <b>04 / street ready</b>
+              <strong>QR, NFC, link, wallet, done.</strong>
+              <span>UDC intents make DeFi work beyond the usual dashboard crowd.</span>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="p2p_soup_fluid_separator" data-p2p-soup-fluid-separator data-direction="ltr" data-variant="c" aria-label="Peer-to-peer soup fluid separator" data-od-id="p2p-soup-fluid-separator-3">
+      <span data-p2p-soup-fluid-separator-keyword>global shared liquidity</span>
+    </section>
+
+    <section id="architecture" aria-labelledby="architecture-title" data-od-id="architecture-section">
+      <div class="shell architecture">
+        <div class="hud-card architecture-art reveal" data-od-id="architecture-art">
+          <div>
+            <span class="eyebrow">Architecture</span>
+            <h2 id="architecture-title" style="margin-top: 14px;" data-od-id="architecture-title">On-chain rules. Off-chain user control.</h2>
+          </div>
+          <img src="assets/cybernekos/soup-machine_AP.png" alt="CyberNeko tending a glowing soup machine" width="894" height="666" data-od-id="architecture-neko">
+        </div>
+        <div class="flow-list">
+          <article class="flow-item reveal" data-od-id="flow-on-chain">
+            <span class="step">01</span>
+            <div>
+              <h3>P2P DeFi Kernel validators</h3>
+              <p>Cardano L1 validates commitments, swap conditions, and trustless settlement.</p>
+            </div>
+          </article>
+          <article class="flow-item reveal" data-od-id="flow-user-device">
+            <span class="step">02</span>
+            <div>
+              <h3>User-device frontend</h3>
+              <p>Intent creation, matching coordination, and protocol UX run locally instead of inside a custom backend.</p>
+            </div>
+          </article>
+          <article class="flow-item reveal" data-od-id="flow-wallet">
+            <span class="step">03</span>
+            <div>
+              <h3>GameChanger Wallet execution</h3>
+              <p>Flows become sealed transactions only at the last mile, where wallets review and sign.</p>
+            </div>
+          </article>
+          <article class="flow-item reveal" data-od-id="flow-evidence">
+            <span class="step">04</span>
+            <div>
+              <h3>Evidence-based confirmation</h3>
+              <p>Receipts and hashes are hints; cart items are confirmed only after normalized chain data provides evidence.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="p2p_soup_fluid_separator" data-p2p-soup-fluid-separator data-direction="rtl" data-variant="d" aria-label="Peer-to-peer soup fluid separator" data-od-id="p2p-soup-fluid-separator-4">
+      <span data-p2p-soup-fluid-separator-keyword>runs on your device</span>
+    </section>
+
+    <section class="icon-quote-section" aria-labelledby="icon-quote-title" data-od-id="icon-quote-section">
+      <div class="shell">
+        <div class="icon-quote reveal" data-od-id="icon-quote-card">
+          <img class="icon-quote-kitchen" src="assets/kitchen/kitchen_station_B.png" alt="" width="1024" height="1024" aria-hidden="true" data-od-id="icon-quote-kitchen-station">
+          <div class="icon-quote-copy">
+            <span class="punk-mark" data-od-id="icon-quote-mark">The pot belongs to users</span>
+            <blockquote id="icon-quote-title" data-od-id="icon-quote-text">No silos. No middlemen. No exclusive frontends.</blockquote>
+            <p data-od-id="icon-quote-copy">The README frames NeonSoup as direct user access to unified shared liquidity: the kawaii pot is not decoration, it is the protocol’s promise that everyone cooks from the same global soup.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="p2p_soup_fluid_separator" data-p2p-soup-fluid-separator data-direction="ltr" data-variant="e" aria-label="Peer-to-peer soup fluid separator" data-od-id="p2p-soup-fluid-separator-5">
+      <span data-p2p-soup-fluid-separator-keyword>you own it</span>
+    </section>
+
+    <section id="composability" aria-labelledby="composability-title" data-od-id="composability-section">
+      <div class="shell">
+        <div class="section-head reveal">
+          <h2 id="composability-title" data-od-id="composability-title">Eject any frontend</h2>
+          <p data-od-id="composability-copy">NeonSoup’s README points to UDC and GCFS as the composability layer: intents can travel by URL, QR, NFC, and verified on-chain code distribution.</p>
+        </div>
+        <div class="grid-2">
+          <article class="module reveal" data-od-id="module-udc">
+            <span class="chip">UDC</span>
+            <h3>Universal Dapp Connector</h3>
+            <p>Reusable intent-based integrations let users swap anywhere: links, QR codes, NFC tags, and street-level handoffs.</p>
+          </article>
+          <article class="module reveal" data-od-id="module-gcfs">
+            <span class="chip">GCFS</span>
+            <h3>On-chain file system</h3>
+            <p>Protocol libraries can be read, maintained, cryptographically verified, and composed without permission.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="p2p_soup_fluid_separator" data-p2p-soup-fluid-separator data-direction="rtl" data-variant="f" aria-label="Peer-to-peer soup fluid separator" data-od-id="p2p-soup-fluid-separator-6">
+      <span data-p2p-soup-fluid-separator-keyword>you are the &quot;batcher&quot;</span>
+    </section>
+
+    <section aria-labelledby="quote-title" data-od-id="quote-section">
+      <div class="shell">
+        <div class="quote-band reveal">
+          <span class="eyebrow" id="quote-title" data-od-id="quote-eyebrow">Composability in mind</span>
+          <span class="punk-mark" data-od-id="quote-punk-mark">Bring your own frontend</span>
+          <blockquote data-od-id="quote-text">Bring your own distinctiveness into The Global Soup.</blockquote>
+          <p data-od-id="quote-copy">Open, modular intents are the product surface: users bring their own frontends, wallets, rules, and recipes to the same shared liquidity.</p>
+          <img class="quote-neko" src="assets/cybernekos/hologram-wave_AO.png" alt="CyberNeko projecting a hologram" width="894" height="666" data-od-id="quote-neko">
+        </div>
+      </div>
+    </section>
+
+    <section class="p2p_soup_fluid_separator" data-p2p-soup-fluid-separator data-direction="ltr" data-variant="g" aria-label="Peer-to-peer soup fluid separator" data-od-id="p2p-soup-fluid-separator-7">
+      <span data-p2p-soup-fluid-separator-keyword>you are in control</span>
+    </section>
+
+    <section class="cta" aria-labelledby="cta-title" data-od-id="cta-section">
+      <div class="shell">
+        <div class="hud-card cta-card reveal">
+          <div>
+            <span class="eyebrow">Development dapp</span>
+            <h2 id="cta-title" style="margin-top: 14px;" data-od-id="cta-title">Testnet soup only.</h2>
+            <p data-od-id="cta-copy">The current frontend is a developer tool for testing the P2P DeFi Kernel order book, GameChanger Wallet intents, and protocol UX before the production NeonSoup frontend lands. It is not production ready.</p>
+            <div class="hero-actions" data-od-id="cta-actions">
+              <a class="btn btn-primary" href="https://neonsoup-dev.netlify.app/" data-od-id="cta-devtool-link">Open development dapp</a>
+              <a class="btn btn-ghost" href="https://github.com/GameChangerFinance/NeonSoup" data-od-id="cta-github-link">Read the README</a>
+            </div>
+          </div>
+          <img class="cta-art" src="assets/cybernekos/serving-soup_AD.png" alt="CyberNeko serving a glowing soup bowl" width="894" height="666" data-od-id="cta-neko">
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" data-od-id="site-footer">
+    <div class="shell">
+      <span data-od-id="footer-source">NeonSoup landing page based on the public README and CyberNeko design system.</span>
+      <span data-od-id="footer-warning">Use development surfaces on testnet only.</span>
+    </div>
+  </footer>
+
+  <script>
+    const root = document.documentElement;
+    const themeToggle = document.getElementById("themeToggle");
+    const savedTheme = localStorage.getItem("neonsoup-theme");
+    if (savedTheme) {
+      root.dataset.theme = savedTheme;
+      themeToggle.textContent = savedTheme === "light" ? "☾" : "☼";
+      themeToggle.setAttribute("aria-label", savedTheme === "light" ? "Toggle dark theme" : "Toggle light theme");
+    }
+
+    themeToggle.addEventListener("click", () => {
+      const next = root.dataset.theme === "light" ? "dark" : "light";
+      root.dataset.theme = next;
+      localStorage.setItem("neonsoup-theme", next);
+      themeToggle.textContent = next === "light" ? "☾" : "☼";
+      themeToggle.setAttribute("aria-label", next === "light" ? "Toggle dark theme" : "Toggle light theme");
+    });
+
+    const amount = document.getElementById("amount");
+    const priority = document.getElementById("priority");
+    const customPriority = document.querySelector("[data-select='priority']");
+    const priorityTrigger = document.querySelector(".cyber-select-trigger");
+    const prioritySelected = document.getElementById("prioritySelected");
+    const priorityOptions = Array.from(document.querySelectorAll(".cyber-option"));
+    const cookRoute = document.getElementById("cookRoute");
+    const estimate = document.getElementById("estimate");
+    const readinessBar = document.getElementById("readinessBar");
+    const routeStatus = document.getElementById("routeStatus");
+    const routeBadge = document.getElementById("routeBadge");
+    const routeId = document.getElementById("routeId");
+    const copyRoute = document.getElementById("copyRoute");
+
+    function setPriority(value) {
+      const selectedOption = priorityOptions.find((option) => option.dataset.value === value);
+      if (!selectedOption) return;
+      priority.value = value;
+      prioritySelected.textContent = selectedOption.textContent;
+      priorityOptions.forEach((option) => {
+        option.setAttribute("aria-selected", String(option.dataset.value === value));
+      });
+      customPriority.classList.remove("is-open");
+      priorityTrigger.setAttribute("aria-expanded", "false");
+      priority.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    priorityTrigger.addEventListener("click", () => {
+      const isOpen = customPriority.classList.toggle("is-open");
+      priorityTrigger.setAttribute("aria-expanded", String(isOpen));
+    });
+
+    priorityOptions.forEach((option) => {
+      option.addEventListener("click", () => setPriority(option.dataset.value));
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!customPriority.contains(event.target)) {
+        customPriority.classList.remove("is-open");
+        priorityTrigger.setAttribute("aria-expanded", "false");
+      }
+    });
+
+    function formatOutput(value) {
+      return new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+    }
+
+    function cook() {
+      const rawAmount = Number(String(amount.value).replace(/,/g, ""));
+      const cleanAmount = Number.isFinite(rawAmount) && rawAmount > 0 ? rawAmount : 0;
+      const multipliers = {
+        balanced: 0.99,
+        direct: 0.985,
+        inspectable: 0.978
+      };
+      const readiness = {
+        balanced: 82,
+        direct: 74,
+        inspectable: 92
+      };
+      const labels = {
+        balanced: "Balanced route simulated",
+        direct: "Direct match staged",
+        inspectable: "Recipe trace expanded"
+      };
+      const code = Math.abs(Math.round(cleanAmount * 37 + priority.value.length * 503)).toString(16).toUpperCase().padStart(4, "0").slice(0, 4);
+      estimate.textContent = formatOutput(cleanAmount * multipliers[priority.value]);
+      readinessBar.style.width = `${readiness[priority.value]}%`;
+      routeStatus.textContent = labels[priority.value];
+      routeBadge.textContent = cleanAmount > 0 ? "Wallet review" : "Needs amount";
+      routeId.textContent = `UDC://neonsoup/open-intent/${code}-C0OK`;
+    }
+
+    cookRoute.addEventListener("click", cook);
+    amount.addEventListener("input", cook);
+    priority.addEventListener("change", cook);
+    cook();
+
+    copyRoute.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(routeId.textContent);
+        copyRoute.textContent = "Copied";
+        setTimeout(() => { copyRoute.textContent = "Copy"; }, 1300);
+      } catch {
+        copyRoute.textContent = "Select";
+        routeId.focus?.();
+        setTimeout(() => { copyRoute.textContent = "Copy"; }, 1300);
+      }
+    });
+
+    // P2P soup fluid separator module: config, stage builder, anchor geometry, and scroll update loop.
+    window.p2p_soup_fluid_separator_config = {
+      selector: "[data-p2p-soup-fluid-separator]",
+      assets: {
+        potBg: "assets/images/empty_pot_bg.png",
+        potFg: "assets/images/empty_pot_fg.png",
+        cybernekos: [
+          "assets/cybernekos/serving-soup_AD.png",
+          "assets/cybernekos/soup-machine_AP.png",
+          "assets/cybernekos/order-tablet_O.png",
+          "assets/cybernekos/hologram-wave_AO.png",
+          "assets/cybernekos/peeking-counter_A.png"
+        ],
+        kitchen: [
+          "assets/kitchen/whisk_A.png",
+          "assets/kitchen/whisk_B.png",
+          "assets/kitchen/chef_knife_A.png",
+          "assets/kitchen/peeler_A.png",
+          "assets/kitchen/measuring_spoon_A.png",
+          "assets/kitchen/strainer_ladle_A.png",
+          "assets/kitchen/chef_hat_A.png",
+          "assets/kitchen/soup_bowl_A.png",
+          "assets/kitchen/blender_A.png"
+        ]
+      },
+      tokens: ["ADA", "MIN", "iUSD", "DJED", "USDM", "WMT", "SNEK"],
+      payloadCount: 9,
+      directionStrategy: "alternate",
+      arc: {
+        liftRatio: 0.32,
+        wobbleRatio: 0.035,
+        laneGapRatio: 0.018
+      },
+      anchors: {
+        mouthX: 0.5,
+        mouthY: 0.52
+      },
+      track: {
+        minHeight: 118,
+        maxHeight: 292,
+        heightRatio: 0.78,
+        minWidth: 140,
+        mouthOverlapRatio: 0
+      },
+      payloadScale: {
+        min: 0.36,
+        max: 0.78,
+        referenceWidth: 1180,
+        keywordDimming: 0.38
+      },
+      bubbles: {
+        count: 14,
+        minSize: 7,
+        maxSize: 18,
+        window: 0.56
+      },
+      payloadWindow: 0.42,
+      scrollWindow: {
+        startViewport: 0.92,
+        endViewport: 0.08
+      },
+      potRotation: {
+        sourceThrow: 42,
+        receiverCatch: 34
+      }
+    };
+
+    function create_p2p_soup_fluid_separator(customConfig = {}) {
+      const config = {
+        ...window.p2p_soup_fluid_separator_config,
+        ...customConfig,
+        assets: {
+          ...window.p2p_soup_fluid_separator_config.assets,
+          ...(customConfig.assets || {})
+        },
+        arc: {
+          ...window.p2p_soup_fluid_separator_config.arc,
+          ...(customConfig.arc || {})
+        },
+        anchors: {
+          ...window.p2p_soup_fluid_separator_config.anchors,
+          ...(customConfig.anchors || {})
+        },
+        track: {
+          ...window.p2p_soup_fluid_separator_config.track,
+          ...(customConfig.track || {})
+        },
+        payloadScale: {
+          ...window.p2p_soup_fluid_separator_config.payloadScale,
+          ...(customConfig.payloadScale || {})
+        },
+        bubbles: {
+          ...window.p2p_soup_fluid_separator_config.bubbles,
+          ...(customConfig.bubbles || {})
+        },
+        scrollWindow: {
+          ...window.p2p_soup_fluid_separator_config.scrollWindow,
+          ...(customConfig.scrollWindow || {})
+        },
+        potRotation: {
+          ...window.p2p_soup_fluid_separator_config.potRotation,
+          ...(customConfig.potRotation || {})
+        }
+      };
+
+      const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const shuffle = (items) => {
+        const copy = [...items];
+        for (let i = copy.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+      };
+      const buildStage = (section) => {
+        if (section.querySelector("[data-p2p-soup-fluid-separator-stage]")) return;
+        const keywordSource = section.querySelector("[data-p2p-soup-fluid-separator-keyword]");
+        const keywordNode = keywordSource ? keywordSource.cloneNode(true) : null;
+        section.innerHTML = `
+          <div class="p2p_soup_fluid_separator-stage" data-p2p-soup-fluid-separator-stage>
+            <div class="p2p_soup_fluid_separator-pot-back p2p_soup_fluid_separator-pot-left" aria-hidden="true">
+              <img class="p2p_soup_fluid_separator-pot-img" src="${config.assets.potBg}" alt="">
+              <span class="p2p_soup_fluid_separator-pot-glow"></span>
+              <span class="p2p_soup_fluid_separator-pot-fluid"></span>
+              <span class="p2p_soup_fluid_separator-pot-mouth"></span>
+            </div>
+            <div class="p2p_soup_fluid_separator-pot-back p2p_soup_fluid_separator-pot-right" aria-hidden="true">
+              <img class="p2p_soup_fluid_separator-pot-img" src="${config.assets.potBg}" alt="">
+              <span class="p2p_soup_fluid_separator-pot-glow"></span>
+              <span class="p2p_soup_fluid_separator-pot-fluid"></span>
+              <span class="p2p_soup_fluid_separator-pot-mouth"></span>
+            </div>
+            <div class="p2p_soup_fluid_separator-track" aria-hidden="true">
+              <svg class="p2p_soup_fluid_separator-wave" viewBox="0 0 1200 300" preserveAspectRatio="none" focusable="false">
+                <path class="p2p_soup_fluid_separator-wave-body" pathLength="1" d="M 0 164 C 94 78 166 82 244 145 S 398 254 522 160 S 716 50 842 145 S 1040 250 1200 116"/>
+                <path class="p2p_soup_fluid_separator-wave-hot" pathLength="1" d="M 0 141 C 114 54 188 76 270 132 S 402 224 544 138 S 730 42 858 126 S 1038 222 1200 96"/>
+                <path class="p2p_soup_fluid_separator-wave-cool" pathLength="1" d="M 0 190 C 114 112 190 116 286 170 S 428 278 558 186 S 748 86 878 168 S 1034 276 1200 146"/>
+              </svg>
+            </div>
+            <div class="p2p_soup_fluid_separator-bubble-layer" data-p2p-soup-fluid-separator-bubble-layer aria-hidden="true"></div>
+            <div class="p2p_soup_fluid_separator-payload-layer" data-p2p-soup-fluid-separator-payload-layer aria-hidden="true"></div>
+            <div class="p2p_soup_fluid_separator-pot-front p2p_soup_fluid_separator-pot-left" aria-hidden="true">
+              <img class="p2p_soup_fluid_separator-pot-img" src="${config.assets.potFg}" alt="">
+            </div>
+            <div class="p2p_soup_fluid_separator-pot-front p2p_soup_fluid_separator-pot-right" aria-hidden="true">
+              <img class="p2p_soup_fluid_separator-pot-img" src="${config.assets.potFg}" alt="">
+            </div>
+          </div>
+        `;
+        const payloadLayer = section.querySelector("[data-p2p-soup-fluid-separator-payload-layer]");
+        if (payloadLayer && keywordNode) {
+          const keywordLayer = document.createElement("div");
+          keywordLayer.className = "p2p_soup_fluid_separator-keyword-layer";
+          keywordLayer.dataset.p2pSoupFluidSeparatorKeywordLayer = "";
+          keywordLayer.setAttribute("aria-hidden", "true");
+          keywordNode.classList.add("p2p_soup_fluid_separator-keyword");
+          keywordLayer.appendChild(keywordNode);
+          payloadLayer.before(keywordLayer);
+        }
+      };
+
+      const makePayloadPool = () => {
+        const nekos = shuffle(config.assets.cybernekos).map((src, index) => ({
+          type: "image",
+          kind: "neko",
+          src,
+          alt: "",
+          size: 64 + (index % 3) * 13
+        }));
+        const kitchen = shuffle(config.assets.kitchen || []).map((src, index) => ({
+          type: "image",
+          kind: "kitchen",
+          src,
+          alt: "",
+          size: 48 + (index % 4) * 6
+        }));
+        const tokens = shuffle(config.tokens).map((label, index) => ({
+          type: "token",
+          label,
+          tone: index % 2 === 0 ? "tok-a" : "tok-b",
+          size: 58
+        }));
+        return shuffle([...nekos, ...kitchen, ...tokens]).slice(0, config.payloadCount);
+      };
+
+      const sections = Array.from(document.querySelectorAll(config.selector));
+      const instances = sections.map((section, sectionIndex) => {
+        buildStage(section);
+        const layer = section.querySelector("[data-p2p-soup-fluid-separator-payload-layer]");
+        const bubbleLayer = section.querySelector("[data-p2p-soup-fluid-separator-bubble-layer]");
+        const stage = section.querySelector("[data-p2p-soup-fluid-separator-stage]");
+        const track = section.querySelector(".p2p_soup_fluid_separator-track");
+        const wavePaths = Array.from(section.querySelectorAll(".p2p_soup_fluid_separator-wave path"));
+        const leftPot = section.querySelector(".p2p_soup_fluid_separator-pot-back.p2p_soup_fluid_separator-pot-left");
+        const rightPot = section.querySelector(".p2p_soup_fluid_separator-pot-back.p2p_soup_fluid_separator-pot-right");
+        const keyword = section.querySelector("[data-p2p-soup-fluid-separator-keyword]");
+        if (!layer || !bubbleLayer || !stage || !track || !leftPot || !rightPot) return null;
+
+        layer.textContent = "";
+        bubbleLayer.textContent = "";
+        const direction = section.dataset.direction || (config.directionStrategy === "alternate" && sectionIndex % 2 ? "rtl" : "ltr");
+        const bubbles = Array.from({ length: config.bubbles.count }, (_, index) => {
+          const node = document.createElement("span");
+          const phase = index / Math.max(1, config.bubbles.count - 1);
+          const size = lerp(config.bubbles.minSize, config.bubbles.maxSize, (index % 5) / 4);
+          node.className = "p2p_soup_fluid_separator-bubble";
+          node.style.setProperty("--p2p-separator-bubble-size", `${size.toFixed(1)}px`);
+          bubbleLayer.appendChild(node);
+          return {
+            node,
+            offset: phase * 0.46,
+            lane: ((index % 7) - 3) * 0.42,
+            float: index % 2 === 0 ? 1 : -1
+          };
+        });
+        const payloads = makePayloadPool().map((payload, index) => {
+          const node = document.createElement("span");
+          node.className = "p2p_soup_fluid_separator-rider";
+          node.dataset.p2pSoupFluidSeparatorRider = payload.kind || payload.type;
+          if (payload.kind === "kitchen") node.classList.add("is-kitchen");
+          if (index > 5) node.dataset.mobileHide = "true";
+          node.style.setProperty("--p2p-separator-rider-size", `${payload.size}px`);
+          node.style.setProperty("--p2p-separator-chip-size", index % 3 === 0 ? "0.56rem" : "0.6rem");
+
+          if (payload.type === "image") {
+            const img = document.createElement("img");
+            img.src = payload.src;
+            img.alt = payload.alt;
+            img.loading = "lazy";
+            node.appendChild(img);
+          } else {
+            const chip = document.createElement("span");
+            chip.className = `p2p_soup_fluid_separator-chip ${payload.tone}`;
+            chip.textContent = `$${payload.label}`;
+            node.appendChild(chip);
+          }
+
+          layer.appendChild(node);
+          return {
+            node,
+            offset: 0.03 + (index / Math.max(1, config.payloadCount - 1)) * 0.42,
+            lane: (index % 5) - 2,
+            spin: index % 2 === 0 ? 1 : -1
+          };
+        });
+
+        return { section, stage, track, wavePaths, leftPot, rightPot, direction, bubbles, payloads, keyword };
+      }).filter(Boolean);
+
+      function getMouthAnchor(stageRect, pot) {
+        const potRect = pot.getBoundingClientRect();
+        return {
+          x: potRect.left - stageRect.left + potRect.width * config.anchors.mouthX,
+          y: potRect.top - stageRect.top + potRect.height * config.anchors.mouthY,
+          potWidth: potRect.width
+        };
+      }
+
+      function getAnchorSet(instance, stageRect) {
+        const left = getMouthAnchor(stageRect, instance.leftPot);
+        const right = getMouthAnchor(stageRect, instance.rightPot);
+        const leftIsSource = instance.direction !== "rtl";
+        return {
+          left,
+          right,
+          source: leftIsSource ? left : right,
+          target: leftIsSource ? right : left
+        };
+      }
+
+      function pointOnArc(t, lane, stageRect, anchors) {
+        const x = lerp(anchors.source.x, anchors.target.x, t);
+        const baseY = lerp(anchors.source.y, anchors.target.y, t);
+        const arch = Math.sin(t * Math.PI);
+        const lift = Math.min(stageRect.height * config.arc.liftRatio, stageRect.height * 0.42);
+        const wobble = Math.sin((t * Math.PI * 2) + lane) * stageRect.height * config.arc.wobbleRatio;
+        const y = baseY - arch * lift + lane * stageRect.height * config.arc.laneGapRatio + wobble;
+        return {
+          x,
+          y
+        };
+      }
+
+      function updateTrackGeometry(instance, anchors, stageRect, streamStart, streamEnd, trackOpacity) {
+        const distance = Math.abs(anchors.target.x - anchors.source.x);
+        const overlap = Math.min(Math.min(anchors.source.potWidth, anchors.target.potWidth) * config.track.mouthOverlapRatio, 38);
+        const trackHeight = clamp(stageRect.height * config.track.heightRatio, config.track.minHeight, config.track.maxHeight);
+        const trackWidth = Math.max(config.track.minWidth, distance + overlap * 2);
+        const trackLeft = Math.min(anchors.source.x, anchors.target.x) - overlap;
+        const trackTop = lerp(anchors.source.y, anchors.target.y, 0.5) - trackHeight * 0.54;
+
+        instance.section.style.setProperty("--p2p-separator-track-left", `${trackLeft.toFixed(1)}px`);
+        instance.section.style.setProperty("--p2p-separator-track-top", `${trackTop.toFixed(1)}px`);
+        instance.section.style.setProperty("--p2p-separator-track-width", `${trackWidth.toFixed(1)}px`);
+        instance.section.style.setProperty("--p2p-separator-track-height", `${trackHeight.toFixed(1)}px`);
+        instance.section.style.setProperty("--p2p-separator-stream-start", `${(streamStart * 100).toFixed(1)}%`);
+        instance.section.style.setProperty("--p2p-separator-stream-end", `${(streamEnd * 100).toFixed(1)}%`);
+        instance.section.style.setProperty("--p2p-separator-track-opacity", Math.max(0, trackOpacity).toFixed(3));
+        const visibleSpan = Math.max(0.001, streamEnd - streamStart);
+        instance.wavePaths.forEach((path) => {
+          path.style.strokeDasharray = `${visibleSpan.toFixed(4)} 1`;
+          path.style.strokeDashoffset = (-streamStart).toFixed(4);
+        });
+      }
+
+      function updateInstance(instance) {
+        const rect = instance.section.getBoundingClientRect();
+        const start = window.innerHeight * config.scrollWindow.startViewport;
+        const end = window.innerHeight * config.scrollWindow.endViewport;
+        const progress = clamp((start - rect.top) / Math.max(1, start - end + rect.height));
+        const local = progress;
+        const dir = instance.direction === "rtl" ? -1 : 1;
+        const sourceThrowProgress = clamp(local / 0.66);
+        const catcherProgress = clamp((local - 0.34) / 0.66);
+        const throwPower = Math.sin(sourceThrowProgress * Math.PI);
+        const catchPower = Math.sin(catcherProgress * Math.PI);
+        const catchFill = catcherProgress;
+        const leftIsSource = instance.direction !== "rtl";
+        const leftRot = leftIsSource
+          ? lerp(0, config.potRotation.sourceThrow, throwPower)
+          : lerp(0, config.potRotation.receiverCatch, catchPower);
+        const rightRot = leftIsSource
+          ? lerp(0, -config.potRotation.receiverCatch, catchPower)
+          : lerp(0, -config.potRotation.sourceThrow, throwPower);
+        const stageRect = instance.stage.getBoundingClientRect();
+        const anchors = getAnchorSet(instance, stageRect);
+        const payloadResponsiveScale = clamp(
+          stageRect.width / Math.max(1, config.payloadScale.referenceWidth),
+          config.payloadScale.min,
+          config.payloadScale.max
+        );
+        const streamStart = clamp((local - 0.7) / 0.3);
+        const streamEnd = clamp(local / 0.52);
+        const streamSpan = Math.max(0.001, streamEnd - streamStart);
+        const streamPresence = clamp(streamSpan * 2.15);
+        const trackScale = 0.98 + Math.sin(local * Math.PI) * 0.06;
+        const trackOpacity = streamPresence * Math.sin(local * Math.PI);
+        const keywordPulse = instance.keyword
+          ? clamp(1 - Math.abs(local - 0.5) / 0.18)
+          : 0;
+        const keywordOpacity = Math.sin(keywordPulse * Math.PI * 0.5) * trackOpacity;
+        const keywordScale = lerp(0.92, 1.04, keywordPulse);
+        const leftFluid = leftIsSource
+          ? clamp(0.72 - local * 0.48, 0.18, 0.72)
+          : clamp(0.16 + catchFill * 0.62, 0.16, 0.78);
+        const rightFluid = leftIsSource
+          ? clamp(0.16 + catchFill * 0.62, 0.16, 0.78)
+          : clamp(0.72 - local * 0.48, 0.18, 0.72);
+
+        instance.section.style.setProperty("--p2p-separator-progress", progress.toFixed(4));
+        instance.section.style.setProperty("--p2p-separator-dir", dir);
+        instance.section.style.setProperty("--p2p-separator-track-scale", trackScale.toFixed(3));
+        updateTrackGeometry(instance, anchors, stageRect, streamStart, streamEnd, trackOpacity);
+        instance.section.style.setProperty("--p2p-separator-left-rotate", `${leftRot.toFixed(2)}deg`);
+        instance.section.style.setProperty("--p2p-separator-right-rotate", `${rightRot.toFixed(2)}deg`);
+        instance.section.style.setProperty("--p2p-separator-left-fluid", leftFluid.toFixed(3));
+        instance.section.style.setProperty("--p2p-separator-right-fluid", rightFluid.toFixed(3));
+        instance.section.style.setProperty("--p2p-separator-left-mouth", (leftIsSource ? clamp(1 - local / 0.7) : catchFill).toFixed(3));
+        instance.section.style.setProperty("--p2p-separator-right-mouth", (leftIsSource ? catchFill : clamp(1 - local / 0.7)).toFixed(3));
+        instance.section.style.setProperty("--p2p-separator-keyword-opacity", keywordOpacity.toFixed(3));
+        instance.section.style.setProperty("--p2p-separator-keyword-scale", keywordScale.toFixed(3));
+
+        instance.bubbles.forEach((bubble) => {
+          const raw = (local - bubble.offset) / config.bubbles.window;
+          const active = raw >= 0 && raw <= 1;
+          const t = clamp(raw);
+          const pos = pointOnArc(t, bubble.lane, stageRect, anchors);
+          const lift = Math.sin(t * Math.PI) * stageRect.height * 0.026 * bubble.float;
+          const opacity = active ? Math.sin(t * Math.PI) * streamPresence * 0.72 : 0;
+          const scale = active ? lerp(0.58, 1.14, Math.sin(t * Math.PI)) : 0.5;
+          bubble.node.style.opacity = opacity.toFixed(3);
+          bubble.node.style.transform = `translate3d(${pos.x.toFixed(1)}px, ${(pos.y + lift).toFixed(1)}px, 0) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
+        });
+
+        instance.payloads.forEach((payload) => {
+          const windowSize = config.payloadWindow;
+          const raw = (local - payload.offset) / windowSize;
+          const active = raw >= 0 && raw <= 1;
+          const t = clamp(raw);
+          const pathT = clamp(raw);
+          const pos = pointOnArc(pathT, payload.lane, stageRect, anchors);
+          const keywordClearance = lerp(1, 1 - config.payloadScale.keywordDimming, keywordPulse);
+          const opacity = active ? Math.sin(t * Math.PI) * streamPresence * keywordClearance : 0;
+          const scale = (active ? lerp(0.72, 1.18, Math.sin(t * Math.PI)) : 0.6) * payloadResponsiveScale;
+          const rotate = lerp(instance.direction === "rtl" ? 42 : -42, instance.direction === "rtl" ? -46 : 46, pathT) + payload.spin * local * 80;
+          payload.node.style.opacity = opacity.toFixed(3);
+          payload.node.style.transform = `translate3d(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px, 0) translate(-50%, -50%) rotate(${rotate.toFixed(1)}deg) scale(${scale.toFixed(3)})`;
+        });
+      }
+
+      let ticking = false;
+      function updateAll() {
+        ticking = false;
+        instances.forEach(updateInstance);
+      }
+      function requestUpdate() {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(updateAll);
+      }
+
+      window.addEventListener("scroll", requestUpdate, { passive: true });
+      window.addEventListener("resize", requestUpdate);
+      updateAll();
+
+      return {
+        config,
+        update: updateAll,
+        destroy() {
+          window.removeEventListener("scroll", requestUpdate);
+          window.removeEventListener("resize", requestUpdate);
+        }
+      };
+    }
+
+    const p2p_soup_fluid_separator = create_p2p_soup_fluid_separator();
+    window.p2p_soup_fluid_separator = p2p_soup_fluid_separator;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.14 });
+
+    document.querySelectorAll(".reveal").forEach((node) => observer.observe(node));
+  </script>
+
+
+
+</body></html>
