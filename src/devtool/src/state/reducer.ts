@@ -8,31 +8,13 @@ import { cartItemsWithoutSourceCollisions } from '../../../core/intents/cart';
 import type { AppAction, AppOptions, AppState, AssetMetadata, CartState, NetworkTag } from './types';
 
 export const defaultOptions: AppOptions = {
-  network: 'preprod',
-  provider: APP_CONFIG.defaultProvider,
-  providerUrl: '',
-  blockfrostUrl: '',
-  blockfrostKey: '',
-  gcWalletUrlPattern: APP_CONFIG.gcWalletUrlPattern,
-  swapSlippageTolerancePercent: 0.5,
-  swapPayUpPercent: 1,
-  toastAutoHideMs: 5200,
-  historyFetchLimit: 50,
-  cardanoscanTxUrlPattern: '',
-  popupMode: true,
-  hideUnknownOffers: true,
-  hideUnknownPortfolio: true,
-  ownerOnly: false,
-  theme: 'dark',
+  ...APP_CONFIG.defaults.options,
 };
 
 function freshCart(): CartState {
   return {
     items: [],
-    mode: 'bundle',
-    maxIntentsPerTransaction: 20,
-    modalOpen: false,
-    showConfirmedOnly: false,
+    ...APP_CONFIG.defaults.cart,
   };
 }
 
@@ -94,13 +76,13 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
       openAskAssetKey: assetKeys.ask,
       openOfferAmount: '',
       openAskAmount: '',
-      bulkOpenCount: '3',
-      bulkOpenVariancePercent: '0',
-      bulkOpenOfferVariancePercent: '0',
+      bulkOpenCount: APP_CONFIG.defaults.forms.bulkOpenCount,
+      bulkOpenVariancePercent: APP_CONFIG.defaults.forms.bulkOpenVariancePercent,
+      bulkOpenOfferVariancePercent: APP_CONFIG.defaults.forms.bulkOpenOfferVariancePercent,
       fillOfferAmount: '',
       fillAskAmount: '',
       swapOfferAmount: '',
-      swapPayUp: false,
+      swapPayUp: APP_CONFIG.defaults.forms.swapPayUp,
       ...(seed?.forms || {}),
     },
     wallet: seed?.wallet || null,

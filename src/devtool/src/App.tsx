@@ -198,8 +198,11 @@ export default function App() {
         offerAmount: state.forms.swapOfferAmount,
         payUp: state.forms.swapPayUp,
         excludedUtxoRefs,
-        slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
-        payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+        slippageToleranceBps: percentToBps(
+          state.options.swapSlippageTolerancePercent,
+          APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
+        ),
+        payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
       }),
     [
       ask,
@@ -573,8 +576,11 @@ export default function App() {
       offerAmount: state.forms.swapOfferAmount,
       payUp: state.forms.swapPayUp,
       excludedUtxoRefs,
-      slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
-      payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+      slippageToleranceBps: percentToBps(
+        state.options.swapSlippageTolerancePercent,
+        APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
+      ),
+      payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
     });
     return createSwapCartItems(state, freshQuote);
   }

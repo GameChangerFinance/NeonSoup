@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import textLogoUrl from './assets/textLogo.png';
-import logoUrl from './assets/logo.png';
+import logoUrl from '/assets/logo/icon.png';
 import { APP_CONFIG } from '../../common/config/appConfig';
 import { useAppDispatch, useAppState } from '../../common/state/appState';
 import { assetMap, balanceOf, resolveAsset, visiblePortfolio } from '../../common/state/selectors';
@@ -135,6 +135,28 @@ function tooltipAssetForLabel(label: string): UiAsset {
   return 'tooltip';
 }
 
+function alertAssetForMessage(tone: NoticeTone, message: string): UiAsset {
+  if (/wallet|connect|disconnect/i.test(message)) return 'wallet';
+  if (/liquidity|offers|order/i.test(message)) return tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : 'route';
+  if (/cart|queue|operation/i.test(message)) return 'cart';
+  if (/history|transactions|loaded/i.test(message)) return 'history';
+  if (/amount|balance|price|slippage|terms/i.test(message)) return tone === 'danger' ? 'danger' : 'scale';
+  if (tone === 'success') return 'success';
+  if (tone === 'danger') return 'danger';
+  if (tone === 'warning') return 'warning';
+  return 'info';
+}
+
+function ValidationAlert({ tone, message }: { tone: NoticeTone; message: string }) {
+  const role = tone === 'info' || tone === 'success' ? 'status' : 'alert';
+  return (
+    <div className={`alert alert-${tone} validation-alert`} role={role}>
+      <VisualAsset asset={alertAssetForMessage(tone, message)} className="ns-alert-art" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
 function walletFromReturn(raw: unknown): WalletConnection | null {
   if (!raw || typeof raw !== 'object') return null;
   const wallet = (raw as Record<string, unknown>).wallet;
@@ -229,6 +251,18 @@ function quotePreviewOutput(quote: SwapQuote): bigint {
   return quote.outputQuantity + (quote.unfilledRequestedQuantity * lastPrice.denominator) / lastPrice.numerator;
 }
 
+function quoteHasExecutableRoute(quote: SwapQuote): boolean {
+  return quote.segments.length > 0 && quote.outputQuantity > 0n;
+}
+
+function quoteHasTrueLiquidityShortage(quote: SwapQuote): boolean {
+  return (
+    quote.unfilledRequestedQuantity > 0n &&
+    quote.remainderBlockedCount === 0 &&
+    quote.segments.every((segment) => segment.makerRemainderQuantity <= 0n)
+  );
+}
+
 function formQuantity(value: string, asset: ResolvedAsset): bigint {
   return toBase(value, asset.decimals);
 }
@@ -290,7 +324,7 @@ function receiptToast(receipt: NeonSoupExecutionReceipt | null, raw: unknown): T
   return {
     tone: 'success',
     title: 'Wallet submitted',
-    message: `${receipt.itemCount} operation${receipt.itemCount === 1 ? '' : 's'} sent to the wallet. Chain confirmation is still authoritative.`,
+    message: `${receipt.itemCount} operation${receipt.itemCount === 1 ? '' : 's'} successfully sent to the wallet`,
   };
 }
 
@@ -786,23 +820,26 @@ function SwapScreen({
   const output = fromBase(quotePreviewOutput(quote), receiveAsset.decimals);
   const balance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
   const balancePercent = percent(quote.requestedInputQuantity, balance);
+  const executionQuantity = quote.executionInputQuantity;
+  const hasExecutableRoute = quoteHasExecutableRoute(quote);
+  const hasTrueLiquidityShortage = quoteHasTrueLiquidityShortage(quote);
   const swapProblems = [
     ...(!state.wallet ? ['Connect a wallet before swapping.'] : []),
     ...(requestedQuantity <= 0n ? ['Enter an amount greater than zero.'] : []),
-    ...(requestedQuantity > balance
+    ...(executionQuantity > balance
       ? [`Your balance is ${fromBase(balance, offerAsset.decimals)} ${assetTitle(offerAsset)}, which is not enough for this swap.`]
       : []),
-    ...(quote.unfilledRequestedQuantity > 0n
-      ? ['That amount is not available right now. Try a smaller swap.']
+    ...(requestedQuantity > 0n && hasTrueLiquidityShortage
+      ? ['Not enough available liquidity for this swap right now.']
       : []),
-    ...(requestedQuantity > 0n && !quote.segments.length
+    ...(requestedQuantity > 0n && !hasExecutableRoute
       ? [`No available offers can sell ${assetTitle(receiveAsset)} for ${assetTitle(offerAsset)} right now.`]
       : []),
   ];
   const swapDisabled = swapProblems.length > 0;
   const severity: SwapQuoteSeverity = severityForSlippage(
     quote.weightedSlippageBps,
-    percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
+    percentToBps(state.options.swapSlippageTolerancePercent, APP_CONFIG.defaults.quote.slippageTolerancePercentFallback),
   );
   return (
     <section className="panel-card swap-panel">
@@ -876,11 +913,7 @@ function SwapScreen({
 
       <CompactRouteBar quote={quote} offerAsset={offerAsset} receiveAsset={receiveAsset} />
 
-      {swapProblems.length ? (
-        <div className="alert alert-warning validation-alert" role="alert">
-          {swapProblems[0]}
-        </div>
-      ) : null}
+      {swapProblems.length ? <ValidationAlert tone="warning" message={swapProblems[0] ?? ''} /> : null}
 
       <button type="button" className="cta" onClick={onSwap} disabled={swapDisabled}>
         Swap <ActionButtonSuffix cartMode={cartMode} icon="bi-arrow-right" />
@@ -1035,11 +1068,7 @@ function OpenScreen({
         </div>
       </div>
 
-      {openProblems.length ? (
-        <div className="alert alert-warning validation-alert" role="alert">
-          {openProblems[0]}
-        </div>
-      ) : null}
+      {openProblems.length ? <ValidationAlert tone="warning" message={openProblems[0] ?? ''} /> : null}
 
       <button type="button" className="cta open-cta" onClick={onOpen} disabled={disabled}>
         Open Offer <ActionButtonSuffix cartMode={cartMode} icon="bi-plus-circle" />
@@ -1076,8 +1105,11 @@ function MarketsScreen({
         offerAmount: '1',
         payUp: state.forms.swapPayUp,
         excludedUtxoRefs,
-        slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
-        payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+        slippageToleranceBps: percentToBps(
+          state.options.swapSlippageTolerancePercent,
+          APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
+        ),
+        payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
       });
       return { receiveAsset, offerAsset, quote, balance };
     })
@@ -1289,11 +1321,7 @@ function HistoryScreen({
         <h1>History</h1>
         <RefreshButton loading={loading} disabled={!state.wallet} onClick={onRefresh} />
       </div>
-      {notice ? (
-        <div className="alert alert-info validation-alert" role="status">
-          {notice}
-        </div>
-      ) : null}
+      {notice ? <ValidationAlert tone="info" message={notice} /> : null}
       {!state.wallet ? <EmptyState asset="history">Connect a wallet to show your order history.</EmptyState> : null}
       <div className="table-list dex-table history-table">
         <div className="market-row table-head" role="row">
@@ -1447,11 +1475,7 @@ function OptionsScreen({
           {/*<span className="tag">Execution</span>*/}
         </div>
       )}
-      {optionProblems.length ? (
-        <div className="alert alert-warning validation-alert" role="alert">
-          {optionProblems[0]}
-        </div>
-      ) : null}
+      {optionProblems.length ? <ValidationAlert tone="warning" message={optionProblems[0] ?? ''} /> : null}
       <div className="options-grid">
         <label className="option-line">
           <span>
@@ -1595,7 +1619,7 @@ function AppModal({
   onClose: () => void;
   asset?: UiAsset;
 }) {
-  return (
+  return createPortal(
     <div className="backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="modal-card" aria-modal="true" role="dialog" aria-labelledby="modal-title">
         {asset ? <VisualAsset asset={asset} className="modal-helper-art" /> : null}
@@ -1605,9 +1629,10 @@ function AppModal({
             <i className="bi bi-x-lg" aria-hidden="true" />
           </button>
         </div>
-        {children}
+        <div className="modal-body-scroll">{children}</div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1707,7 +1732,10 @@ export default function App() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const [cartMode, setCartMode] = useState(() => localStorage.getItem('neonsoup-frontend-cart-mode') !== 'off');
+  const [cartMode, setCartMode] = useState(() => {
+    const stored = localStorage.getItem('neonsoup-frontend-cart-mode');
+    return stored ? stored === 'on' : APP_CONFIG.defaults.frontendCartMode;
+  });
   const [toast, setToast] = useState<ToastState | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
@@ -1735,8 +1763,11 @@ export default function App() {
         offerAmount: state.forms.swapOfferAmount,
         payUp: state.forms.swapPayUp,
         excludedUtxoRefs,
-        slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
-        payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+        slippageToleranceBps: percentToBps(
+          state.options.swapSlippageTolerancePercent,
+          APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
+        ),
+        payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
       }),
     [
       offerAsset,
@@ -1969,7 +2000,13 @@ export default function App() {
   async function swap() {
     const requestedQuantity = formQuantity(state.forms.swapOfferAmount, offerAsset);
     const balance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
-    if (!state.wallet || requestedQuantity <= 0n || requestedQuantity > balance || quote.unfilledRequestedQuantity > 0n || !quote.segments.length) {
+    if (
+      !state.wallet ||
+      requestedQuantity <= 0n ||
+      quote.executionInputQuantity > balance ||
+      !quoteHasExecutableRoute(quote) ||
+      quoteHasTrueLiquidityShortage(quote)
+    ) {
       setToast({ tone: 'warning', title: 'Swap unavailable', message: 'Fix the highlighted swap amount before continuing.' });
       return;
     }
@@ -1981,9 +2018,20 @@ export default function App() {
       offerAmount: state.forms.swapOfferAmount,
       payUp: state.forms.swapPayUp,
       excludedUtxoRefs,
-      slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
-      payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+      slippageToleranceBps: percentToBps(
+        state.options.swapSlippageTolerancePercent,
+        APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
+      ),
+      payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
     });
+    if (
+      freshQuote.executionInputQuantity > balance ||
+      !quoteHasExecutableRoute(freshQuote) ||
+      quoteHasTrueLiquidityShortage(freshQuote)
+    ) {
+      setToast({ tone: 'warning', title: 'Swap unavailable', message: 'Available offers changed. Review the updated quote before continuing.' });
+      return;
+    }
     const items = createSwapCartItems(state, freshQuote);
     const addResult = addItemsToCart(items);
     if (!addResult.ok) return;

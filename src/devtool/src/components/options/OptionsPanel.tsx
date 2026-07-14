@@ -273,7 +273,10 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                     dispatch({
                       type: 'set-options',
                       options: {
-                        swapSlippageTolerancePercent: optionPercent(Number(event.target.value), 0.5),
+                        swapSlippageTolerancePercent: optionPercent(
+                          Number(event.target.value),
+                          APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
+                        ),
                       },
                     })
                   }
@@ -295,7 +298,7 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                     dispatch({
                       type: 'set-options',
                       options: {
-                        swapPayUpPercent: optionPercent(Number(event.target.value), 1),
+                        swapPayUpPercent: optionPercent(Number(event.target.value), APP_CONFIG.defaults.quote.payUpPercentFallback),
                       },
                     })
                   }
