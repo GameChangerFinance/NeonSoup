@@ -3,6 +3,35 @@ import react from '@vitejs/plugin-react';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+function googleAnalyticsPlugin(measurementId: string) {
+  return {
+    name: 'neonsoup-google-analytics',
+    transformIndexHtml() {
+      if (!measurementId) return [];
+      return [
+        {
+          tag: 'script',
+          attrs: {
+            async: true,
+            src: `https://www.googletagmanager.com/gtag/js?id=${measurementId}`,
+          },
+          injectTo: 'head',
+        },
+        {
+          tag: 'script',
+          children: `
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', ${JSON.stringify(measurementId)});
+`,
+          injectTo: 'head',
+        },
+      ];
+    },
+  };
+}
+
 function devIntentMiddleware() {
   return {
     name: 'neonsoup-frontend-intents',
@@ -34,12 +63,14 @@ function devIntentMiddleware() {
 
 export default defineConfig(({ mode }) => {
   const envDir = resolve(process.cwd());
-  loadEnv(mode, envDir, '');
+  const env = loadEnv(mode, envDir, '');
+  const configuredGoogleAnalyticsId = env.NEONSOUP_GOOGLE_ANALYTICS_ID?.trim() || '';
+  const googleAnalyticsId = /^[A-Z0-9-]+$/.test(configuredGoogleAnalyticsId) ? configuredGoogleAnalyticsId : '';
 
   return {
     root: 'src/frontend',
     envDir,
-    plugins: [react(), devIntentMiddleware()],
+    plugins: [react(), googleAnalyticsPlugin(googleAnalyticsId), devIntentMiddleware()],
     build: {
       outDir: '../../dist/frontend',
       emptyOutDir: true,
