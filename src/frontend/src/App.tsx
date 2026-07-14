@@ -346,7 +346,7 @@ function HelpTooltip({ label, children, asset }: { label: string; children: Reac
       const rect = button.getBoundingClientRect();
       const margin = 16;
       const gap = 8;
-      const width = Math.min(420, window.innerWidth - margin * 2);
+      const width = Math.min(520, window.innerWidth - margin * 2);
       const left = Math.min(Math.max(rect.left + rect.width / 2 - width / 2, margin), window.innerWidth - width - margin);
       const showBelow = rect.top < 96;
       const top = showBelow ? rect.bottom + gap : Math.max(margin, rect.top - gap);
@@ -537,13 +537,14 @@ function CompactRouteBar({ quote, offerAsset, receiveAsset }: { quote: SwapQuote
     return Number((value * 10_000n) / displayTotal) / 100;
   };
   const segments = quote.segments.flatMap((segment) => {
-    const out: Array<{ key: string; className: string; displayQuantity: bigint; title: string }> = [];
+    const out: Array<{ key: string; className: string; displayQuantity: bigint; title: string; asset: UiAsset }> = [];
     if (segment.baseAskQuantity > 0n) {
       out.push({
         key: `fill-${segment.utxoRef}`,
         className: `route-segment route-${segment.severity}`,
         displayQuantity: segment.baseAskQuantity,
         title: `${fromBase(segment.baseAskQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)} -> ${fromBase(segment.baseOfferQuantity, receiveAsset.decimals)} ${assetTitle(receiveAsset)}. ${formatBps(segment.cumulativeSlippageBps)} price movement.`,
+        asset: segment.severity === 'danger' ? 'warning' : segment.severity === 'warning' ? 'scale' : 'ladle',
       });
     }
     if (segment.roundUpAskQuantity > 0n) {
@@ -552,6 +553,7 @@ function CompactRouteBar({ quote, offerAsset, receiveAsset }: { quote: SwapQuote
         className: `route-segment route-round route-round-${segment.severity}`,
         displayQuantity: segment.roundUpAskQuantity,
         title: `${fromBase(segment.roundUpAskQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)} is included to keep the offer cleanly executable.`,
+        asset: 'measure',
       });
     }
     if (segment.makerRemainderQuantity > 0n) {
@@ -560,6 +562,7 @@ function CompactRouteBar({ quote, offerAsset, receiveAsset }: { quote: SwapQuote
         className: 'route-segment route-remainder',
         displayQuantity: segment.makerRemainderAskEquivalentQuantity,
         title: `${fromBase(segment.makerRemainderQuantity, receiveAsset.decimals)} ${assetTitle(receiveAsset)} stays available after this swap.`,
+        asset: 'cloche',
       });
     }
     return out;
@@ -573,6 +576,7 @@ function CompactRouteBar({ quote, offerAsset, receiveAsset }: { quote: SwapQuote
       title: blockedAtBoundary
         ? `${fromBase(quote.unfilledRequestedQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)} is not routed at this order boundary.`
         : `${fromBase(quote.unfilledRequestedQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)} is above what is available right now.`,
+      asset: blockedAtBoundary ? 'strainer' : 'warning',
     });
   }
   return (
@@ -594,7 +598,10 @@ function CompactRouteBar({ quote, offerAsset, receiveAsset }: { quote: SwapQuote
             style={{ flexBasis: `${Math.max(0.3, share(segment.displayQuantity))}%` }}
             aria-label={segment.title}
           >
-            <span className="route-tooltip">{segment.title}</span>
+            <span className="route-tooltip">
+              <VisualAsset asset={segment.asset} className="ns-tooltip-art" />
+              <span className="help-popover-content">{segment.title}</span>
+            </span>
           </button>
         ))}
       </div>
