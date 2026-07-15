@@ -459,15 +459,38 @@ async function getAddressTransactions(
   limit = 50,
 ): Promise<ChainTransaction[]> {
   const safeLimit = Math.max(1, Math.min(250, Math.floor(limit) || 50));
-  const result = await requestGraphql<
-    { transactions?: Array<{ hash?: string | null }> | null },
-    { limit: number; offset: number; address: string }
-  >(context, GRAPHQL_MK2_OPERATIONS.addressTransactions, GRAPHQL_MK2_QUERIES.addressTransactions, {
-    limit: safeLimit,
-    offset: 0,
-    address,
+  type AddressTxRow = { hash?: string | null; includedAt?: string | number | null };
+  async function fetchSide(operationName: GraphqlMk2OperationName, query: string): Promise<AddressTxRow[]> {
+    const result = await requestGraphql<
+      { transactions?: AddressTxRow[] | null },
+      { limit: number; offset: number; address: string }
+    >(context, operationName, query, {
+      limit: safeLimit,
+      offset: 0,
+      address,
+    });
+    return result.transactions || [];
+  }
+  const [inputs, outputs] = await Promise.allSettled([
+    fetchSide(GRAPHQL_MK2_OPERATIONS.addressInputTransactions, GRAPHQL_MK2_QUERIES.addressInputTransactions),
+    fetchSide(GRAPHQL_MK2_OPERATIONS.addressOutputTransactions, GRAPHQL_MK2_QUERIES.addressOutputTransactions),
+  ]);
+  if (inputs.status === 'rejected' && outputs.status === 'rejected') {
+    throw inputs.reason instanceof Error ? inputs.reason : new Error('Address transaction lookup failed.');
+  }
+  const rows = [
+    ...(inputs.status === 'fulfilled' ? inputs.value : []),
+    ...(outputs.status === 'fulfilled' ? outputs.value : []),
+  ];
+  const deduped = new Map<string, number>();
+  rows.forEach((transaction) => {
+    if (!transaction.hash) return;
+    deduped.set(transaction.hash, Math.max(deduped.get(transaction.hash) || 0, parseChainIncludedAt(transaction.includedAt)));
   });
-  const hashes = (result.transactions || []).map((transaction) => transaction.hash || '').filter(Boolean);
+  const hashes = [...deduped.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, safeLimit)
+    .map(([hash]) => hash);
   return getTransactions(context, hashes);
 }
 

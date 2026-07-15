@@ -15,6 +15,7 @@ export type {
   ExecutionReceiptItem,
   ExecutionReceiptTx,
   GcscriptArgs,
+  GcscriptPrivacyMode,
   IntentArgs,
   IntentTemplate,
   NeonSoupExecutionReceipt,
@@ -28,6 +29,8 @@ export type {
   ProtocolTransaction,
   ProtocolTransactionDetail,
   ResolvedAsset,
+  ServiceFeeAsset,
+  ServiceFeeConfig,
   WalletConnection,
 } from '../../core/types';
 

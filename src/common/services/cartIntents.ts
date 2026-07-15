@@ -142,12 +142,14 @@ export function createBulkOpenCartItems(
 }
 
 export function createSwapCartItems(state: AppState, quote: SwapQuote): CartItem[] {
+  const swapActionId = newIntentId('swap-action');
   return quote.segments
     .filter((segment) => segment.offerQuantity > 0n)
     .map((segment) => {
       const args = buildFillArgsForQuantity(state, segment.offer, segment.offerQuantity);
       const intentId = args['intent-id'] || newIntentId(`swap-${segment.offer.txHash.slice(0, 8)}`);
       args['intent-id'] = intentId;
+      args['swap-action-id'] = swapActionId;
       const receivedAsset = resolveAsset(state, segment.offer.offerPolicyId, segment.offer.offerAssetName);
       const paidAsset = resolveAsset(state, segment.offer.askPolicyId, segment.offer.askAssetName);
       return {

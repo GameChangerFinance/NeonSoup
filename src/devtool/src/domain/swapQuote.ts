@@ -12,6 +12,7 @@ export interface SwapQuoteInput {
   payUp: boolean;
   excludedUtxoRefs?: ReadonlySet<string> | readonly string[];
   slippageToleranceBps?: number;
+  warningSlippageMultiplier?: number;
   payUpBps?: number;
 }
 
@@ -108,8 +109,6 @@ export interface SwapQuote {
   severity: SwapQuoteSeverity;
 }
 
-const EXTREME_SLIPPAGE_MULTIPLIER = 2;
-
 function assetKeyOf(policyId: string, assetNameHex: string): string {
   return `${policyId}.${assetNameHex}`;
 }
@@ -170,12 +169,12 @@ export function percentToBps(value: number | string | undefined, fallback = 0): 
   return Math.max(0, Math.min(500_000, Math.round(parsed * 100)));
 }
 
-export function severityForSlippage(slippageBps: number, toleranceBps: number): SwapQuoteSeverity {
+export function severityForSlippage(slippageBps: number, toleranceBps: number, warningMultiplier: number): SwapQuoteSeverity {
   if (slippageBps <= 0) return 'success';
-  if (toleranceBps <= 0) return 'warning';
-  if (slippageBps <= toleranceBps) return 'success';
-  if (slippageBps <= toleranceBps * EXTREME_SLIPPAGE_MULTIPLIER) return 'warning';
-  return 'danger';
+  if (toleranceBps <= 0) return 'danger';
+  if (slippageBps >= toleranceBps) return 'danger';
+  if (slippageBps >= toleranceBps * warningMultiplier) return 'warning';
+  return 'success';
 }
 
 export function summarizeSwapBookPolicyFilters(
@@ -330,6 +329,7 @@ export function quoteSwap({
   payUp,
   excludedUtxoRefs,
   slippageToleranceBps = 50,
+  warningSlippageMultiplier = 0.7,
   payUpBps = 100,
 }: SwapQuoteInput): SwapQuote {
   const requestedInputQuantity = offerAsset ? toBase(offerAmount, offerAsset.decimals) : 0n;
@@ -440,7 +440,8 @@ export function quoteSwap({
   const marginalPrice = rawSegments[rawSegments.length - 1]?.price || null;
   const weightedSlippageBps = priceDeviationBps(effectivePrice, normalized.executableBestPrice);
   const marginalSlippageBps = priceDeviationBps(marginalPrice, normalized.executableBestPrice);
-  const severity = outputQuantity > 0n ? severityForSlippage(weightedSlippageBps, slippageToleranceBps) : 'muted';
+  const severity =
+    outputQuantity > 0n ? severityForSlippage(weightedSlippageBps, slippageToleranceBps, warningSlippageMultiplier) : 'muted';
 
   return {
     requestedInputQuantity,
@@ -494,7 +495,7 @@ export function quoteSwap({
           priceDeviationBps: segmentSlippageBps,
           segmentSlippageBps,
           cumulativeSlippageBps,
-          severity: severityForSlippage(cumulativeSlippageBps, slippageToleranceBps),
+          severity: severityForSlippage(cumulativeSlippageBps, slippageToleranceBps, warningSlippageMultiplier),
         };
       });
     })(),

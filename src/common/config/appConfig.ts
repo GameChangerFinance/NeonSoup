@@ -1,7 +1,7 @@
 import { MAINNET_ASSETS, PREPROD_ASSETS } from './assets';
 import packageJson from '../../../package.json';
 
-const env = import.meta.env;
+const env = import.meta.env as ImportMetaEnv & Record<string, string | undefined>;
 const buildTag = env.VITE_NEONSOUP_BUILD_TAG || 'local';
 const appVersion = `${packageJson.version}+${buildTag}`;
 const defaultProvider = 'graphqlMk2';
@@ -9,6 +9,22 @@ const gcWalletUrlPattern = env.VITE_NEONSOUP_GC_WALLET_URL_PATTERN || '';
 
 function envFlag(value: string | undefined): boolean {
   return value === '1' || value?.toLowerCase() === 'true';
+}
+
+function serviceFees(prefix: 'PREPROD' | 'MAINNET') {
+  return {
+    address: env[`VITE_NEONSOUP_${prefix}_SERVICE_FEE_ADDRESS`] || '',
+    bundleSwap: {
+      policyId: env[`VITE_NEONSOUP_${prefix}_BUNDLE_SWAP_SERVICE_FEE_POLICY_ID`] || 'ada',
+      assetNameHex: env[`VITE_NEONSOUP_${prefix}_BUNDLE_SWAP_SERVICE_FEE_ASSET_NAME`] || 'ada',
+      quantity: env[`VITE_NEONSOUP_${prefix}_BUNDLE_SWAP_SERVICE_FEE_QUANTITY`] || '',
+    },
+    parallelSwap: {
+      policyId: env[`VITE_NEONSOUP_${prefix}_PARALLEL_SWAP_SERVICE_FEE_POLICY_ID`] || 'ada',
+      assetNameHex: env[`VITE_NEONSOUP_${prefix}_PARALLEL_SWAP_SERVICE_FEE_ASSET_NAME`] || 'ada',
+      quantity: env[`VITE_NEONSOUP_${prefix}_PARALLEL_SWAP_SERVICE_FEE_QUANTITY`] || '',
+    },
+  };
 }
 
 export const APP_CONFIG = {
@@ -34,9 +50,9 @@ export const APP_CONFIG = {
       blockfrostUrl: '',
       blockfrostKey: '',
       gcWalletUrlPattern,
-      swapSlippageTolerancePercent: 0.5,
+      swapSlippageTolerancePercent: 5.0,
       swapPayUpPercent: 5,
-      toastAutoHideMs: 5200,
+      toastAutoHideMs: 30000,
       historyFetchLimit: 50,
       cardanoscanTxUrlPattern: '',
       popupMode: true,
@@ -46,6 +62,9 @@ export const APP_CONFIG = {
       theme: 'dark',
     },
     forms: {
+      openOfferAmount: '0.1',
+      openAskAmount: '0.1',
+      swapOfferAmount: '0.1',
       bulkOpenCount: '3',
       bulkOpenVariancePercent: '0',
       bulkOpenOfferVariancePercent: '0',
@@ -59,6 +78,8 @@ export const APP_CONFIG = {
     },
     quote: {
       slippageTolerancePercentFallback: 0.5,
+      warningSlippageMultiplier: 0.7,
+      maxSlippageTolerancePercent: 35,
       payUpPercentFallback: 5,
     },
   },
@@ -70,6 +91,7 @@ export const APP_CONFIG = {
       blockfrostUrl: '',
       apiKey: env.VITE_NEONSOUP_PREPROD_BLOCKFROST_KEY || '',
       beaconPolicy: 'c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209',
+      serviceFees: serviceFees('PREPROD'),
       assets: PREPROD_ASSETS,
     },
     mainnet: {
@@ -79,6 +101,7 @@ export const APP_CONFIG = {
       blockfrostUrl: '',
       apiKey: env.VITE_NEONSOUP_MAINNET_BLOCKFROST_KEY || '',
       beaconPolicy: 'c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209',
+      serviceFees: serviceFees('MAINNET'),
       assets: MAINNET_ASSETS,
     },
   },

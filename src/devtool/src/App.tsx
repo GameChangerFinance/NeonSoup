@@ -202,6 +202,7 @@ export default function App() {
           state.options.swapSlippageTolerancePercent,
           APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
         ),
+        warningSlippageMultiplier: APP_CONFIG.defaults.quote.warningSlippageMultiplier,
         payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
       }),
     [
@@ -580,6 +581,7 @@ export default function App() {
         state.options.swapSlippageTolerancePercent,
         APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
       ),
+      warningSlippageMultiplier: APP_CONFIG.defaults.quote.warningSlippageMultiplier,
       payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
     });
     return createSwapCartItems(state, freshQuote);

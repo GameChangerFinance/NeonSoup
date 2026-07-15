@@ -956,7 +956,7 @@ button {
   width: min(520px, calc(100vw - 32px));
   max-width: min(520px, calc(100vw - 32px));
   min-height: 84px;
-  padding: 16px 18px 16px 122px;
+  padding: 16px 18px 16px 100px;
   border: 1px solid var(--line);
   border-radius: 18px 6px 18px 10px;
   background:
@@ -1393,6 +1393,20 @@ button {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
+  position: relative;
+}
+
+.open-switch-btn {
+  left: 50%;
+  margin: 0;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.open-switch-btn:hover,
+.open-switch-btn:focus-visible {
+  transform: translate(-50%, calc(-50% - 2px));
 }
 
 .offer-box {
@@ -1494,7 +1508,7 @@ button {
   isolation: isolate;
   overflow: visible;
   min-height: 74px;
-  padding: 16px 18px 16px 122px;
+  padding: 16px 18px 16px 100px;
   border-color: color-mix(in srgb, var(--yellow) 58%, transparent);
   background: color-mix(in srgb, var(--yellow) 14%, transparent);
   color: var(--text);
@@ -2531,6 +2545,19 @@ button {
 
   .open-grid {
     grid-template-columns: 1fr;
+  }
+
+  .open-switch-btn {
+    left: auto;
+    margin: -12px auto;
+    position: relative;
+    top: auto;
+    transform: none;
+  }
+
+  .open-switch-btn:hover,
+  .open-switch-btn:focus-visible {
+    transform: translateY(-2px);
   }
 
   .history-row {

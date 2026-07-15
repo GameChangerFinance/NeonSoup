@@ -11,6 +11,7 @@ import { assetTitle, configuredAssets } from '../../common/domain/assets';
 import { createOpenBookSnapshot } from '../../common/domain/openBook';
 import { isCurrentOutputOwner } from '../../common/domain/ownership';
 import { fromBase, percent, ratioDecimal, toBase } from '../../common/domain/quantities';
+import { serviceFeesForNetwork, swapServiceFeeForMode } from '../../common/domain/serviceFees';
 import { safeError, short } from '../../common/domain/text';
 import {
   composeTransactionRows,
@@ -66,6 +67,16 @@ interface ToastState {
   message: string;
 }
 
+interface WalletExecutionStatus {
+  txs: Array<{
+    status: string;
+    hasSubmitError: boolean;
+    hasContentionError: boolean;
+  }>;
+  itemCount?: number;
+  incognito: boolean;
+}
+
 const HELP = {
   swapPage:
     'Swap estimates a route across live NeonSoup offers. It feels like a DEX swap, but it fills P2P DeFi Kernel order-book liquidity at posted limit prices.',
@@ -83,6 +94,7 @@ const HELP = {
     'Asset and estimated amount you may receive from the current route. The final amount depends on live order availability when you submit.',
   bestExecutablePrice: 'Best currently available limit price from executable live offers for this pair.',
   balanceUsed: 'Share of your connected wallet balance used by the executable part of this swap.',
+  serviceFee: 'NeonSoup service fee added to the wallet transaction for this swap action.',
   openOfferAsset: 'Asset and amount you lock into a new one-way offer for other users to fill.',
   openRequestAsset: 'Asset and amount you want to receive as the offer is filled.',
   limitPrice: 'Fixed exchange rate for your offer. Fillers can only take your offered asset if they pay at least this price.',
@@ -106,6 +118,11 @@ const HELP = {
     'Wallet-submitted operations are not final until a provider confirms the transaction on-chain.',
 };
 
+const INCOGNITO_NOTICE =
+  'You are using Incognito Mode. You can continue without connecting because GameChanger Wallet will provide the required address privately, but NeonSoup cannot know your balance.';
+const INCOGNITO_CART_NOTICE =
+  'In Incognito Mode, NeonSoup does not keep executed Cart items after opening the wallet, so your activity is not tracked in local app history.';
+
 const UI_ASSETS = {
   route: '/assets/cybernekos/lens-inspection_U.png',
   tooltip: '/assets/cybernekos/peeking-counter_A.png',
@@ -117,6 +134,7 @@ const UI_ASSETS = {
   walletConnected: '/assets/cybernekos/dj-cook_K.png',
   walletConnect: '/assets/cybernekos/yawning-paw_AF.png',
   walletDisconnect: '/assets/cybernekos/skateboard-bowl_AE.png',
+  incognito: '/assets/cybernekos/incognito_half_A.png',
   receipt: '/assets/cybernekos/receipt-sorting_S.png',
   parallel: '/assets/cybernekos/receipt-sorting_S.png',
   cloche: '/assets/cybernekos/serving-cloche_AQ.png',
@@ -135,6 +153,7 @@ const UI_ASSETS = {
   options: '/assets/cybernekos/pantry-terminal_AM.png',
   bundleActions: '/assets/cybernekos/soup-pot-stack_BB.png',
   payUp: '/assets/cybernekos/temperature-gun_W.png',
+  serviceFee: '/assets/cybernekos/bowl-seasoning_I.png',
   bundle: '/assets/kitchen/bento_cube_A.png',
   measure: '/assets/kitchen/measuring_spoon_A.png',
   strainer: '/assets/kitchen/strainer_ladle_A.png',
@@ -153,6 +172,7 @@ function tooltipAssetForLabel(label: string): UiAsset {
   if (/history/i.test(label)) return 'history';
   if (/options/i.test(label)) return 'options';
   if (/portfolio/i.test(label)) return 'walletConnected';
+  if (/service fee/i.test(label)) return 'serviceFee';
   if (/pay-up/i.test(label)) return 'payUp';
   if (/price impact|slippage|limit price/i.test(label)) return 'scale';
   if (/swap|receive|you pay|executable|balance used|route|availability/i.test(label)) return 'ladle';
@@ -173,7 +193,7 @@ function tooltipAssetForLabel(label: string): UiAsset {
 
 function alertAssetForMessage(tone: NoticeTone, message: string): UiAsset {
   if (/order transactions? loaded|recent order transactions|transaction/i.test(message)) return 'history';
-  if (/connect a wallet/i.test(message)) return 'walletConnect';
+  if (/connect a wallet|incognito mode/i.test(message)) return 'incognito';
   if (/disconnect/i.test(message)) return 'walletDisconnect';
   if (/wallet|connect/i.test(message)) return 'walletConnected';
   if (/liquidity|offers|order/i.test(message)) return tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : 'route';
@@ -186,7 +206,27 @@ function alertAssetForMessage(tone: NoticeTone, message: string): UiAsset {
   return 'info';
 }
 
-function ValidationAlert({ tone, message }: { tone: NoticeTone; message: string }) {
+interface PageAlertItem {
+  tone: NoticeTone;
+  message: string;
+}
+
+const ALERT_PRIORITY: Record<NoticeTone, number> = {
+  danger: 0,
+  warning: 1,
+  success: 2,
+  info: 3,
+};
+
+function prioritizedAlert(alerts: Array<PageAlertItem | false | null | undefined>): PageAlertItem | null {
+  return (
+    alerts
+      .filter((alert): alert is PageAlertItem => Boolean(alert && alert.message))
+      .sort((left, right) => ALERT_PRIORITY[left.tone] - ALERT_PRIORITY[right.tone])[0] || null
+  );
+}
+
+function ValidationAlert({ tone, message }: PageAlertItem) {
   const role = tone === 'info' || tone === 'success' ? 'status' : 'alert';
   return (
     <div className={`alert alert-${tone} validation-alert`} role={role}>
@@ -196,14 +236,54 @@ function ValidationAlert({ tone, message }: { tone: NoticeTone; message: string 
   );
 }
 
+function PageAlert({ alerts }: { alerts: Array<PageAlertItem | false | null | undefined> }) {
+  const alert = prioritizedAlert(alerts);
+  return alert ? <ValidationAlert tone={alert.tone} message={alert.message} /> : null;
+}
+
 function walletFromReturn(raw: unknown): WalletConnection | null {
   if (!raw || typeof raw !== 'object') return null;
   const wallet = (raw as Record<string, unknown>).wallet;
   return wallet && typeof wallet === 'object' ? (wallet as WalletConnection) : null;
 }
 
+function incognitoExecutionStatusFromWalletReturn(raw: unknown): WalletExecutionStatus | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const decoded = (raw as Record<string, unknown>).decoded;
+  if (!decoded || typeof decoded !== 'object') return null;
+  const exports = (decoded as Record<string, unknown>).exports;
+  if (!exports || typeof exports !== 'object') return null;
+  const receipt = (exports as Record<string, unknown>).neonsoupExecution;
+  if (!receipt || typeof receipt !== 'object') return null;
+  const txs = (receipt as Record<string, unknown>).txs;
+  if (!Array.isArray(txs)) return null;
+  const normalized = txs
+    .map((tx) => {
+      if (!tx || typeof tx !== 'object') return null;
+      const value = tx as Record<string, unknown>;
+      return typeof value.status === 'string' &&
+        typeof value.hasSubmitError === 'boolean' &&
+        typeof value.hasContentionError === 'boolean'
+        ? {
+            status: value.status,
+            hasSubmitError: value.hasSubmitError,
+            hasContentionError: value.hasContentionError,
+          }
+        : null;
+    })
+    .filter((tx): tx is WalletExecutionStatus['txs'][number] => Boolean(tx));
+  return normalized.length === txs.length && normalized.length ? { txs: normalized, incognito: true } : null;
+}
+
 function formatBps(bps: number): string {
   return `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`;
+}
+
+function serviceFeeText(state: AppState): string {
+  const fee = swapServiceFeeForMode(serviceFeesForNetwork(state.options.network, state.customAssets), state.cart.mode);
+  if (!fee) return 'No fee';
+  const ticker = fee.ticker || (fee.policyId === 'ada' && fee.assetNameHex === 'ada' ? 'ADA' : `${short(fee.policyId, 4, 4)}.${fee.assetNameHex || 'asset'}`);
+  return `${fee.displayQuantity || fee.quantity} ${ticker}`;
 }
 
 function compareQuantityDesc(a: bigint, b: bigint): number {
@@ -343,27 +423,48 @@ function protocolRowsFromChainTransactions(state: AppState, transactions: Parame
     .filter((transaction) => transaction.status === 'failed' || Boolean(transaction.actions?.length));
 }
 
-function receiptToast(receipt: NeonSoupExecutionReceipt | null, raw: unknown): ToastState {
-  if (!receipt) {
+function executionStatusFromReceipt(receipt: NeonSoupExecutionReceipt): WalletExecutionStatus {
+  return { txs: receipt.txs, itemCount: receipt.itemCount, incognito: false };
+}
+
+function walletExecutionToast(status: WalletExecutionStatus | null): ToastState | null {
+  if (!status) return null;
+  const total = status.txs.length;
+  const failed = status.txs.filter((tx) => tx.hasSubmitError).length;
+  const contention = status.txs.filter((tx) => tx.hasContentionError).length;
+  const submitted = Math.max(0, total - failed);
+  const privacySuffix = status.incognito
+    ? ' NeonSoup did not keep local activity details for this Incognito Mode execution.'
+    : ' Final details will update after chain confirmation.';
+  if (!failed) {
+    const actionCount = status.itemCount || total;
     return {
       tone: 'success',
-      title: 'Wallet connected',
-      message: 'NeonSoup can now read your public wallet address and balances.',
+      title: status.incognito ? 'Wallet execution sent' : 'Wallet submitted',
+      message: `${actionCount} operation${actionCount === 1 ? '' : 's'} sent to the wallet with no reported transaction errors.${privacySuffix}`,
     };
   }
-  const failed = receipt.txs.filter((tx) => tx.hasSubmitError).length;
-  const submitted = Math.max(0, receipt.txs.length - failed);
-  if (failed) {
+  if (failed === total) {
     return {
-      tone: 'warning',
-      title: 'Some transactions need attention',
-      message: `${submitted} transaction${submitted === 1 ? '' : 's'} submitted and ${failed} reported a tentative wallet submission error. Final amounts will update after chain confirmation.`,
+      tone: 'danger',
+      title: 'Wallet execution failed',
+      message: `${failed} transaction${failed === 1 ? '' : 's'} reported wallet submission errors${contention ? `, including ${contention} contention error${contention === 1 ? '' : 's'}` : ''}.${privacySuffix}`,
     };
   }
   return {
+    tone: 'warning',
+    title: 'Some transactions need attention',
+    message: `${submitted} transaction${submitted === 1 ? '' : 's'} submitted and ${failed} reported wallet submission errors${contention ? `, including ${contention} contention error${contention === 1 ? '' : 's'}` : ''}.${privacySuffix}`,
+  };
+}
+
+function walletReturnToast(receipt: NeonSoupExecutionReceipt | null, incognitoStatus: WalletExecutionStatus | null): ToastState {
+  const executionToast = walletExecutionToast(receipt ? executionStatusFromReceipt(receipt) : incognitoStatus);
+  if (executionToast) return executionToast;
+  return {
     tone: 'success',
-    title: 'Wallet submitted',
-    message: `${receipt.itemCount} operation${receipt.itemCount === 1 ? '' : 's'} successfully sent to the wallet`,
+    title: 'Wallet connected',
+    message: 'NeonSoup can now read your public wallet address and balances.',
   };
 }
 
@@ -733,10 +834,10 @@ function ActionButtonSuffix({ cartMode, icon }: { cartMode: boolean; icon: strin
   );
 }
 
-function Sidebar({ hideBrand = false }: { hideBrand?: boolean }) {
+function Sidebar({ hideBrand = false, incognito = false }: { hideBrand?: boolean; incognito?: boolean }) {
   const items: Array<[ViewId, string, string, boolean?]> = [
     ['swap', 'bi-arrow-left-right', 'Swap'],
-    ['open', 'bi-plus-circle', 'Open', true],
+    ['open', 'bi-plus-circle', 'Open', !incognito],
     ['markets', 'bi-graph-up-arrow', 'Markets'],
     ['orders', 'bi-clipboard-check', 'My Orders'],
     ['portfolio', 'bi-person', 'Portfolio'],
@@ -828,9 +929,13 @@ function Topbar({
       ) : (
         <span className="wallet-help-wrap wallet-connect-wrap">
           <button type="button" className="wallet-btn wallet-connect" onClick={onConnect}>
-            <i className="bi bi-wallet" aria-hidden="true" /> Connect Wallet
+            <i className="bi bi-incognito" aria-hidden="true" /> Connect Wallet
           </button>
-          <HelpTooltip label="Connect wallet help">Connect through GameChanger Wallet. It supports CIP-30 browser extension wallets, hardware wallets, seed phrase wallets, QR wallets, and burner wallets.</HelpTooltip>
+          <HelpTooltip label="Connect wallet help">
+            Connect through GameChanger Wallet for balances and history; it supports CIP-30 browser extension wallets, hardware wallets, seed phrase wallets, QR wallets, and burner wallets.
+            <br/><br/>  
+            <strong>You are currently in Incognito Mode:</strong> you can trade without exposing your address to NeonSoup. 
+          </HelpTooltip>
         </span>
       )}
       <button type="button" className="icon-btn more-btn" aria-label="Open Options" onClick={onOptions}>
@@ -874,12 +979,24 @@ function SwapScreen({
   const executionQuantity = quote.executionInputQuantity;
   const hasExecutableRoute = quoteHasExecutableRoute(quote);
   const hasTrueLiquidityShortage = quoteHasTrueLiquidityShortage(quote);
+  const incognito = !state.wallet;
+  const slippageTolerancePercent = state.options.swapSlippageTolerancePercent;
+  const slippageToleranceBps = percentToBps(slippageTolerancePercent, APP_CONFIG.defaults.quote.slippageTolerancePercentFallback);
+  const maxSlippageTolerancePercent = APP_CONFIG.defaults.quote.maxSlippageTolerancePercent;
+  const slippageDangerProblems = [
+    ...(slippageTolerancePercent <= 0 ? ['Set a slippage tolerance greater than 0% before swapping.'] : []),
+    ...(slippageTolerancePercent >= maxSlippageTolerancePercent
+      ? [`Slippage tolerance must stay below ${maxSlippageTolerancePercent}%.`]
+      : []),
+    ...(hasPair && requestedQuantity > 0n && quote.outputQuantity > 0n && quote.weightedSlippageBps >= slippageToleranceBps
+      ? ['Price impact is above your slippage tolerance. Increase tolerance or choose a smaller swap.']
+      : []),
+  ];
   const swapProblems = [
-    ...(!state.wallet ? ['Connect a wallet before swapping.'] : []),
     ...(!receiveAsset ? ['Select the asset you want to receive before swapping.'] : []),
     ...(receiveAsset && receiveAsset.assetKey === offerAsset.assetKey ? ['Select a different asset to receive before swapping.'] : []),
     ...(requestedQuantity <= 0n ? ['Enter an amount greater than zero.'] : []),
-    ...(executionQuantity > balance
+    ...(state.wallet && executionQuantity > balance
       ? [`Your balance is ${fromBase(balance, offerAsset.decimals)} ${assetTitle(offerAsset)}, which is not enough for this swap.`]
       : []),
     ...(hasPair && requestedQuantity > 0n && hasTrueLiquidityShortage
@@ -889,10 +1006,11 @@ function SwapScreen({
       ? [`No available offers can sell ${assetTitle(receiveAsset)} for ${assetTitle(offerAsset)} right now.`]
       : []),
   ];
-  const swapDisabled = swapProblems.length > 0;
+  const swapDisabled = slippageDangerProblems.length > 0 || swapProblems.length > 0;
   const severity: SwapQuoteSeverity = severityForSlippage(
     quote.weightedSlippageBps,
-    percentToBps(state.options.swapSlippageTolerancePercent, APP_CONFIG.defaults.quote.slippageTolerancePercentFallback),
+    slippageToleranceBps,
+    APP_CONFIG.defaults.quote.warningSlippageMultiplier,
   );
   return (
     <section className="panel-card swap-panel">
@@ -983,7 +1101,13 @@ function SwapScreen({
 
       {receiveAsset && hasPair ? <CompactRouteBar quote={quote} offerAsset={offerAsset} receiveAsset={receiveAsset} /> : null}
 
-      {swapProblems.length ? <ValidationAlert tone="warning" message={swapProblems[0] ?? ''} /> : null}
+      <PageAlert
+        alerts={[
+          incognito && { tone: 'info', message: `${INCOGNITO_NOTICE} Connect a wallet if you want balances to be shown.` },
+          slippageDangerProblems.length ? { tone: 'danger', message: slippageDangerProblems[0] ?? '' } : null,
+          swapProblems.length ? { tone: 'warning', message: swapProblems[0] ?? '' } : null,
+        ]}
+      />
 
       <button type="button" className="cta" onClick={onSwap} disabled={swapDisabled}>
         Swap <ActionButtonSuffix cartMode={cartMode} icon="bi-arrow-right" />
@@ -1002,7 +1126,11 @@ function SwapScreen({
         </div>
         <div>
           Balance used <HelpTooltip label="Balance used help">{HELP.balanceUsed}</HelpTooltip>
-          <strong>{balance ? `${balancePercent}%` : 'Connect wallet'}</strong>
+          <strong>{incognito ? 'Incognito' : balance ? `${balancePercent}%` : '0%'}</strong>
+        </div>
+        <div>
+          Service fee <HelpTooltip label="Service fee help">{HELP.serviceFee}</HelpTooltip>
+          <strong>{serviceFeeText(state)}</strong>
         </div>
       </div>
     </section>
@@ -1029,17 +1157,18 @@ function OpenScreen({
   refreshing: boolean;
 }) {
   const dispatch = useAppDispatch();
+  const [flipRotation, setFlipRotation] = useState(0);
   const offerBalance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
   const offerQuantity = formQuantity(state.forms.openOfferAmount, offerAsset);
   const askQuantity = askAsset ? formQuantity(state.forms.openAskAmount, askAsset) : 0n;
   const priceValue = askAsset ? openPriceText(offerQuantity, askQuantity, offerAsset, askAsset) : '-';
+  const incognito = !state.wallet;
   const openProblems = [
-    ...(!state.wallet ? ['Connect a wallet before opening an offer.'] : []),
     ...(!askAsset ? ['Select the asset you want to receive before opening an offer.'] : []),
     ...(askAsset && offerAsset.assetKey === askAsset.assetKey ? ['Select a different asset to receive before opening an offer.'] : []),
     ...(offerQuantity <= 0n ? ['Enter the amount you want to offer.'] : []),
     ...(askQuantity <= 0n ? ['Enter the amount you want to receive.'] : []),
-    ...(offerQuantity > offerBalance
+    ...(state.wallet && offerQuantity > offerBalance
       ? [`Your balance is ${fromBase(offerBalance, offerAsset.decimals)} ${assetTitle(offerAsset)}, which is not enough for this offer.`]
       : []),
   ];
@@ -1063,6 +1192,7 @@ function OpenScreen({
             Create a one-way Cardano-Swaps offer. Other users can fill it partially or fully while your price stays fixed.
             <HelpTooltip label="Open offer help">
               Opening an offer locks the asset you offer at your personal P2P DeFi Kernel address. Fillers pay the requested asset according to your limit price.
+              {incognito ? ' In Incognito Mode, set amounts carefully because NeonSoup cannot read your balance.' : ''}
             </HelpTooltip>
           </small>
         </div>
@@ -1095,6 +1225,25 @@ function OpenScreen({
             onSet={(value) => dispatch({ type: 'set-forms', forms: { openOfferAmount: value } })}
           />
         </div>
+        <button
+          type="button"
+          className="switch-btn open-switch-btn"
+          aria-label="Flip offer and request assets"
+          onClick={() => {
+            setFlipRotation((rotation) => rotation + 180);
+            dispatch({
+              type: 'set-forms',
+              forms: {
+                openOfferAssetKey: state.forms.openAskAssetKey,
+                openAskAssetKey: state.forms.openOfferAssetKey,
+                openOfferAmount: state.forms.openAskAmount,
+                openAskAmount: state.forms.openOfferAmount,
+              },
+            });
+          }}
+        >
+          <i className="bi bi-arrow-left-right" style={{ transform: `rotate(${flipRotation}deg)` }} aria-hidden="true" />
+        </button>
         <div className="offer-box request-box">
           <label className="token-label" htmlFor="open-ask-amount">
             Your request <HelpTooltip label="Your request help">{HELP.openRequestAsset}</HelpTooltip>
@@ -1146,7 +1295,12 @@ function OpenScreen({
         </div>
       </div>
 
-      {openProblems.length ? <ValidationAlert tone="warning" message={openProblems[0] ?? ''} /> : null}
+      <PageAlert
+        alerts={[
+          incognito && { tone: 'info', message: `${INCOGNITO_NOTICE} Connect a wallet to show balances before opening an offer.` },
+          openProblems.length ? { tone: 'warning', message: openProblems[0] ?? '' } : null,
+        ]}
+      />
 
       <button type="button" className="cta open-cta" onClick={onOpen} disabled={disabled}>
         Open Offer <ActionButtonSuffix cartMode={cartMode} icon="bi-plus-circle" />
@@ -1187,6 +1341,7 @@ function MarketsScreen({
           state.options.swapSlippageTolerancePercent,
           APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
         ),
+        warningSlippageMultiplier: APP_CONFIG.defaults.quote.warningSlippageMultiplier,
         payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
       });
       return { receiveAsset, offerAsset, quote, balance };
@@ -1235,7 +1390,7 @@ function MarketsScreen({
                 {fromBase(balance, receiveAsset.decimals)} {assetTitle(receiveAsset)}
               </span>
               <span className="row-actions">
-                {balance > 0n ? (
+                {!state.wallet || balance > 0n ? (
                   <button type="button" className="mini-btn" onClick={() => onOffer(receiveAsset.assetKey, state.forms.openOfferAssetKey)}>
                     <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
                   </button>
@@ -1279,7 +1434,7 @@ function OrdersScreen({
         </h1>
         <RefreshButton loading={refreshing} onClick={onRefresh} />
       </div>
-      {state.wallet ? null : <ValidationAlert tone="warning" message="Connect a wallet to show owned orders." />}
+      <PageAlert alerts={[!state.wallet && { tone: 'info', message: `${INCOGNITO_NOTICE} Connect a wallet to show owned orders.` }]} />
       {state.wallet && !owned.length ? <EmptyState asset="open">No open NeonSoup orders found for this wallet.</EmptyState> : null}
       <ScrollFade>
         <div className="grid2 orders-grid">
@@ -1363,7 +1518,7 @@ function PortfolioScreen({
         </h1>
         <RefreshButton loading={refreshing} disabled={!state.wallet} onClick={onRefresh} />
       </div>
-      {state.wallet ? null : <ValidationAlert tone="warning" message="Connect a wallet to load balances and operation history." />}
+      <PageAlert alerts={[!state.wallet && { tone: 'info', message: `${INCOGNITO_NOTICE} Connect a wallet to load balances and operation history.` }]} />
       <ScrollFade
         header={
           <div className="table-list dex-table portfolio-table">
@@ -1423,8 +1578,12 @@ function HistoryScreen({
         </h1>
         <RefreshButton loading={loading} disabled={!state.wallet} onClick={onRefresh} />
       </div>
-      {notice ? <ValidationAlert tone="info" message={notice} /> : null}
-      {!state.wallet ? <ValidationAlert tone="warning" message="Connect a wallet to show your order history." /> : null}
+      <PageAlert
+        alerts={[
+          notice ? { tone: 'info', message: notice } : null,
+          !state.wallet && { tone: 'info', message: `${INCOGNITO_NOTICE} Connect a wallet to show your order history.` },
+        ]}
+      />
       <ScrollFade
         header={
           <div className="table-list dex-table history-table">
@@ -1574,10 +1733,14 @@ function OptionsScreen({
   const dispatch = useAppDispatch();
   const optionProblems = [
     ...(state.options.swapPayUpPercent < 0 ? ['Pay-up premium cannot be negative.'] : []),
-    ...(state.options.swapSlippageTolerancePercent < 0 ? ['Slippage tolerance cannot be negative.'] : []),
+    ...(state.options.swapSlippageTolerancePercent <= 0 ? ['Slippage tolerance must be greater than 0%.'] : []),
+    ...(state.options.swapSlippageTolerancePercent >= APP_CONFIG.defaults.quote.maxSlippageTolerancePercent
+      ? [`Slippage tolerance must stay below ${APP_CONFIG.defaults.quote.maxSlippageTolerancePercent}%.`]
+      : []),
   ];
   const parallelMode = state.cart.mode === 'parallel';
   const payUpEnabled = state.forms.swapPayUp;
+  const incognito = !state.wallet;
   return (
     <section className={modal ? 'options-modal-content' : 'panel-card'}>
       {hideTitle ? null : (
@@ -1588,7 +1751,7 @@ function OptionsScreen({
           {/*<span className="tag">Execution</span>*/}
         </div>
       )}
-      {optionProblems.length ? <ValidationAlert tone="warning" message={optionProblems[0] ?? ''} /> : null}
+      <PageAlert alerts={[optionProblems.length ? { tone: 'danger', message: optionProblems[0] ?? '' } : null]} />
       <ScrollFade>
         <div className="options-grid">
           <label className="option-line">
@@ -1610,7 +1773,11 @@ function OptionsScreen({
           </label>
           <label className="option-line">
           <span>
-            <b>Cart Mode</b> <HelpTooltip label="Cart Mode help">{HELP.cartMode}</HelpTooltip>
+            <b>Cart Mode</b>{' '}
+            <HelpTooltip label="Cart Mode help">
+              {HELP.cartMode}
+              {incognito ? ` ${INCOGNITO_CART_NOTICE}` : ''}
+            </HelpTooltip>
             <small>Queue operations and launch the wallet from Cart.</small>
           </span>
           <input type="checkbox" checked={cartMode} onChange={(event) => setCartMode(event.target.checked)} />
@@ -1682,13 +1849,14 @@ function OptionsScreen({
           <span>
             <b>Slippage tolerance</b>
             <HelpTooltip label="Slippage tolerance help">{HELP.slippageTolerance}</HelpTooltip>
-            <small>Warning threshold for order-book route price movement.</small>
+            <small>Maximum accepted order-book route price movement.</small>
           </span>
           <span className="option-input-wrap">
             <input
               type="number"
               className="option-input"
               min="0"
+              max={APP_CONFIG.defaults.quote.maxSlippageTolerancePercent}
               step="0.1"
               value={state.options.swapSlippageTolerancePercent}
               onChange={(event) =>
@@ -1780,6 +1948,7 @@ function collisionSourceRefs(items: readonly CartItem[]): Set<string> {
 function CartModal({
   state,
   cartMode,
+  incognito,
   onClose,
   onRun,
   onRemove,
@@ -1787,6 +1956,7 @@ function CartModal({
 }: {
   state: AppState;
   cartMode: boolean;
+  incognito: boolean;
   onClose: () => void;
   onRun: () => void;
   onRemove: (itemId: string) => void;
@@ -1847,11 +2017,15 @@ function CartModal({
             <div>
               <h2>Your Cart is empty</h2>
               {cartMode ? (
-                <p>Queued operations will appear here before you run them.</p>
+                <p>{incognito ? INCOGNITO_CART_NOTICE : 'Queued operations will appear here before you run them.'}</p>
               ) : (
                 <>
                   <p>
-                    {HELP.cartMode} <HelpTooltip label="Cart Mode help">{HELP.cartMode}</HelpTooltip>
+                    {HELP.cartMode}{' '}
+                    <HelpTooltip label="Cart Mode help">
+                      {HELP.cartMode}
+                      {incognito ? ` ${INCOGNITO_CART_NOTICE}` : ''}
+                    </HelpTooltip>
                   </p>
                   <p className="cart-empty-reminder">You can change this setting later from Options.</p>
                   <button type="button" className="primary-btn" onClick={onSwitchCartMode}>
@@ -1866,7 +2040,7 @@ function CartModal({
   );
 }
 
-function Drawer({ close }: { close: () => void }) {
+function Drawer({ close, incognito }: { close: () => void; incognito: boolean }) {
   return (
     <div className="mobile-drawer" onMouseDown={(event) => event.target === event.currentTarget && close()}>
       <div className="drawer">
@@ -1877,7 +2051,7 @@ function Drawer({ close }: { close: () => void }) {
           </button>
         </div>
         <div onClick={close}>
-          <Sidebar hideBrand />
+          <Sidebar hideBrand incognito={incognito} />
         </div>
       </div>
     </div>
@@ -1933,6 +2107,7 @@ export default function App() {
           state.options.swapSlippageTolerancePercent,
           APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
         ),
+        warningSlippageMultiplier: APP_CONFIG.defaults.quote.warningSlippageMultiplier,
         payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
       }),
     [
@@ -2101,6 +2276,7 @@ export default function App() {
     if (!raw) return;
     const wallet = shouldConsume ? consumeWalletReturn(raw) || walletFromReturn(raw) : walletFromReturn(raw);
     const receipt = executionReceiptFromWalletReturn(raw);
+    const incognitoStatus = receipt ? null : incognitoExecutionStatusFromWalletReturn(raw);
     const at = typeof raw === 'object' ? Number((raw as Record<string, unknown>).at) || Date.now() : Date.now();
     if (wallet) dispatch({ type: 'set-wallet', wallet });
     dispatch({ type: 'set-wallet-return', payload: raw });
@@ -2108,9 +2284,9 @@ export default function App() {
       dispatch({ type: 'apply-execution-receipt', receipt, at });
       dispatch({ type: 'merge-transactions', transactions: transactionsFromReceipt(receipt, at) });
     }
-    if (receipt || wallet) {
+    if (receipt || incognitoStatus || wallet) {
       const summary = executionSummaryForItems(state, state.cart.items, receipt);
-      const notice = receiptToast(receipt, raw);
+      const notice = walletReturnToast(receipt, incognitoStatus);
       setToast(summary ? { ...notice, message: `${notice.message} ${summary}` } : notice);
     }
     void refreshOffers();
@@ -2138,11 +2314,7 @@ export default function App() {
     }
   }
 
-  async function runItems(items: CartItem[]) {
-    if (!state.wallet) {
-      setToast({ tone: 'warning', title: 'Connect wallet first', message: 'NeonSoup needs public wallet data before transaction execution.' });
-      return;
-    }
+  async function runItems(items: CartItem[], options: { clearAfterOpen?: boolean } = {}) {
     if (!items.length) {
       setToast({ tone: 'warning', title: 'Nothing selected', message: 'No draft or failed Cart operations are selected to run.' });
       return;
@@ -2157,7 +2329,11 @@ export default function App() {
             })
           : await buildParallelGcscriptIntent({ state, items });
       await openWalletCode(state, code);
-      setToast({ tone: 'info', title: 'Wallet opened', message: 'Operations remain pending until the wallet returns submission data.' });
+      setToast({ tone: 'info', title: 'Wallet opened', message: 'Continue in wallet to review and sign...' });
+      if (options.clearAfterOpen) {
+        dispatch({ type: 'remove-cart-items', itemIds: items.map((item) => item.id) });
+        dispatch({ type: 'set-cart-modal-open', open: false });
+      }
     } catch (error) {
       setToast({ tone: 'danger', title: 'Could not build wallet request', message: safeError(error) });
     }
@@ -2167,11 +2343,10 @@ export default function App() {
     const requestedQuantity = formQuantity(state.forms.swapOfferAmount, offerAsset);
     const balance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
     if (
-      !state.wallet ||
       !receiveAsset ||
       offerAsset.assetKey === receiveAsset.assetKey ||
       requestedQuantity <= 0n ||
-      quote.executionInputQuantity > balance ||
+      (state.wallet && quote.executionInputQuantity > balance) ||
       !quoteHasExecutableRoute(quote) ||
       quoteHasTrueLiquidityShortage(quote)
     ) {
@@ -2190,10 +2365,11 @@ export default function App() {
         state.options.swapSlippageTolerancePercent,
         APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
       ),
+      warningSlippageMultiplier: APP_CONFIG.defaults.quote.warningSlippageMultiplier,
       payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
     });
     if (
-      freshQuote.executionInputQuantity > balance ||
+      (state.wallet && freshQuote.executionInputQuantity > balance) ||
       !quoteHasExecutableRoute(freshQuote) ||
       quoteHasTrueLiquidityShortage(freshQuote)
     ) {
@@ -2201,6 +2377,10 @@ export default function App() {
       return;
     }
     const items = createSwapCartItems(state, freshQuote);
+    if (!state.wallet && !cartMode) {
+      await runItems(items);
+      return;
+    }
     const addResult = addItemsToCart(items);
     if (!addResult.ok) return;
     if (cartMode) {
@@ -2215,11 +2395,15 @@ export default function App() {
     const offerBalance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
     const offerQuantity = formQuantity(state.forms.openOfferAmount, offerAsset);
     const askQuantity = receiveAsset ? formQuantity(state.forms.openAskAmount, receiveAsset) : 0n;
-    if (!state.wallet || !receiveAsset || offerAsset.assetKey === receiveAsset.assetKey || offerQuantity <= 0n || askQuantity <= 0n || offerQuantity > offerBalance) {
+    if (!receiveAsset || offerAsset.assetKey === receiveAsset.assetKey || offerQuantity <= 0n || askQuantity <= 0n || (state.wallet && offerQuantity > offerBalance)) {
       setToast({ tone: 'warning', title: 'Open offer unavailable', message: 'Fix the highlighted offer terms before continuing.' });
       return;
     }
     const item = createCartItemFromCurrentIntent({ ...state, action: 'open' });
+    if (!state.wallet && !cartMode) {
+      await runItems([item]);
+      return;
+    }
     const addResult = addItemsToCart([item]);
     if (!addResult.ok) return;
     if (cartMode) {
@@ -2316,7 +2500,7 @@ export default function App() {
     <main className="frontend-app">
       <div className="shell">
         <div className="layout">
-          <Sidebar />
+          <Sidebar incognito={!state.wallet} />
           <Topbar
             cartCount={draftCartCount}
             wallet={state.wallet}
@@ -2433,6 +2617,7 @@ export default function App() {
         <CartModal
           state={state}
           cartMode={cartMode}
+          incognito={!state.wallet}
           onClose={() => dispatch({ type: 'set-cart-modal-open', open: false })}
           onRemove={(itemId) => dispatch({ type: 'remove-cart-item', itemId })}
           onSwitchCartMode={() => {
@@ -2440,7 +2625,9 @@ export default function App() {
             setToast({ tone: 'info', title: 'Cart Mode enabled', message: 'New operations will be queued in Cart before opening the wallet.' });
           }}
           onRun={() =>
-            void runItems(selectedCartItems(state.cart).filter((item) => item.status === 'draft' || item.status === 'failed'))
+            void runItems(selectedCartItems(state.cart).filter((item) => item.status === 'draft' || item.status === 'failed'), {
+              clearAfterOpen: !state.wallet,
+            })
           }
         />
       ) : null}
@@ -2449,7 +2636,7 @@ export default function App() {
           <OptionsScreen state={state} cartMode={cartMode} setCartMode={setCartMode} modal hideTitle />
         </AppModal>
       ) : null}
-      {drawerOpen ? <Drawer close={() => setDrawerOpen(false)} /> : null}
+      {drawerOpen ? <Drawer close={() => setDrawerOpen(false)} incognito={!state.wallet} /> : null}
       {toast ? <AppToast toast={toast} onClose={() => setToast(null)} /> : null}
     </main>
   );

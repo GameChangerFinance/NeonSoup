@@ -39,6 +39,20 @@ export interface AssetPair {
   ask: AssetRef;
 }
 
+export interface ServiceFeeAsset extends AssetRef {
+  quantity: string;
+  displayQuantity?: string;
+  ticker?: string;
+}
+
+export interface ServiceFeeConfig {
+  address: string;
+  bundleSwap?: ServiceFeeAsset;
+  parallelSwap?: ServiceFeeAsset;
+}
+
+export type GcscriptPrivacyMode = 'connected' | 'incognito';
+
 export interface OpenOffer {
   id: string;
   orderKind?: OrderKind;
@@ -145,7 +159,7 @@ export interface CartItem {
 }
 
 export interface ExecutionOutputRef {
-  role: 'openedOffer' | 'remainingOffer' | 'filledOffer' | 'closedFunds';
+  role: 'openedOffer' | 'remainingOffer' | 'filledOffer' | 'closedFunds' | 'serviceFee';
   index: string | number;
 }
 

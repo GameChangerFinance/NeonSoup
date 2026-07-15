@@ -49,6 +49,7 @@ export function buildOpenIntentArgs({
     'price-numerator': (askQuantity / priceFactor).toString(),
     'price-denominator': (offerQuantity > 0n ? offerQuantity / priceFactor : 1n).toString(),
     'owner-stake-keyhash': ownerStakeKeyHash,
+    'owner-stake-script-hash': '',
     'intent-id': intentId,
   };
 }
@@ -74,6 +75,7 @@ export function buildFillIntentArgsForQuantity({
     'offer-quantity': offerQuantity.toString(),
     'ask-quantity': askQuantityForFill(offer, offerQuantity).toString(),
     'owner-stake-keyhash': offer.ownerStakeKeyHash || '',
+    'owner-stake-script-hash': '',
     'intent-id': intentId,
   };
 }
@@ -92,6 +94,7 @@ export function buildCloseIntentArgs({ offer, ownerAddress, intentId }: CloseInt
     'utxo-ask-quantity': offer.utxoAskQuantity || '0',
     'offer-address': ownerAddress || offer.address,
     'owner-stake-keyhash': offer.ownerStakeKeyHash || '',
+    'owner-stake-script-hash': '',
     'intent-id': intentId,
   };
 }

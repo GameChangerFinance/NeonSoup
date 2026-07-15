@@ -268,7 +268,7 @@ const cumulativeRoute = quoteSwap({
   receiveAsset: received,
   offerAmount: '312',
   payUp: false,
-  slippageToleranceBps: 50,
+  slippageToleranceBps: 120,
 });
 
 assert(cumulativeRoute.segments[0]?.segmentSlippageBps === 0, 'first segment has no per-order slippage');

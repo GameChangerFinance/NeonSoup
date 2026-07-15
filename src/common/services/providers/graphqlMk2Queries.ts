@@ -8,6 +8,8 @@ export const GRAPHQL_MK2_OPERATIONS = {
   transactionsByHashMinimal: 'NeonSoup_GetTransactionsByHashMinimal',
   transactionOutputsByHash: 'NeonSoup_GetTransactionOutputsByHash',
   addressTransactions: 'NeonSoup_GetAddressTransactions',
+  addressInputTransactions: 'NeonSoup_GetAddressInputTransactions',
+  addressOutputTransactions: 'NeonSoup_GetAddressOutputTransactions',
 } as const;
 
 export type GraphqlMk2OperationName = (typeof GRAPHQL_MK2_OPERATIONS)[keyof typeof GRAPHQL_MK2_OPERATIONS];
@@ -251,6 +253,30 @@ export const GRAPHQL_MK2_QUERIES = {
     where: {_or: [{inputs: {_some: {address: {_eq: $address}}}}, {outputs: {_some: {address: {_eq: $address}}}}]}
   ) {
     hash
+  }
+}`,
+  addressInputTransactions: `query NeonSoup_GetAddressInputTransactions($limit: Int = 50, $offset: Int = 0, $address: String!) {
+  transactions(
+    limit: $limit
+    offset: $offset
+    range: {min: 1, max: 250}
+    order_by: [INCLUDED_AT_DESC]
+    where: {inputs: {_some: {address: {_eq: $address}}}}
+  ) {
+    hash
+    includedAt
+  }
+}`,
+  addressOutputTransactions: `query NeonSoup_GetAddressOutputTransactions($limit: Int = 50, $offset: Int = 0, $address: String!) {
+  transactions(
+    limit: $limit
+    offset: $offset
+    range: {min: 1, max: 250}
+    order_by: [INCLUDED_AT_DESC]
+    where: {outputs: {_some: {address: {_eq: $address}}}}
+  ) {
+    hash
+    includedAt
   }
 }`,
 } as const;

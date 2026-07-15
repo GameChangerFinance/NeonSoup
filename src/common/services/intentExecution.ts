@@ -11,6 +11,7 @@ import { getGcRuntime } from './gcRuntime';
 import { cleanReturnUrl } from './intents';
 export { executionReceiptFromWalletReturn } from '../../core/wallet/receipts';
 import { createBundledGcscriptSource, createParallelGcscriptSource } from '../../core/gcscript/composer';
+import { serviceFeesForNetwork } from '../domain/serviceFees';
 
 export interface BundledIntentArgs {
   state: AppState;
@@ -55,6 +56,7 @@ async function buildRuntimeGcscript(source: IntentTemplate['code']): Promise<Int
 }
 
 export async function buildBundledGcscriptIntent({
+  state,
   items,
   maxIntentsPerTransaction,
 }: BundledIntentArgs): Promise<IntentTemplate['code']> {
@@ -63,15 +65,19 @@ export async function buildBundledGcscriptIntent({
       items,
       maxIntentsPerTransaction,
       returnUrlPattern: cleanReturnUrl(),
+      serviceFees: serviceFeesForNetwork(state.options.network, state.customAssets),
+      privacyMode: state.wallet?.address ? 'connected' : 'incognito',
     }),
   );
 }
 
-export async function buildParallelGcscriptIntent({ items }: ParallelIntentArgs): Promise<IntentTemplate['code']> {
+export async function buildParallelGcscriptIntent({ state, items }: ParallelIntentArgs): Promise<IntentTemplate['code']> {
   return buildRuntimeGcscript(
     createParallelGcscriptSource({
       items,
       returnUrlPattern: cleanReturnUrl(),
+      serviceFees: serviceFeesForNetwork(state.options.network, state.customAssets),
+      privacyMode: state.wallet?.address ? 'connected' : 'incognito',
     }),
   );
 }

@@ -42,14 +42,14 @@ function freshForms(network: NetworkTag, customAssets: InitialStateSeed['customA
   return {
     openOfferAssetKey: assetKeys.offer,
     openAskAssetKey: assetKeys.ask,
-    openOfferAmount: '',
-    openAskAmount: '',
+    openOfferAmount: APP_CONFIG.defaults.forms.openOfferAmount,
+    openAskAmount: APP_CONFIG.defaults.forms.openAskAmount,
     bulkOpenCount: APP_CONFIG.defaults.forms.bulkOpenCount,
     bulkOpenVariancePercent: APP_CONFIG.defaults.forms.bulkOpenVariancePercent,
     bulkOpenOfferVariancePercent: APP_CONFIG.defaults.forms.bulkOpenOfferVariancePercent,
     fillOfferAmount: '',
     fillAskAmount: '',
-    swapOfferAmount: '',
+    swapOfferAmount: APP_CONFIG.defaults.forms.swapOfferAmount,
     swapPayUp: APP_CONFIG.defaults.forms.swapPayUp,
   };
 }

@@ -147,7 +147,8 @@
             "name": "DAppAddress",
             "addr": {
                 "spendScriptHashHex": "{get('cache.spendingValidator.scriptHashHex')}",
-                "stakePubKeyHashHex": "{get('args.owner-stake-keyhash')}"
+                "stakePubKeyHashHex": "{get('args.owner-stake-keyhash')}",
+                "stakeScriptHashHex": "{get('args.owner-stake-script-hash')}" // TODO: verify this is valid with P2P DeFi Kernel / ask for support
             }
         },
         "swapRedeemer": {
