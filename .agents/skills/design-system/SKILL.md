@@ -61,6 +61,9 @@ Avoid:
 - Use `punk-mark` labels for section tags and module labels.
 - Give mascot cards enough internal padding before placing breakout art.
 - Raise the parent card z-index when a mascot overlaps neighboring cards.
+- Tooltip, dialog, and helper art may aesthetically overflow cards, modals, or
+  tooltips, but verify z-index, clipping, scroll containers, and sibling
+  overlap so the art does not cover copy, controls, or adjacent cards.
 - Keep full-width copy in the pot-icon quote/manifesto card and position the icon as a corner breakout.
 - Add real interaction for routing, filtering, dropdowns, copy actions, validation, theme changes, or wallet review when the screen includes those actions.
 

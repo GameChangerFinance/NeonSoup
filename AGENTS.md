@@ -63,6 +63,9 @@ implementation details.
 - Provider defaults are read through shared app config from Vite env variables.
   Use `.env.example` as the committed template and keep private `.env` files
   untracked.
+- Frontend Google Analytics uses the same `VITE_NEONSOUP_GOOGLE_ANALYTICS_ID`
+  env var pattern as DevTool. Do not commit analytics secrets or private env
+  files.
 
 ## Provider Goals
 
@@ -324,6 +327,12 @@ loading.
   confirmed chain data.
 - Reintroducing direct single-intent execution state instead of using Cart
   composition for all Open/Fill/Close paths.
+- Changing route-bar math or denominators to hide a booked-UTxO bug. Compare
+  against DevTool and `docs/SWAP.md` first.
+- Passing raw click events into refresh/reconciliation handlers. Wrap handlers
+  in closures so loader arguments cannot receive event-shaped garbage.
+- Treating a browser/devtools visual issue as actual layout overflow without
+  measuring `scrollWidth` and element bounds.
 - Changing `src/intents/` signatures while trying to refactor UI/core adapters.
 - Forgetting legacy snapshot defaults such as `utxo-ask-quantity: "0"`.
 - Leaking provider raw response shapes into components/reducers.
@@ -442,6 +451,37 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
   do not consume API calls for unavailable market data.
 - Do not use fake/mock data or generic prototype labels in the final frontend.
   Use real useful data/wording or render nothing.
+- The Frontend should use design-system assets through
+  `src/frontend/public/assets`. Keep contextual `UI_ASSETS` mappings for wallet
+  connect/disconnect, Cart, Swap/route, Open offers, network, Options, History,
+  alerts, and toasts in frontend code.
+- Use CyberNekos more often than kitchen assets for friendly production DEX
+  help. Kitchen assets are only for cases where the filename/content best
+  matches the UI action or idea.
+- Do not use the P2P soup separator unless explicitly requested.
+- Tooltip, page-title, and help copy should be friendly and protocol-accurate.
+  Swap copy must explain live order offers without implying AMM pool liquidity.
+- `open-hero` and `swap-hero` are desktop/tablet affordances and should be
+  hidden on small/mobile screens.
+- Mobile cards must preserve enough top padding for page titles; titles should
+  not touch card borders.
+- Modal cards must be vertically centered in the viewport, fit mobile
+  width/height, use internal scrolling, keep helper art at the bottom-left with
+  enough padding, and avoid body/page overflow.
+- When diagnosing overflow or responsiveness, render the app locally and
+  measure document/body/modal dimensions such as `scrollWidth` and element
+  bounds. Do not fix unrelated layout rules without evidence.
+- Network selection is centralized in app state/config. The current default is
+  `preprod`, and the footer network pill should stay minimal with a tooltip.
+- User-facing Options must keep internal technical defaults hidden unless
+  requested. Defaults, thresholds, booleans, providers, percentages, factors,
+  theme, and network defaults belong in centralized `APP_CONFIG`.
+- Invalid same-asset pairs or incomplete pair context from Markets/Portfolio
+  actions must reset the second asset to unselected, show a clear alert, and
+  disable CTAs.
+- User-facing warnings should block truly impossible or risky trades such as
+  insufficient live liquidity, but must not expose advanced
+  remainder/min-UTxO internals as end-user copy.
 
 ## Frontend Cart And Routing Notes
 
@@ -466,9 +506,29 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
   editing. Excluding booked UTxOs should be equivalent to quoting against a
   manually prefiltered book; do not change denominator or segment rules to mask
   an exclusion bug.
+- Remember the route-bar fix: exclude booked source UTxOs before quote math
+  while preserving DevTool route semantics, denominator, leftovers, round-up,
+  and segment categories.
+- A typed amount that leaves an invalid/tiny maker remainder must be handled by
+  route math using round-up/unrouted semantics, not exposed as a developer
+  warning or arbitrary CTA block when the DevTool-compatible route can execute
+  safely.
+- Route-bar denominator and segment visibility must remain stable while the
+  amount increments. Only newly included offers or a final unavailable segment
+  should visibly add/jump; leftover/change segments must not disappear in ways
+  that shrink previous segments.
+- Semantic route segments are distinct: normal fills, maker-remainder/change,
+  clean-execution round-up/min-remainder absorption, and truly unavailable
+  input. Only truly unavailable input should use unavailable/striped treatment.
+- Cart collision badges are diagnostic; correct routing and reducer/domain
+  guards should prevent new collisions by excluding already booked source UTxOs
+  before quote/cart-item creation.
 - Routing math, route behavior, segment logic, and segment styling are easy to
   break. Be extra careful with route changes and ask before changing route-bar
   semantics when the requested fix is ambiguous.
+- Direct actions and Cart runs should share one composition, launch, and receipt
+  path when wallet semantics match. Cart Mode changes whether launch is
+  immediate or queued.
 
 ## Frontend History And Wallet Notes
 
@@ -488,6 +548,8 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
   template in user Options.
 - Avoid duplicate transaction entries and avoid promoting wallet-return hashes
   to trusted confirmations before provider/chain evidence exists.
+- History should dedupe wallet-return hints against chain-backed rows and show
+  all recognized pairs for the wallet.
 - The connect wallet widget should reuse the same internal connection
   state/return handling as DevTool, including app-state reload/refresh,
   history cleanup to avoid reprocessing the same return payload on navigation,
@@ -503,6 +565,8 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
   GameChanger before using GameChanger dapps.
 - Remove or hide developer-facing wallet-return messages such as “wallet return
   captured” when they are not useful to end users.
+- On wallet disconnect, purge Cart items, loaded transactions, open offers, and
+  other user-specific cached traces to protect privacy.
 
 ## Data Normalization Goals
 
