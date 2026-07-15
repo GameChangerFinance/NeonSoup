@@ -53,6 +53,7 @@ import type {
   NoticeTone,
   OpenOffer,
   ResolvedAsset,
+  NetworkTag,
   ProtocolTransactionDetail,
   WalletConnection,
 } from '../../common/state/types';
@@ -82,6 +83,8 @@ const HELP = {
     'Percentage threshold used to warn about route-level price movement across multiple limit orders. This is not AMM curve slippage; it measures how much worse the selected order-book route is compared with the best executable price NeonSoup sees locally.',
   provider:
     'The provider only transports chain data. NeonSoup keeps swap semantics and routing on your device.',
+  network:
+    'Shows which Cardano network NeonSoup is using for chain data and wallet operations. You can change networks in Options when more networks are enabled.',
   pending:
     'Wallet-submitted operations are not final until a provider confirms the transaction on-chain.',
 };
@@ -90,22 +93,31 @@ const UI_ASSETS = {
   route: '/assets/cybernekos/lens-inspection_U.png',
   tooltip: '/assets/cybernekos/peeking-counter_A.png',
   tablet: '/assets/cybernekos/order-tablet_O.png',
+  network: '/assets/cybernekos/conveyor-belt_T.png',
   scale: '/assets/cybernekos/soup-scale_J.png',
   ladle: '/assets/cybernekos/ladle-stir_X.png',
-  wallet: '/assets/cybernekos/order-complete_P.png',
+  wallet: '/assets/cybernekos/yawning-paw_AF.png',
+  walletConnected: '/assets/cybernekos/dj-cook_K.png',
+  walletConnect: '/assets/cybernekos/yawning-paw_AF.png',
+  walletDisconnect: '/assets/cybernekos/skateboard-bowl_AE.png',
   receipt: '/assets/cybernekos/receipt-sorting_S.png',
+  parallel: '/assets/cybernekos/receipt-sorting_S.png',
   cloche: '/assets/cybernekos/serving-cloche_AQ.png',
   success: '/assets/cybernekos/confetti-happy_AC.png',
   warning: '/assets/cybernekos/worried-sweat_E.png',
   danger: '/assets/cybernekos/crying-error_F.png',
   info: '/assets/cybernekos/order-tablet_O.png',
+  infoToast: '/assets/cybernekos/table-setting_AR.png',
   empty: '/assets/cybernekos/sitting-calm_D.png',
-  cart: '/assets/cybernekos/delivery-cart_AW.png',
+  cart: '/assets/cybernekos/menu-scroll_N.png',
+  cartMode: '/assets/cybernekos/menu-scroll_N.png',
   open: '/assets/cybernekos/specials-board_AU.png',
   menu: '/assets/cybernekos/menu-pointer_R.png',
   data: '/assets/cybernekos/data-wall_AY.png',
   history: '/assets/cybernekos/receipt-sorting_S.png',
   options: '/assets/cybernekos/pantry-terminal_AM.png',
+  bundleActions: '/assets/cybernekos/soup-pot-stack_BB.png',
+  payUp: '/assets/cybernekos/temperature-gun_W.png',
   bundle: '/assets/kitchen/bento_cube_A.png',
   measure: '/assets/kitchen/measuring_spoon_A.png',
   strainer: '/assets/kitchen/strainer_ladle_A.png',
@@ -121,22 +133,28 @@ function VisualAsset({ asset, className = '' }: { asset: UiAsset; className?: st
 function tooltipAssetForLabel(label: string): UiAsset {
   if (/route|availability/i.test(label)) return 'route';
   if (/price impact|slippage/i.test(label)) return 'scale';
-  if (/wallet|connect|disconnect/i.test(label)) return 'wallet';
+  if (/disconnect/i.test(label)) return 'walletDisconnect';
+  if (/connect/i.test(label)) return 'walletConnect';
+  if (/wallet/i.test(label)) return 'walletConnected';
   if (/open offer/i.test(label)) return 'open';
   if (/order progress/i.test(label)) return 'data';
-  if (/cart mode|cart collision/i.test(label)) return 'cart';
-  if (/parallel/i.test(label)) return 'strainer';
-  if (/bundle/i.test(label)) return 'bundle';
-  if (/pay-up premium/i.test(label)) return 'measure';
-  if (/pay-up/i.test(label)) return 'ladle';
+  if (/cart mode/i.test(label)) return 'cartMode';
+  if (/cart collision/i.test(label)) return 'cart';
+  if (/parallel/i.test(label)) return 'parallel';
+  if (/bundle/i.test(label)) return 'bundleActions';
+  if (/pay-up/i.test(label)) return 'payUp';
   if (/provider url/i.test(label)) return 'menu';
+  if (/network/i.test(label)) return 'network';
   if (/provider/i.test(label)) return 'tablet';
   if (/pending/i.test(label)) return 'receipt';
   return 'tooltip';
 }
 
 function alertAssetForMessage(tone: NoticeTone, message: string): UiAsset {
-  if (/wallet|connect|disconnect/i.test(message)) return 'wallet';
+  if (/order transactions? loaded|recent order transactions|transaction/i.test(message)) return 'history';
+  if (/connect a wallet/i.test(message)) return 'walletConnect';
+  if (/disconnect/i.test(message)) return 'walletDisconnect';
+  if (/wallet|connect/i.test(message)) return 'walletConnected';
   if (/liquidity|offers|order/i.test(message)) return tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : 'route';
   if (/cart|queue|operation/i.test(message)) return 'cart';
   if (/history|transactions|loaded/i.test(message)) return 'history';
@@ -438,6 +456,17 @@ function EmptyState({ children, asset = 'empty' }: { children: ReactNode; asset?
   );
 }
 
+function ScrollFade({ children, className = '', header }: { children: ReactNode; className?: string; header?: ReactNode }) {
+  return (
+    <div className={`scroll-fade ${className}`}>
+      {header ? <div className="scroll-fade-header">{header}</div> : null}
+      <div className="scroll-fade-scroll">
+        <div className="scroll-fade-inner">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 function CopyIcon({ value, label = 'Copy value' }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   if (!value) return null;
@@ -655,7 +684,7 @@ function AppToast({ toast, onClose }: { toast: ToastState; onClose: () => void }
   return (
     <div className={`app-toast app-toast-${toast.tone}`} role="status" aria-live="polite">
       <VisualAsset
-        asset={toast.tone === 'success' ? 'success' : toast.tone === 'danger' ? 'danger' : toast.tone === 'warning' ? 'warning' : 'info'}
+        asset={toast.tone === 'success' ? 'success' : toast.tone === 'danger' ? 'danger' : toast.tone === 'warning' ? 'warning' : 'infoToast'}
         className="toast-helper-art"
       />
       <div className="toast-icon">
@@ -766,13 +795,13 @@ function Topbar({
               </span>
               {wallet.walletType ? <span className="wallet-type">{wallet.walletType}</span> : null}
             </button>
-            <HelpTooltip label="Wallet widget help" asset="wallet">Shows the connected wallet. Click it to copy the wallet address.</HelpTooltip>
+            <HelpTooltip label="Wallet widget help">Shows the connected wallet. Click it to copy the wallet address.</HelpTooltip>
           </span>
           <span className="wallet-help-wrap wallet-disconnect-wrap">
             <button type="button" className="wallet-disconnect" aria-label="Disconnect wallet" onClick={onDisconnect}>
               <i className="bi bi-x-lg" aria-hidden="true" />
             </button>
-            <HelpTooltip label="Disconnect wallet help" asset="wallet">Disconnect clears the local wallet connection from NeonSoup. It does not change the wallet itself.</HelpTooltip>
+            <HelpTooltip label="Disconnect wallet help">Disconnect clears the local wallet connection from NeonSoup. It does not change the wallet itself.</HelpTooltip>
           </span>
         </div>
       ) : (
@@ -780,7 +809,7 @@ function Topbar({
           <button type="button" className="wallet-btn wallet-connect" onClick={onConnect}>
             <i className="bi bi-wallet" aria-hidden="true" /> Connect Wallet
           </button>
-          <HelpTooltip label="Connect wallet help" asset="wallet">Connect through GameChanger Wallet. It supports CIP-30 browser extension wallets, hardware wallets, seed phrase wallets, QR wallets, and burner wallets.</HelpTooltip>
+          <HelpTooltip label="Connect wallet help">Connect through GameChanger Wallet. It supports CIP-30 browser extension wallets, hardware wallets, seed phrase wallets, QR wallets, and burner wallets.</HelpTooltip>
         </span>
       )}
       <button type="button" className="icon-btn more-btn" aria-label="Open Options" onClick={onOptions}>
@@ -1127,40 +1156,47 @@ function MarketsScreen({
         <h1>Markets</h1>
         <RefreshButton loading={refreshing} onClick={onRefresh} />
       </div>
-      <div className="table-list dex-table markets-table">
-        <div className="market-row table-head" role="row">
-          <span>Pair</span>
-          <span>Best price</span>
-          <span>Open offers</span>
-          <span>Your balance</span>
-          <span>Actions</span>
-        </div>
-        {rows.map(({ receiveAsset, offerAsset, quote, balance }) => (
-          <div className="market-row" key={receiveAsset.assetKey}>
-            <div className="pair-cell">
-              <AssetPairStack offerAsset={receiveAsset} askAsset={offerAsset} />
-              <span>
-                {assetTitle(receiveAsset)} / {offerAsset ? assetTitle(offerAsset) : '-'}
+      <ScrollFade
+        header={
+          <div className="table-list dex-table markets-table">
+            <div className="market-row table-head" role="row">
+              <span>Pair</span>
+              <span>Best price</span>
+              <span>Open offers</span>
+              <span>Your balance</span>
+              <span>Actions</span>
+            </div>
+          </div>
+        }
+      >
+        <div className="table-list dex-table markets-table">
+          {rows.map(({ receiveAsset, offerAsset, quote, balance }) => (
+            <div className="market-row" key={receiveAsset.assetKey}>
+              <div className="pair-cell">
+                <AssetPairStack offerAsset={receiveAsset} askAsset={offerAsset} />
+                <span>
+                  {assetTitle(receiveAsset)} / {offerAsset ? assetTitle(offerAsset) : '-'}
+                </span>
+              </div>
+              <span className="mono">{priceText(quote.executableBestPrice, offerAsset, receiveAsset)}</span>
+              <span>{quote.rawCandidateCount} orders</span>
+              <span className="mono">
+                {fromBase(balance, receiveAsset.decimals)} {assetTitle(receiveAsset)}
+              </span>
+              <span className="row-actions">
+                {balance > 0n ? (
+                  <button type="button" className="mini-btn" onClick={() => onOffer(receiveAsset.assetKey)}>
+                    <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
+                  </button>
+                ) : null}
+                <button type="button" className="mini-btn" onClick={() => onSelect(state.forms.openOfferAssetKey, receiveAsset.assetKey)}>
+                  <i className="bi bi-arrow-left-right" aria-hidden="true" /> Swap
+                </button>
               </span>
             </div>
-            <span className="mono">{priceText(quote.executableBestPrice, offerAsset, receiveAsset)}</span>
-            <span>{quote.rawCandidateCount} orders</span>
-            <span className="mono">
-              {fromBase(balance, receiveAsset.decimals)} {assetTitle(receiveAsset)}
-            </span>
-            <span className="row-actions">
-              {balance > 0n ? (
-                <button type="button" className="mini-btn" onClick={() => onOffer(receiveAsset.assetKey)}>
-                  <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
-                </button>
-              ) : null}
-              <button type="button" className="mini-btn" onClick={() => onSelect(state.forms.openOfferAssetKey, receiveAsset.assetKey)}>
-                <i className="bi bi-arrow-left-right" aria-hidden="true" /> Swap
-              </button>
-            </span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </ScrollFade>
     </section>
   );
 }
@@ -1190,59 +1226,61 @@ function OrdersScreen({
         <h1>My Orders</h1>
         <RefreshButton loading={refreshing} onClick={onRefresh} />
       </div>
-      {state.wallet ? null : <EmptyState>Connect a wallet to show owned orders.</EmptyState>}
+      {state.wallet ? null : <ValidationAlert tone="warning" message="Connect a wallet to show owned orders." />}
       {state.wallet && !owned.length ? <EmptyState asset="open">No open NeonSoup orders found for this wallet.</EmptyState> : null}
-      <div className="grid2 orders-grid">
-        {owned.map((offer) => {
-          const offered = resolveAsset(state, offer.offerPolicyId, offer.offerAssetName);
-          const asked = resolveAsset(state, offer.askPolicyId, offer.askAssetName);
-          const hasAccumulatedAsk = BigInt(offer.utxoAskQuantity || '0') > 0n;
-          const remaining = BigInt(offer.utxoOfferQuantity || '0');
-          const accumulated = BigInt(offer.utxoAskQuantity || '0');
-          const filledOffer = filledOfferEquivalent(offer);
-          const totalOffer = remaining + filledOffer;
-          const filledPct =
-            totalOffer > 0n ? Number((filledOffer * 10_000n) / totalOffer) / 100 : 0;
-          const progressLabel = `${filledPct.toFixed(filledPct % 1 === 0 ? 0 : 2)}% filled: ${fromBase(filledOffer, offered.decimals)} ${assetTitle(offered)} of ${fromBase(totalOffer, offered.decimals)} ${assetTitle(offered)}. Received ${fromBase(accumulated, asked.decimals)} ${assetTitle(asked)} so far.`;
-          return (
-            <article className="order-card" key={offer.id}>
-              <div className="order-head">
-                <span className="pair-cell">
-                  <AssetPairStack offerAsset={offered} askAsset={asked} />
-                  <b>
-                    {assetTitle(offered)} / {assetTitle(asked)}
-                  </b>
-                </span>
-                <span className="pill">{offer.orderKind}</span>
-              </div>
-              <div className="order-fill-card">
-                <span>
-                  Filled / Total <HelpTooltip label="Order progress help">Filled is estimated from the requested asset accumulated in the order and the order limit price.</HelpTooltip>
-                </span>
-                <strong>
-                  {fromBase(filledOffer, offered.decimals)} / {fromBase(totalOffer, offered.decimals)} {assetTitle(offered)}
-                </strong>
-                <small>
-                  Received {fromBase(accumulated, asked.decimals)} {assetTitle(asked)} so far
-                </small>
-                <div className="bar order-progress" tabIndex={0} aria-label={progressLabel}>
-                  <i style={{ width: `${Math.min(100, Math.max(0, filledPct))}%` }} />
-                  <span className="route-tooltip">{progressLabel}</span>
+      <ScrollFade>
+        <div className="grid2 orders-grid">
+          {owned.map((offer) => {
+            const offered = resolveAsset(state, offer.offerPolicyId, offer.offerAssetName);
+            const asked = resolveAsset(state, offer.askPolicyId, offer.askAssetName);
+            const hasAccumulatedAsk = BigInt(offer.utxoAskQuantity || '0') > 0n;
+            const remaining = BigInt(offer.utxoOfferQuantity || '0');
+            const accumulated = BigInt(offer.utxoAskQuantity || '0');
+            const filledOffer = filledOfferEquivalent(offer);
+            const totalOffer = remaining + filledOffer;
+            const filledPct =
+              totalOffer > 0n ? Number((filledOffer * 10_000n) / totalOffer) / 100 : 0;
+            const progressLabel = `${filledPct.toFixed(filledPct % 1 === 0 ? 0 : 2)}% filled: ${fromBase(filledOffer, offered.decimals)} ${assetTitle(offered)} of ${fromBase(totalOffer, offered.decimals)} ${assetTitle(offered)}. Received ${fromBase(accumulated, asked.decimals)} ${assetTitle(asked)} so far.`;
+            return (
+              <article className="order-card" key={offer.id}>
+                <div className="order-head">
+                  <span className="pair-cell">
+                    <AssetPairStack offerAsset={offered} askAsset={asked} />
+                    <b>
+                      {assetTitle(offered)} / {assetTitle(asked)}
+                    </b>
+                  </span>
+                  <span className="pill">{offer.orderKind}</span>
                 </div>
-              </div>
-              <div className="order-meta">
-                <span>
-                  Limit price {orderLimitPriceText(offer, offered, asked)} {assetTitle(asked)} / {assetTitle(offered)}
-                </span>
-                <span>{hasAccumulatedAsk ? 'Partially filled' : 'Waiting for fills'}</span>
-              </div>
-              <button type="button" className="mini-btn" onClick={() => onCloseOrder(offer)}>
-                Close order <ActionButtonSuffix cartMode={cartMode} icon="bi-x-circle" />
-              </button>
-            </article>
-          );
-        })}
-      </div>
+                <div className="order-fill-card">
+                  <span>
+                    Filled / Total <HelpTooltip label="Order progress help">Filled is estimated from the requested asset accumulated in the order and the order limit price.</HelpTooltip>
+                  </span>
+                  <strong>
+                    {fromBase(filledOffer, offered.decimals)} / {fromBase(totalOffer, offered.decimals)} {assetTitle(offered)}
+                  </strong>
+                  <small>
+                    Received {fromBase(accumulated, asked.decimals)} {assetTitle(asked)} so far
+                  </small>
+                  <div className="bar order-progress" tabIndex={0} aria-label={progressLabel}>
+                    <i style={{ width: `${Math.min(100, Math.max(0, filledPct))}%` }} />
+                    <span className="route-tooltip">{progressLabel}</span>
+                  </div>
+                </div>
+                <div className="order-meta">
+                  <span>
+                    Limit price {orderLimitPriceText(offer, offered, asked)} {assetTitle(asked)} / {assetTitle(offered)}
+                  </span>
+                  <span>{hasAccumulatedAsk ? 'Partially filled' : 'Waiting for fills'}</span>
+                </div>
+                <button type="button" className="mini-btn" onClick={() => onCloseOrder(offer)}>
+                  Close order <ActionButtonSuffix cartMode={cartMode} icon="bi-x-circle" />
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      </ScrollFade>
     </section>
   );
 }
@@ -1270,34 +1308,41 @@ function PortfolioScreen({
         <h1>Portfolio</h1>
         <RefreshButton loading={refreshing} disabled={!state.wallet} onClick={onRefresh} />
       </div>
-      {state.wallet ? null : <EmptyState>Connect a wallet to load balances and operation history.</EmptyState>}
-      <div className="table-list dex-table portfolio-table">
-        <div className="market-row table-head" role="row">
-          <span>Asset</span>
-          <span>Balance</span>
-          <span>Actions</span>
-        </div>
-        {portfolio.map((asset) => (
-          <div className="market-row" key={asset.assetKey}>
-            <div className="pair-cell">
-              <AssetIcon asset={asset} />
-              <span>{assetTitle(asset)}</span>
-              {!asset.known ? <span className="asset-unknown">Unknown</span> : null}
+      {state.wallet ? null : <ValidationAlert tone="warning" message="Connect a wallet to load balances and operation history." />}
+      <ScrollFade
+        header={
+          <div className="table-list dex-table portfolio-table">
+            <div className="market-row table-head" role="row">
+              <span>Asset</span>
+              <span>Balance</span>
+              <span>Actions</span>
             </div>
-            <span className="mono">{fromBase(asset.quantity || '0', asset.decimals)}</span>
-            <span className="row-actions">
-              {BigInt(asset.quantity || '0') > 0n ? (
-                <button type="button" className="mini-btn" onClick={() => onOfferAsset(asset.assetKey)}>
-                  <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
-                </button>
-              ) : null}
-              <button type="button" className="mini-btn" onClick={() => onSwapAsset(asset.assetKey)}>
-                <i className="bi bi-arrow-left-right" aria-hidden="true" /> Swap
-              </button>
-            </span>
           </div>
-        ))}
-      </div>
+        }
+      >
+        <div className="table-list dex-table portfolio-table">
+          {portfolio.map((asset) => (
+            <div className="market-row" key={asset.assetKey}>
+              <div className="pair-cell">
+                <AssetIcon asset={asset} />
+                <span>{assetTitle(asset)}</span>
+                {!asset.known ? <span className="asset-unknown">Unknown</span> : null}
+              </div>
+              <span className="mono">{fromBase(asset.quantity || '0', asset.decimals)}</span>
+              <span className="row-actions">
+                {BigInt(asset.quantity || '0') > 0n ? (
+                  <button type="button" className="mini-btn" onClick={() => onOfferAsset(asset.assetKey)}>
+                    <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
+                  </button>
+                ) : null}
+                <button type="button" className="mini-btn" onClick={() => onSwapAsset(asset.assetKey)}>
+                  <i className="bi bi-arrow-left-right" aria-hidden="true" /> Swap
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      </ScrollFade>
     </section>
   );
 }
@@ -1322,37 +1367,44 @@ function HistoryScreen({
         <RefreshButton loading={loading} disabled={!state.wallet} onClick={onRefresh} />
       </div>
       {notice ? <ValidationAlert tone="info" message={notice} /> : null}
-      {!state.wallet ? <EmptyState asset="history">Connect a wallet to show your order history.</EmptyState> : null}
-      <div className="table-list dex-table history-table">
-        <div className="market-row table-head" role="row">
-          <span>Status</span>
-          <span>Actions</span>
-          <span>Created at</span>
-          <span>Transaction</span>
-          <span>Open</span>
-        </div>
-        {rows.map((tx) => (
-          <div className={`market-row tx-row tx-${tx.status}`} key={tx.id}>
-            <span className={`tx-status tx-status-${tx.status}`}>{tx.status}</span>
-            <span>{tx.summary}</span>
-            <span>{formatDateTime(tx.at)}</span>
-            <span className="mono inline-copy">
-              {tx.txHash ? shortHash(tx.txHash) : 'Pending'}
-              <CopyIcon value={tx.txHash} label="Copy transaction hash" />
-            </span>
-            <span className="row-actions">
-              <button type="button" className="mini-btn" onClick={() => setSelectedTx(tx)}>
-                <i className="bi bi-eye" aria-hidden="true" /> View
-              </button>
-              {tx.txHash ? (
-                <button type="button" className="mini-btn" onClick={() => openExternalUrl(txExplorerUrl(state, tx.txHash))}>
+      {!state.wallet ? <ValidationAlert tone="warning" message="Connect a wallet to show your order history." /> : null}
+      <ScrollFade
+        header={
+          <div className="table-list dex-table history-table">
+            <div className="market-row table-head" role="row">
+              <span>Status</span>
+              <span>Actions</span>
+              <span>Created at</span>
+              <span>Transaction</span>
+              <span>Open</span>
+            </div>
+          </div>
+        }
+      >
+        <div className="table-list dex-table history-table">
+          {rows.map((tx) => (
+            <div className={`market-row tx-row tx-${tx.status}`} key={tx.id}>
+              <span className={`tx-status tx-status-${tx.status}`}>{tx.status}</span>
+              <span>{tx.summary}</span>
+              <span>{formatDateTime(tx.at)}</span>
+              <span className="mono inline-copy">
+                {tx.txHash ? shortHash(tx.txHash) : 'Pending'}
+                <CopyIcon value={tx.txHash} label="Copy transaction hash" />
+              </span>
+              <span className="row-actions">
+                <button type="button" className="mini-btn" onClick={() => setSelectedTx(tx)}>
+                  <i className="bi bi-eye" aria-hidden="true" /> View
+                </button>
+                {tx.txHash ? (
+                  <button type="button" className="mini-btn" onClick={() => openExternalUrl(txExplorerUrl(state, tx.txHash))}>
                   <i className="bi bi-link-45deg" aria-hidden="true" /> Explorer
                 </button>
               ) : null}
             </span>
           </div>
         ))}
-      </div>
+        </div>
+      </ScrollFade>
       {!rows.length ? <EmptyState asset="history">No order transactions found yet.</EmptyState> : null}
       {selectedTx ? <TransactionDetailsModal state={state} tx={selectedTx} onClose={() => setSelectedTx(null)} /> : null}
     </section>
@@ -1383,63 +1435,65 @@ function TransactionDetailsModal({ state, tx, onClose }: { state: AppState; tx: 
         </div>
       </div>
       {details.length ? (
-        <div className="tx-operation-list">
-          {details.map((detail, index) => {
-            const offerAsset = detailAsset(state, detail.offerPolicyId, detail.offerAssetNameHex);
-            const askAsset = detailAsset(state, detail.askPolicyId, detail.askAssetNameHex);
-            const labels = amountLabels(detail.action);
-            const offerQuantity = BigInt(detail.offerQuantity || '0');
-            const askQuantity = BigInt(detail.askQuantity || '0');
-            return (
-              <article className="tx-operation-card" key={`${detail.inputRef || ''}-${detail.outputRef || ''}-${index}`}>
-                <div className="order-head">
-                  <div className="pair-cell">
-                    <AssetPairStack offerAsset={offerAsset} askAsset={askAsset} />
-                    <span>{actionTitle(detail.action)}</span>
+        <ScrollFade className="tx-scroll-fade">
+          <div className="tx-operation-list">
+            {details.map((detail, index) => {
+              const offerAsset = detailAsset(state, detail.offerPolicyId, detail.offerAssetNameHex);
+              const askAsset = detailAsset(state, detail.askPolicyId, detail.askAssetNameHex);
+              const labels = amountLabels(detail.action);
+              const offerQuantity = BigInt(detail.offerQuantity || '0');
+              const askQuantity = BigInt(detail.askQuantity || '0');
+              return (
+                <article className="tx-operation-card" key={`${detail.inputRef || ''}-${detail.outputRef || ''}-${index}`}>
+                  <div className="order-head">
+                    <div className="pair-cell">
+                      <AssetPairStack offerAsset={offerAsset} askAsset={askAsset} />
+                      <span>{actionTitle(detail.action)}</span>
+                    </div>
+                    <div className="tx-price">
+                      <span>Price</span>
+                      <strong>{detailPrice(detail, offerAsset, askAsset)}</strong>
+                    </div>
                   </div>
-                  <div className="tx-price">
-                    <span>Price</span>
-                    <strong>{detailPrice(detail, offerAsset, askAsset)}</strong>
+                  <div className="detail-grid tx-amount-grid">
+                    {offerQuantity > 0n ? (
+                      <div className="tx-amount-card">
+                        <span>{labels.offer}</span>
+                        <strong>
+                          {fromBase(offerQuantity, offerAsset.decimals)} {assetTitle(offerAsset)}
+                        </strong>
+                      </div>
+                    ) : null}
+                    {askQuantity > 0n ? (
+                      <div className="tx-amount-card">
+                        <span>{labels.ask}</span>
+                        <strong>
+                          {fromBase(askQuantity, askAsset.decimals)} {assetTitle(askAsset)}
+                        </strong>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-                <div className="detail-grid tx-amount-grid">
-                  {offerQuantity > 0n ? (
-                    <div className="tx-amount-card">
-                      <span>{labels.offer}</span>
-                      <strong>
-                        {fromBase(offerQuantity, offerAsset.decimals)} {assetTitle(offerAsset)}
+                  <div className="tx-ref-row">
+                    <div className="tx-ref-label">
+                      <span>Input</span>
+                      <strong className="mono inline-copy">
+                        {detail.inputRef ? shortHash(detail.inputRef) : 'New output'}
+                        <CopyIcon value={detail.inputRef || ''} label="Copy input reference" />
                       </strong>
                     </div>
-                  ) : null}
-                  {askQuantity > 0n ? (
-                    <div className="tx-amount-card">
-                      <span>{labels.ask}</span>
-                      <strong>
-                        {fromBase(askQuantity, askAsset.decimals)} {assetTitle(askAsset)}
+                    <div className="tx-ref-label">
+                      <span>Output</span>
+                      <strong className="mono inline-copy">
+                        {detail.outputRef ? shortHash(detail.outputRef) : 'Closed'}
+                        <CopyIcon value={detail.outputRef || ''} label="Copy output reference" />
                       </strong>
                     </div>
-                  ) : null}
-                </div>
-                <div className="tx-ref-row">
-                  <div className="tx-ref-label">
-                    <span>Input</span>
-                    <strong className="mono inline-copy">
-                      {detail.inputRef ? shortHash(detail.inputRef) : 'New output'}
-                      <CopyIcon value={detail.inputRef || ''} label="Copy input reference" />
-                    </strong>
                   </div>
-                  <div className="tx-ref-label">
-                    <span>Output</span>
-                    <strong className="mono inline-copy">
-                      {detail.outputRef ? shortHash(detail.outputRef) : 'Closed'}
-                      <CopyIcon value={detail.outputRef || ''} label="Copy output reference" />
-                    </strong>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+                </article>
+              );
+            })}
+          </div>
+        </ScrollFade>
       ) : (
         <EmptyState asset="history">No recognizable order details were found for this transaction.</EmptyState>
       )}
@@ -1476,8 +1530,26 @@ function OptionsScreen({
         </div>
       )}
       {optionProblems.length ? <ValidationAlert tone="warning" message={optionProblems[0] ?? ''} /> : null}
-      <div className="options-grid">
-        <label className="option-line">
+      <ScrollFade>
+        <div className="options-grid">
+          <label className="option-line">
+            <span>
+              <b>Network</b> <HelpTooltip label="Network help">{HELP.network}</HelpTooltip>
+              <small>Cardano network used for offers, balances, history, and wallet operations.</small>
+            </span>
+            <select
+              className="option-input"
+              value={state.options.network}
+              onChange={(event) => dispatch({ type: 'set-options', options: { network: event.target.value as NetworkTag } })}
+            >
+              {state.options.availableNetworks.map((networkTag) => (
+                <option value={networkTag} key={networkTag}>
+                  {networkTag}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="option-line">
           <span>
             <b>Cart Mode</b> <HelpTooltip label="Cart Mode help">{HELP.cartMode}</HelpTooltip>
             <small>Queue operations and launch the wallet from Cart.</small>
@@ -1602,8 +1674,9 @@ function OptionsScreen({
             value={state.options.providerUrl}
             onChange={(event) => dispatch({ type: 'set-options', options: { providerUrl: event.target.value } })}
           />
-        </label>
-      </div>
+          </label>
+        </div>
+      </ScrollFade>
     </section>
   );
 }
@@ -1647,14 +1720,18 @@ function collisionSourceRefs(items: readonly CartItem[]): Set<string> {
 
 function CartModal({
   state,
+  cartMode,
   onClose,
   onRun,
   onRemove,
+  onSwitchCartMode,
 }: {
   state: AppState;
+  cartMode: boolean;
   onClose: () => void;
   onRun: () => void;
   onRemove: (itemId: string) => void;
+  onSwitchCartMode: () => void;
 }) {
   const items = visibleCartItems(state.cart);
   const collisionRefs = collisionSourceRefs(state.cart.items);
@@ -1662,38 +1739,40 @@ function CartModal({
     <AppModal title="Operation Cart" onClose={onClose} asset="cart">
         {items.length ? (
           <>
-            <div className="cart-list">
-              {items.map((item) => {
-                const ref = sourceRef(item);
-                const hasCollision = Boolean(ref && collisionRefs.has(ref));
-                return (
-                  <div className="cart-item" key={item.id}>
-                    <div>
-                      <div className="cart-item-title">
-                        <b>{item.name === 'fill' ? 'Swap' : item.name}</b>
-                        {hasCollision ? (
-                          <span className="cart-collision-badge">
-                            Collision
-                            <HelpTooltip label="Cart collision help">
-                              {`Source UTxO ${short(ref)} appears in more than one Cart item. Remove one of the colliding items before running the Cart.`}
-                            </HelpTooltip>
-                          </span>
+            <ScrollFade>
+              <div className="cart-list">
+                {items.map((item) => {
+                  const ref = sourceRef(item);
+                  const hasCollision = Boolean(ref && collisionRefs.has(ref));
+                  return (
+                    <div className="cart-item" key={item.id}>
+                      <div>
+                        <div className="cart-item-title">
+                          <b>{item.name === 'fill' ? 'Swap' : item.name}</b>
+                          {hasCollision ? (
+                            <span className="cart-collision-badge">
+                              Collision
+                              <HelpTooltip label="Cart collision help">
+                                {`Source UTxO ${short(ref)} appears in more than one Cart item. Remove one of the colliding items before running the Cart.`}
+                              </HelpTooltip>
+                            </span>
+                          ) : null}
+                        </div>
+                        <small>{item.sourceLabel || item.id}</small>
+                        {item.status !== 'draft' ? (
+                          <small>
+                            {item.status} <HelpTooltip label="Pending help">{HELP.pending}</HelpTooltip>
+                          </small>
                         ) : null}
                       </div>
-                      <small>{item.sourceLabel || item.id}</small>
-                      {item.status !== 'draft' ? (
-                        <small>
-                          {item.status} <HelpTooltip label="Pending help">{HELP.pending}</HelpTooltip>
-                        </small>
-                      ) : null}
+                      <button type="button" className="modal-action-btn danger-action" aria-label={`Remove ${item.id}`} onClick={() => onRemove(item.id)}>
+                        <i className="bi bi-trash" aria-hidden="true" />
+                      </button>
                     </div>
-                    <button type="button" className="modal-action-btn danger-action" aria-label={`Remove ${item.id}`} onClick={() => onRemove(item.id)}>
-                      <i className="bi bi-trash" aria-hidden="true" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </ScrollFade>
             <div className="cart-actions">
               <button type="button" className="secondary-btn" onClick={onClose}>
                 <i className="bi bi-x-lg" aria-hidden="true" /> Close
@@ -1704,7 +1783,25 @@ function CartModal({
             </div>
           </>
         ) : (
-          <div className="empty-state">Your Cart has no draft operations.</div>
+          <div className="cart-empty-card ns-art-surface">
+            <VisualAsset asset="cartMode" />
+            <div>
+              <h2>Your Cart is empty</h2>
+              {cartMode ? (
+                <p>Queued operations will appear here before you run them.</p>
+              ) : (
+                <>
+                  <p>
+                    {HELP.cartMode} <HelpTooltip label="Cart Mode help">{HELP.cartMode}</HelpTooltip>
+                  </p>
+                  <p className="cart-empty-reminder">You can change this setting later from Options.</p>
+                  <button type="button" className="primary-btn" onClick={onSwitchCartMode}>
+                    <i className="bi bi-cart-plus" aria-hidden="true" /> Switch into Cart Mode
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         )}
     </AppModal>
   );
@@ -2224,6 +2321,11 @@ export default function App() {
             </Routes>
           </main>
           <footer className="footer">
+            <span className="network-pill">
+              {state.options.network}
+              <HelpTooltip label="Network help">{HELP.network}</HelpTooltip>
+            </span>
+            <span className="footer-separator" aria-hidden="true">|</span>
             <span>by </span>
             <b>GameChanger</b>
             <span>Finance</span>
@@ -2233,8 +2335,13 @@ export default function App() {
       {state.cart.modalOpen ? (
         <CartModal
           state={state}
+          cartMode={cartMode}
           onClose={() => dispatch({ type: 'set-cart-modal-open', open: false })}
           onRemove={(itemId) => dispatch({ type: 'remove-cart-item', itemId })}
+          onSwitchCartMode={() => {
+            setCartMode(true);
+            setToast({ tone: 'info', title: 'Cart Mode enabled', message: 'New operations will be queued in Cart before opening the wallet.' });
+          }}
           onRun={() =>
             void runItems(selectedCartItems(state.cart).filter((item) => item.status === 'draft' || item.status === 'failed'))
           }

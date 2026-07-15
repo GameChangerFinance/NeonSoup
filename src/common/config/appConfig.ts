@@ -27,6 +27,8 @@ export const APP_CONFIG = {
     frontendCartMode: false,
     options: {
       network: 'preprod',
+      // Add 'mainnet' here when mainnet frontend switching is ready.
+      availableNetworks: ['preprod'],
       provider: defaultProvider,
       providerUrl: '',
       blockfrostUrl: '',

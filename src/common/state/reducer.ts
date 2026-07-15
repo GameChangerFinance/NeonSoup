@@ -9,6 +9,7 @@ import type { AppAction, AppOptions, AppState, AssetMetadata, CartState, Network
 
 export const defaultOptions: AppOptions = {
   ...APP_CONFIG.defaults.options,
+  availableNetworks: [...APP_CONFIG.defaults.options.availableNetworks],
 };
 
 function freshCart(): CartState {
@@ -36,6 +37,23 @@ function defaultAssetKeys(network: NetworkTag, customAssets: InitialStateSeed['c
   };
 }
 
+function freshForms(network: NetworkTag, customAssets: InitialStateSeed['customAssets'] = {}): AppState['forms'] {
+  const assetKeys = defaultAssetKeys(network, customAssets);
+  return {
+    openOfferAssetKey: assetKeys.offer,
+    openAskAssetKey: assetKeys.ask,
+    openOfferAmount: '',
+    openAskAmount: '',
+    bulkOpenCount: APP_CONFIG.defaults.forms.bulkOpenCount,
+    bulkOpenVariancePercent: APP_CONFIG.defaults.forms.bulkOpenVariancePercent,
+    bulkOpenOfferVariancePercent: APP_CONFIG.defaults.forms.bulkOpenOfferVariancePercent,
+    fillOfferAmount: '',
+    fillAskAmount: '',
+    swapOfferAmount: '',
+    swapPayUp: APP_CONFIG.defaults.forms.swapPayUp,
+  };
+}
+
 interface InitialStateSeed {
   migrationNeeded?: boolean;
   migrationSourceVersion?: string;
@@ -60,7 +78,6 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
   const options = { ...defaultOptions, ...(seed?.options || {}) };
   const customAssets = seed?.customAssets || {};
   const assetInfo = configuredAssets(options.network, customAssets);
-  const assetKeys = defaultAssetKeys(options.network, customAssets);
   return {
     appVersion: APP_CONFIG.version,
     migrationNeeded: seed?.migrationNeeded || false,
@@ -72,17 +89,7 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
     selectedPair: seed?.selectedPair || null,
     options,
     forms: {
-      openOfferAssetKey: assetKeys.offer,
-      openAskAssetKey: assetKeys.ask,
-      openOfferAmount: '',
-      openAskAmount: '',
-      bulkOpenCount: APP_CONFIG.defaults.forms.bulkOpenCount,
-      bulkOpenVariancePercent: APP_CONFIG.defaults.forms.bulkOpenVariancePercent,
-      bulkOpenOfferVariancePercent: APP_CONFIG.defaults.forms.bulkOpenOfferVariancePercent,
-      fillOfferAmount: '',
-      fillAskAmount: '',
-      swapOfferAmount: '',
-      swapPayUp: APP_CONFIG.defaults.forms.swapPayUp,
+      ...freshForms(options.network, customAssets),
       ...(seed?.forms || {}),
     },
     wallet: seed?.wallet || null,
@@ -142,7 +149,25 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'set-forms':
       return { ...state, forms: { ...state.forms, ...action.forms } };
     case 'set-wallet':
-      return { ...state, wallet: action.wallet, portfolio: action.wallet ? state.portfolio : [] };
+      return action.wallet
+        ? { ...state, wallet: action.wallet }
+        : {
+            ...state,
+            wallet: null,
+            cart: freshCart(),
+            lastWalletReturn: null,
+            openOffers: [],
+            openOffersSnapshot: null,
+            portfolio: [],
+            transactions: [],
+            selectedOrderId: '',
+            selectedPair: null,
+            forms: freshForms(state.options.network, state.customAssets),
+            notices: {
+              ...state.notices,
+              portfolio: { message: 'Connect wallet to load portfolio.', tone: 'warning' },
+            },
+          };
     case 'set-wallet-return':
       return { ...state, lastWalletReturn: action.payload };
     case 'add-cart-item': {
