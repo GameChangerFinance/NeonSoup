@@ -119,7 +119,7 @@ const HELP = {
 };
 
 const INCOGNITO_NOTICE =
-  'You are using Incognito Mode. You can continue without connecting because GameChanger Wallet will provide the required address privately, but NeonSoup cannot know your balance.';
+  'You are using Incognito Mode. You can transact without connecting your wallet because GameChanger Wallet will provide the required address privately, but NeonSoup will not know your balance until you connect.';
 const INCOGNITO_CART_NOTICE =
   'In Incognito Mode, NeonSoup does not keep executed Cart items after opening the wallet, so your activity is not tracked in local app history.';
 

@@ -418,6 +418,13 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
   modal opened by the `...` button.
 - User-facing forms must block invalid actions with Bootstrap alerts and
   disabled CTAs. DevTool may remain more permissive for protocol debugging.
+- Incognito Mode allows Swap/Open-style execution without a connected wallet
+  only when wallet-side GCScript can request the missing address data. User copy
+  must make clear that balances are unknown and the user is responsible for
+  entering valid values.
+- Incognito execution must avoid retaining user activity traces. Do not add
+  direct incognito actions to persisted Cart history, and clear queued incognito
+  Cart items after wallet launch or return.
 - User-facing Options should not expose internal tuning such as toast auto-hide
   timeout, history fetch limit, or explorer URL template unless explicitly
   requested later.
@@ -475,13 +482,18 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
   `preprod`, and the footer network pill should stay minimal with a tooltip.
 - User-facing Options must keep internal technical defaults hidden unless
   requested. Defaults, thresholds, booleans, providers, percentages, factors,
-  theme, and network defaults belong in centralized `APP_CONFIG`.
+  theme, fee config, timeout values, and network defaults belong in centralized
+  `APP_CONFIG`.
 - Invalid same-asset pairs or incomplete pair context from Markets/Portfolio
   actions must reset the second asset to unselected, show a clear alert, and
   disable CTAs.
 - User-facing warnings should block truly impossible or risky trades such as
   insufficient live liquidity, but must not expose advanced
   remainder/min-UTxO internals as end-user copy.
+- Frontend slippage policy is config-driven: warn at
+  `tolerance * warningSlippageMultiplier`, block with danger severity at
+  `tolerance`, block zero tolerance, and block tolerances at or above the
+  configured maximum.
 
 ## Frontend Cart And Routing Notes
 
@@ -537,6 +549,9 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
 - History rows should be ordered newest first and include a created-at datetime.
 - History fetches must be capped internally by app-state defaults, but those
   caps should not be exposed in user Options.
+- History refresh should use bounded MKII address-transaction queries for all
+  recognized wallet activity, not only the selected pair. Avoid unbounded
+  overfetch that can trigger 30s provider timeouts.
 - Remove evidence/debug columns from user-facing History.
 - Transaction details should use body-backed data only. Do not infer operation
   values, prices, or fees from metadata.
@@ -644,6 +659,9 @@ components, reducers, or provider call sites.
 - GCScript/ISL does not have normal imperative conditionals. Existing
   normalization-map patterns are intentional and should be preserved unless a
   simpler protocol-safe approach is clearly available.
+- Service fee outputs are network-specific and reusable-data-driven. Metadata
+  may mention fee type and amount, but execution correctness must come from the
+  transaction body outputs.
 - `utxo-ask-quantity` is a required compatibility arg for fill/close value
   accounting and must default to `"0"` across providers, intent args, top-level
   wrappers, and Cart snapshots.
@@ -674,6 +692,9 @@ components, reducers, or provider call sites.
 - Excluding booked UTxOs from routing should be equivalent to pre-filtering the
   order book. Do not change route math or route-bar semantics to compensate for
   exclusions.
+- Do not use developer-facing warning-threshold logic to disable user-facing
+  CTAs unless the route is truly at or over the user maximum. Do not reintroduce
+  old extreme-multiplier severity rules in the frontend.
 - Preserve route-bar segment semantics: normal fill, round-up/clean-execution
   remainder, maker remainder/change, and final unavailable input are separate
   concepts. Only truly unavailable input should use unavailable/striped
