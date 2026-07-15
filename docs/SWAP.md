@@ -4,6 +4,38 @@ NeonSoup Swap presents an AMM-like UI while routing against P2P DeFi Kernel
 order UTxOs. The quote engine is shared by Frontend and DevTool, works in base
 units with `bigint`, and applies display decimals only when rendering.
 
+## Cardano DEX Fee Structure
+
+Public Cardano DEX fee references and current web search results show two
+separate fee concepts that should not be mixed in NeonSoup UX or accounting:
+
+- Trading, LP, or protocol percentage fees are normally embedded in the swap
+  asset flow itself. They are paid through the traded pool/order assets and
+  reflected in the final swap price or received amount, not as a separate ADA
+  output. For example, a `USDM -> ADA` swap fee is economically taken from that
+  swap's token flow, not charged as an extra ADA service output.
+- Batcher, scooper, or service fees are commonly fixed ADA-denominated outputs
+  on Cardano DEX flows. These are distinct from the trading fee and from the
+  normal Cardano network fee. They compensate the party or infrastructure that
+  helps construct, submit, or process the order execution.
+
+For NeonSoup, any configured per-swap service fee is closest to the Cardano
+batcher/scooper/service-fee model. It should be documented and rendered as a
+NeonSoup service fee, usually ADA-denominated by default, and kept separate from
+route price, price impact, LP/protocol trading fees, and the Cardano ledger fee.
+
+Quick public web search found the following Cardano DEX fee patterns. Treat
+these as a dated design reference, not as a source of live competitor constants;
+verify each DEX UI/docs again before using exact values in marketing copy.
+
+| DEX | Trading / protocol fee pattern | Fixed execution fee pattern | Notes |
+| --- | --- | --- | --- |
+| Minswap | Commonly described around a `0.3%` swap/trading fee on AMM pools, paid through the swapped pool assets and reflected in price/output. | Commonly referenced as an ADA batcher/service fee in user swap flows. | Current Minswap docs expose the whitepaper and governance pages, but exact live UI fee constants should be checked in the app before quoting. |
+| SundaeSwap | Commonly described around a `0.3%` pool/trading fee, paid through the traded pool assets. | Uses the Cardano scooper/batcher model, commonly ADA-denominated. | The fixed fee compensates scoopers/batchers separately from LP/trading economics. |
+| MuesliSwap | Commonly described with percentage trading fees for AMM-style pools and order-book execution economics depending on product/version. | Uses Cardano-style fixed ADA execution/batcher fees where applicable. | Because MuesliSwap spans order-book and AMM products, do not infer one fee model for all order types. |
+| WingRiders | Commonly described with percentage AMM trading fees paid from the swap asset flow. | Uses fixed ADA-denominated execution/batcher-style fees where applicable. | Treat the fixed fee as execution infrastructure cost, separate from pool LP fees. |
+
+
 ## Order-Book Layers
 
 - `rawCanonicalBook`: all discovered protocol-valid pair order UTxOs, keyed by
