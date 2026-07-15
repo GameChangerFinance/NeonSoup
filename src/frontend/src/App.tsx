@@ -67,8 +67,25 @@ interface ToastState {
 }
 
 const HELP = {
+  swapPage:
+    'Swap estimates a route across live NeonSoup offers. It feels like a DEX swap, but it fills P2P DeFi Kernel order-book liquidity at posted limit prices.',
+  openPage:
+    'Open Offer creates a one-way limit order. You choose what you offer, what you request, and the fixed price other users may fill.',
+  marketsPage: 'Markets lists recognized asset pairs and live order-book liquidity available to NeonSoup right now.',
+  ordersPage: 'My Orders shows your open NeonSoup offers and how much of each offer appears filled for this wallet.',
+  portfolioPage: 'Portfolio shows wallet balances recognized by NeonSoup and quick actions to swap or open offers.',
+  historyPage: 'History shows wallet transactions that NeonSoup recognizes from on-chain order activity.',
+  optionsPage: 'Options controls wallet flow, transaction bundling, route preferences, provider, and network selection.',
   route: 'Shows how much of your swap can be matched right now and how smoothly the price moves across available offers.',
   priceImpact: 'Shows how much the estimated price changes while matching your swap against available offers.',
+  swapPay: 'Asset and amount you want to spend. NeonSoup routes this against live order offers.',
+  swapReceive:
+    'Asset and estimated amount you may receive from the current route. The final amount depends on live order availability when you submit.',
+  bestExecutablePrice: 'Best currently available limit price from executable live offers for this pair.',
+  balanceUsed: 'Share of your connected wallet balance used by the executable part of this swap.',
+  openOfferAsset: 'Asset and amount you lock into a new one-way offer for other users to fill.',
+  openRequestAsset: 'Asset and amount you want to receive as the offer is filled.',
+  limitPrice: 'Fixed exchange rate for your offer. Fillers can only take your offered asset if they pay at least this price.',
   cartMode:
     'When Cart Mode is on, operations wait in Cart until you press Run. When it is off, the wallet opens immediately and the operation is still kept as history.',
   parallel:
@@ -131,18 +148,22 @@ function VisualAsset({ asset, className = '' }: { asset: UiAsset; className?: st
 }
 
 function tooltipAssetForLabel(label: string): UiAsset {
-  if (/route|availability/i.test(label)) return 'route';
-  if (/price impact|slippage/i.test(label)) return 'scale';
+  if (/markets/i.test(label)) return 'data';
+  if (/my orders|order progress/i.test(label)) return 'tablet';
+  if (/history/i.test(label)) return 'history';
+  if (/options/i.test(label)) return 'options';
+  if (/portfolio/i.test(label)) return 'walletConnected';
+  if (/pay-up/i.test(label)) return 'payUp';
+  if (/price impact|slippage|limit price/i.test(label)) return 'scale';
+  if (/swap|receive|you pay|executable|balance used|route|availability/i.test(label)) return 'ladle';
   if (/disconnect/i.test(label)) return 'walletDisconnect';
   if (/connect/i.test(label)) return 'walletConnect';
   if (/wallet/i.test(label)) return 'walletConnected';
   if (/open offer/i.test(label)) return 'open';
-  if (/order progress/i.test(label)) return 'data';
   if (/cart mode/i.test(label)) return 'cartMode';
   if (/cart collision/i.test(label)) return 'cart';
   if (/parallel/i.test(label)) return 'parallel';
   if (/bundle/i.test(label)) return 'bundleActions';
-  if (/pay-up/i.test(label)) return 'payUp';
   if (/provider url/i.test(label)) return 'menu';
   if (/network/i.test(label)) return 'network';
   if (/provider/i.test(label)) return 'tablet';
@@ -835,7 +856,7 @@ function SwapScreen({
   quote: SwapQuote;
   assets: Record<string, ResolvedAsset>;
   offerAsset: ResolvedAsset;
-  receiveAsset: ResolvedAsset;
+  receiveAsset: ResolvedAsset | undefined;
   cartMode: boolean;
   onSwap: () => void;
   onFlip: () => void;
@@ -846,7 +867,8 @@ function SwapScreen({
   const [flipRotation, setFlipRotation] = useState(0);
   const payValue = state.forms.swapOfferAmount;
   const requestedQuantity = formQuantity(payValue, offerAsset);
-  const output = fromBase(quotePreviewOutput(quote), receiveAsset.decimals);
+  const hasPair = Boolean(receiveAsset && receiveAsset.assetKey !== offerAsset.assetKey);
+  const output = receiveAsset && hasPair ? fromBase(quotePreviewOutput(quote), receiveAsset.decimals) : '0';
   const balance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
   const balancePercent = percent(quote.requestedInputQuantity, balance);
   const executionQuantity = quote.executionInputQuantity;
@@ -854,14 +876,16 @@ function SwapScreen({
   const hasTrueLiquidityShortage = quoteHasTrueLiquidityShortage(quote);
   const swapProblems = [
     ...(!state.wallet ? ['Connect a wallet before swapping.'] : []),
+    ...(!receiveAsset ? ['Select the asset you want to receive before swapping.'] : []),
+    ...(receiveAsset && receiveAsset.assetKey === offerAsset.assetKey ? ['Select a different asset to receive before swapping.'] : []),
     ...(requestedQuantity <= 0n ? ['Enter an amount greater than zero.'] : []),
     ...(executionQuantity > balance
       ? [`Your balance is ${fromBase(balance, offerAsset.decimals)} ${assetTitle(offerAsset)}, which is not enough for this swap.`]
       : []),
-    ...(requestedQuantity > 0n && hasTrueLiquidityShortage
+    ...(hasPair && requestedQuantity > 0n && hasTrueLiquidityShortage
       ? ['Not enough available liquidity for this swap right now.']
       : []),
-    ...(requestedQuantity > 0n && !hasExecutableRoute
+    ...(receiveAsset && hasPair && requestedQuantity > 0n && !hasExecutableRoute
       ? [`No available offers can sell ${assetTitle(receiveAsset)} for ${assetTitle(offerAsset)} right now.`]
       : []),
   ];
@@ -873,14 +897,29 @@ function SwapScreen({
   return (
     <section className="panel-card swap-panel">
       <div className="panel-head">
-        <h1>Swap</h1>
+        <h1>
+          Swap <HelpTooltip label="Swap page help">{HELP.swapPage}</HelpTooltip>
+        </h1>
         <RefreshButton loading={refreshing} onClick={onRefresh} />
+      </div>
+
+      <div className="swap-hero">
+        <AssetPairStack offerAsset={offerAsset} askAsset={receiveAsset} />
+        <div>
+          <b>
+            Swap {assetTitle(offerAsset)} for {receiveAsset ? assetTitle(receiveAsset) : 'Select asset'}
+          </b>
+          <small>
+            NeonSoup routes across live offers so the swap stays simple while the order book stays under the hood.
+            <HelpTooltip label="Swap route help">{HELP.swapPage}</HelpTooltip>
+          </small>
+        </div>
       </div>
 
       <div className="token-box">
         <div>
           <label className="token-label" htmlFor="swap-pay-amount">
-            You pay
+            You pay <HelpTooltip label="You pay help">{HELP.swapPay}</HelpTooltip>
           </label>
           <AssetPicker
             assets={assets}
@@ -922,7 +961,9 @@ function SwapScreen({
 
       <div className="token-box">
         <div>
-          <div className="token-label">You receive</div>
+          <div className="token-label">
+            You receive <HelpTooltip label="You receive help">{HELP.swapReceive}</HelpTooltip>
+          </div>
           <AssetPicker
             assets={assets}
             value={state.forms.openAskAssetKey}
@@ -933,14 +974,14 @@ function SwapScreen({
         <div className="token-amount">
           <strong>{output}</strong>
           <small>
-            Est. final price{' '}
-            {priceText(quote.effectivePrice || quote.marginalPrice || quote.executableBestPrice, offerAsset, receiveAsset)} {assetTitle(offerAsset)} /{' '}
-            {assetTitle(receiveAsset)}
+            {receiveAsset
+              ? `Est. final price ${priceText(quote.effectivePrice || quote.marginalPrice || quote.executableBestPrice, offerAsset, receiveAsset)} ${assetTitle(offerAsset)} / ${assetTitle(receiveAsset)}`
+              : 'Select a receive asset'}
           </small>
         </div>
       </div>
 
-      <CompactRouteBar quote={quote} offerAsset={offerAsset} receiveAsset={receiveAsset} />
+      {receiveAsset && hasPair ? <CompactRouteBar quote={quote} offerAsset={offerAsset} receiveAsset={receiveAsset} /> : null}
 
       {swapProblems.length ? <ValidationAlert tone="warning" message={swapProblems[0] ?? ''} /> : null}
 
@@ -950,9 +991,9 @@ function SwapScreen({
 
       <div className="stats">
         <div>
-          Best executable price
+          Best executable price <HelpTooltip label="Best executable price help">{HELP.bestExecutablePrice}</HelpTooltip>
           <strong>
-            {priceText(quote.executableBestPrice, offerAsset, receiveAsset)} {assetTitle(offerAsset)}
+            {receiveAsset && hasPair ? `${priceText(quote.executableBestPrice, offerAsset, receiveAsset)} ${assetTitle(offerAsset)}` : '-'}
           </strong>
         </div>
         <div>
@@ -960,7 +1001,7 @@ function SwapScreen({
           <strong className={`severity-${severity}`}>{formatBps(quote.weightedSlippageBps)}</strong>
         </div>
         <div>
-          Balance used
+          Balance used <HelpTooltip label="Balance used help">{HELP.balanceUsed}</HelpTooltip>
           <strong>{balance ? `${balancePercent}%` : 'Connect wallet'}</strong>
         </div>
       </div>
@@ -981,7 +1022,7 @@ function OpenScreen({
   state: AppState;
   assets: Record<string, ResolvedAsset>;
   offerAsset: ResolvedAsset;
-  askAsset: ResolvedAsset;
+  askAsset: ResolvedAsset | undefined;
   cartMode: boolean;
   onOpen: () => void;
   onRefresh: () => void;
@@ -990,11 +1031,12 @@ function OpenScreen({
   const dispatch = useAppDispatch();
   const offerBalance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
   const offerQuantity = formQuantity(state.forms.openOfferAmount, offerAsset);
-  const askQuantity = formQuantity(state.forms.openAskAmount, askAsset);
-  const priceValue = openPriceText(offerQuantity, askQuantity, offerAsset, askAsset);
+  const askQuantity = askAsset ? formQuantity(state.forms.openAskAmount, askAsset) : 0n;
+  const priceValue = askAsset ? openPriceText(offerQuantity, askQuantity, offerAsset, askAsset) : '-';
   const openProblems = [
     ...(!state.wallet ? ['Connect a wallet before opening an offer.'] : []),
-    ...(offerAsset.assetKey === askAsset.assetKey ? ['Choose two different assets for the offer.'] : []),
+    ...(!askAsset ? ['Select the asset you want to receive before opening an offer.'] : []),
+    ...(askAsset && offerAsset.assetKey === askAsset.assetKey ? ['Select a different asset to receive before opening an offer.'] : []),
     ...(offerQuantity <= 0n ? ['Enter the amount you want to offer.'] : []),
     ...(askQuantity <= 0n ? ['Enter the amount you want to receive.'] : []),
     ...(offerQuantity > offerBalance
@@ -1005,7 +1047,9 @@ function OpenScreen({
   return (
     <section className="panel-card open-panel">
       <div className="panel-head">
-        <h1>Open Offer</h1>
+        <h1>
+          Open Offer <HelpTooltip label="Open offer page help">{HELP.openPage}</HelpTooltip>
+        </h1>
         <RefreshButton loading={refreshing} disabled={!state.wallet} onClick={onRefresh} />
       </div>
 
@@ -1013,7 +1057,7 @@ function OpenScreen({
         <AssetPairStack offerAsset={offerAsset} askAsset={askAsset} />
         <div>
           <b>
-            Offer {assetTitle(offerAsset)} for {assetTitle(askAsset)}
+            Offer {assetTitle(offerAsset)} for {askAsset ? assetTitle(askAsset) : 'Select asset'}
           </b>
           <small>
             Create a one-way Cardano-Swaps offer. Other users can fill it partially or fully while your price stays fixed.
@@ -1027,7 +1071,7 @@ function OpenScreen({
       <div className="open-grid">
         <div className="offer-box">
           <label className="token-label" htmlFor="open-offer-amount">
-            You offer
+            Your offer <HelpTooltip label="Your offer help">{HELP.openOfferAsset}</HelpTooltip>
           </label>
           <AssetPicker
             assets={assets}
@@ -1053,7 +1097,7 @@ function OpenScreen({
         </div>
         <div className="offer-box request-box">
           <label className="token-label" htmlFor="open-ask-amount">
-            You request
+            Your request <HelpTooltip label="Your request help">{HELP.openRequestAsset}</HelpTooltip>
           </label>
           <AssetPicker
             assets={assets}
@@ -1070,13 +1114,16 @@ function OpenScreen({
             inputMode="decimal"
             value={state.forms.openAskAmount}
             onChange={(event) => dispatch({ type: 'set-forms', forms: { openAskAmount: event.target.value } })}
+            disabled={!askAsset}
           />
           <small>Requested asset received as the offer is filled.</small>
         </div>
       </div>
 
       <div className="open-summary">
-        <label htmlFor="open-price">Limit price</label>
+        <label htmlFor="open-price">
+          Limit price <HelpTooltip label="Limit price help">{HELP.limitPrice}</HelpTooltip>
+        </label>
         <div className="price-input-wrap">
           <input
             id="open-price"
@@ -1086,13 +1133,15 @@ function OpenScreen({
             step="0.000001"
             inputMode="decimal"
             value={priceValue === '-' ? '' : priceValue}
+            disabled={!askAsset}
             onChange={(event) => {
+              if (!askAsset) return;
               const nextAsk = askQuantityFromPrice(offerQuantity, event.target.value, offerAsset, askAsset);
               dispatch({ type: 'set-forms', forms: { openAskAmount: nextAsk > 0n ? fromBase(nextAsk, askAsset.decimals) : '' } });
             }}
           />
           <span>
-            {assetTitle(askAsset)} / {assetTitle(offerAsset)}
+            {askAsset ? assetTitle(askAsset) : 'Select asset'} / {assetTitle(offerAsset)}
           </span>
         </div>
       </div>
@@ -1117,7 +1166,7 @@ function MarketsScreen({
   state: AppState;
   assets: Record<string, ResolvedAsset>;
   onSelect: (payKey: string, receiveKey: string) => void;
-  onOffer: (assetKey: string) => void;
+  onOffer: (offerKey: string, askKey: string) => void;
   onRefresh: () => void;
   refreshing: boolean;
 }) {
@@ -1153,7 +1202,9 @@ function MarketsScreen({
   return (
     <section className="panel-card">
       <div className="panel-head">
-        <h1>Markets</h1>
+        <h1>
+          Markets <HelpTooltip label="Markets page help">{HELP.marketsPage}</HelpTooltip>
+        </h1>
         <RefreshButton loading={refreshing} onClick={onRefresh} />
       </div>
       <ScrollFade
@@ -1185,7 +1236,7 @@ function MarketsScreen({
               </span>
               <span className="row-actions">
                 {balance > 0n ? (
-                  <button type="button" className="mini-btn" onClick={() => onOffer(receiveAsset.assetKey)}>
+                  <button type="button" className="mini-btn" onClick={() => onOffer(receiveAsset.assetKey, state.forms.openOfferAssetKey)}>
                     <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
                   </button>
                 ) : null}
@@ -1223,7 +1274,9 @@ function OrdersScreen({
   return (
     <section className="panel-card">
       <div className="panel-head">
-        <h1>My Orders</h1>
+        <h1>
+          My Orders <HelpTooltip label="My orders page help">{HELP.ordersPage}</HelpTooltip>
+        </h1>
         <RefreshButton loading={refreshing} onClick={onRefresh} />
       </div>
       {state.wallet ? null : <ValidationAlert tone="warning" message="Connect a wallet to show owned orders." />}
@@ -1305,7 +1358,9 @@ function PortfolioScreen({
   return (
     <section className="panel-card">
       <div className="panel-head">
-        <h1>Portfolio</h1>
+        <h1>
+          Portfolio <HelpTooltip label="Portfolio page help">{HELP.portfolioPage}</HelpTooltip>
+        </h1>
         <RefreshButton loading={refreshing} disabled={!state.wallet} onClick={onRefresh} />
       </div>
       {state.wallet ? null : <ValidationAlert tone="warning" message="Connect a wallet to load balances and operation history." />}
@@ -1363,7 +1418,9 @@ function HistoryScreen({
   return (
     <section className="panel-card">
       <div className="panel-head">
-        <h1>History</h1>
+        <h1>
+          History <HelpTooltip label="History page help">{HELP.historyPage}</HelpTooltip>
+        </h1>
         <RefreshButton loading={loading} disabled={!state.wallet} onClick={onRefresh} />
       </div>
       {notice ? <ValidationAlert tone="info" message={notice} /> : null}
@@ -1525,7 +1582,9 @@ function OptionsScreen({
     <section className={modal ? 'options-modal-content' : 'panel-card'}>
       {hideTitle ? null : (
         <div className="panel-head">
-          <h1>Options</h1>
+          <h1>
+            Options <HelpTooltip label="Options page help">{HELP.optionsPage}</HelpTooltip>
+          </h1>
           {/*<span className="tag">Execution</span>*/}
         </div>
       )}
@@ -1665,7 +1724,7 @@ function OptionsScreen({
           <span>
             <b>API provider URL</b>
             <HelpTooltip label="Provider URL help">Overrides the endpoint used by the selected API provider. Empty keeps the configured default.</HelpTooltip>
-            <small>Optional endpoint override. Empty uses the same default endpoint selection as DevTool.</small>
+            <small>Optional endpoint override. Empty uses default endpoint.</small>
           </span>
           <input
             type="url"
@@ -1846,17 +1905,27 @@ export default function App() {
     return <main className="frontend-app">No configured assets are available for this network.</main>;
   }
   const offerAsset = assets[state.forms.openOfferAssetKey] || defaultAsset;
-  const receiveAsset = assets[state.forms.openAskAssetKey] || configuredValues[1] || defaultAsset;
+  const receiveAsset = assets[state.forms.openAskAssetKey];
+  const quoteReceiveAsset =
+    receiveAsset && receiveAsset.assetKey !== offerAsset.assetKey
+      ? receiveAsset
+      : configuredValues.find((asset) => asset.assetKey !== offerAsset.assetKey) || defaultAsset;
   const draftCartCount = state.cart.items.filter((item) => item.status === 'draft').length;
   const pendingHashesKey = [...new Set(pendingTransactionHashes(state))].sort().join(',');
   const excludedUtxoRefs = useMemo(() => bookedSourceRefs(state.cart), [state.cart]);
+
+  useLayoutEffect(() => {
+    if (state.forms.openOfferAssetKey && state.forms.openOfferAssetKey === state.forms.openAskAssetKey) {
+      dispatch({ type: 'set-forms', forms: { openAskAssetKey: '' } });
+    }
+  }, [dispatch, state.forms.openAskAssetKey, state.forms.openOfferAssetKey]);
 
   const quote = useMemo(
     () =>
       quoteSwap({
         offers: state.openOffers,
         offerAsset,
-        receiveAsset,
+        receiveAsset: quoteReceiveAsset,
         offerAmount: state.forms.swapOfferAmount,
         payUp: state.forms.swapPayUp,
         excludedUtxoRefs,
@@ -1868,7 +1937,7 @@ export default function App() {
       }),
     [
       offerAsset,
-      receiveAsset,
+      quoteReceiveAsset,
       state.forms.swapOfferAmount,
       state.forms.swapPayUp,
       excludedUtxoRefs,
@@ -2099,6 +2168,8 @@ export default function App() {
     const balance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
     if (
       !state.wallet ||
+      !receiveAsset ||
+      offerAsset.assetKey === receiveAsset.assetKey ||
       requestedQuantity <= 0n ||
       quote.executionInputQuantity > balance ||
       !quoteHasExecutableRoute(quote) ||
@@ -2143,8 +2214,8 @@ export default function App() {
   async function openOffer() {
     const offerBalance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
     const offerQuantity = formQuantity(state.forms.openOfferAmount, offerAsset);
-    const askQuantity = formQuantity(state.forms.openAskAmount, receiveAsset);
-    if (!state.wallet || offerAsset.assetKey === receiveAsset.assetKey || offerQuantity <= 0n || askQuantity <= 0n || offerQuantity > offerBalance) {
+    const askQuantity = receiveAsset ? formQuantity(state.forms.openAskAmount, receiveAsset) : 0n;
+    if (!state.wallet || !receiveAsset || offerAsset.assetKey === receiveAsset.assetKey || offerQuantity <= 0n || askQuantity <= 0n || offerQuantity > offerBalance) {
       setToast({ tone: 'warning', title: 'Open offer unavailable', message: 'Fix the highlighted offer terms before continuing.' });
       return;
     }
@@ -2198,7 +2269,13 @@ export default function App() {
   }
 
   function selectPair(payKey: string, receiveKey: string) {
-    dispatch({ type: 'set-forms', forms: { openOfferAssetKey: payKey, openAskAssetKey: receiveKey } });
+    dispatch({
+      type: 'set-forms',
+      forms: {
+        openOfferAssetKey: payKey,
+        openAskAssetKey: payKey === receiveKey ? '' : receiveKey,
+      },
+    });
     navigate('/swap');
   }
 
@@ -2207,10 +2284,32 @@ export default function App() {
       type: 'set-forms',
       forms: {
         openOfferAssetKey: assetKey,
-        openAskAssetKey: state.forms.openAskAssetKey === assetKey ? state.forms.openOfferAssetKey : state.forms.openAskAssetKey,
+        openAskAssetKey: '',
       },
     });
     navigate('/open');
+  }
+
+  function startOfferPair(offerKey: string, askKey: string) {
+    dispatch({
+      type: 'set-forms',
+      forms: {
+        openOfferAssetKey: offerKey,
+        openAskAssetKey: offerKey === askKey ? '' : askKey,
+      },
+    });
+    navigate('/open');
+  }
+
+  function startSwapFromAsset(assetKey: string) {
+    dispatch({
+      type: 'set-forms',
+      forms: {
+        openOfferAssetKey: assetKey,
+        openAskAssetKey: '',
+      },
+    });
+    navigate('/swap');
   }
 
   return (
@@ -2273,7 +2372,7 @@ export default function App() {
                     state={state}
                     assets={assets}
                     onSelect={selectPair}
-                    onOffer={startOffer}
+                    onOffer={startOfferPair}
                     onRefresh={() => void refreshOffers()}
                     refreshing={state.loading.offers}
                   />
@@ -2297,9 +2396,7 @@ export default function App() {
                   <PortfolioScreen
                     state={state}
                     onOfferAsset={startOffer}
-                    onSwapAsset={(assetKey) => {
-                      selectPair(state.forms.openOfferAssetKey, assetKey);
-                    }}
+                    onSwapAsset={startSwapFromAsset}
                     onRefresh={() => void refreshPortfolio()}
                     refreshing={state.loading.portfolio}
                   />

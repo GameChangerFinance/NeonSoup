@@ -151,7 +151,7 @@ button {
   grid-template-columns: 56px 1fr;
   align-items: center;
   text-align: left;
-  padding: 0 14px;
+  padding: 0 14px 0 24px;
   font-size: 18px;
   text-decoration: none;
   transition:
@@ -474,9 +474,16 @@ button {
 
 .panel-head h1 {
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font: 900 clamp(28px, 3vw, 38px) / 1 var(--font-display);
   letter-spacing: 0;
   text-shadow: 0 0 18px color-mix(in oklch, var(--cyan) 18%, transparent);
+}
+
+.panel-head h1 .help-btn {
+  transform: translateY(-2px);
 }
 
 .tag {
@@ -550,6 +557,12 @@ button {
   color: var(--sub);
   margin-bottom: 18px;
   font-size: 16px;
+}
+
+.token-label .help-wrap,
+.stats .help-wrap,
+.open-summary label .help-wrap {
+  margin-left: 4px;
 }
 
 .asset-picker {
@@ -1348,6 +1361,7 @@ button {
     linear-gradient(180deg, color-mix(in oklch, var(--panel) 96%, var(--blue) 4%), var(--panel));
 }
 
+.swap-hero,
 .open-hero {
   border: 1px solid var(--line);
   border-radius: 28px 10px 28px 14px;
@@ -1362,11 +1376,14 @@ button {
   margin-bottom: 18px;
 }
 
+.swap-hero b,
+.swap-hero small,
 .open-hero b,
 .open-hero small {
   display: block;
 }
 
+.swap-hero small,
 .open-hero small {
   color: var(--sub);
   margin-top: 3px;
@@ -1468,11 +1485,14 @@ button {
   margin-top: 10px;
 }
 
+.alert {
+  margin-block: 22px;
+}
+
 .validation-alert {
   position: relative;
   isolation: isolate;
   overflow: visible;
-  margin: 16px 0 0;
   min-height: 74px;
   padding: 16px 18px 16px 122px;
   border-color: color-mix(in srgb, var(--yellow) 58%, transparent);
@@ -1978,8 +1998,7 @@ button {
 .mobile-drawer {
   position: fixed;
   inset: 0;
-  z-index: 100;
-  background: var(--backdrop);
+  z-index: 100;  
   display: grid;
   align-items: center;
   justify-items: center;
@@ -2383,6 +2402,11 @@ button {
     min-height: auto;
   }
 
+  .swap-hero,
+  .open-hero {
+    display: none;
+  }
+
   .backdrop {
     padding: 12px;
   }
@@ -2523,6 +2547,11 @@ button {
 
   .panel-head h1 {
     font-size: 27px;
+  }
+
+  .swap-hero,
+  .open-hero {
+    display: none;
   }
 
   .token-box {
