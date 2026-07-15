@@ -20,7 +20,7 @@
   --ns-shadow-pink: 0 0 24px oklch(72% 0.24 326 / 0.38), 0 0 72px oklch(72% 0.24 326 / 0.14);
   --ns-shadow-riot: 0 0 28px oklch(82% 0.18 195 / 0.5), 0 0 90px oklch(72% 0.24 326 / 0.32), 0 0 150px oklch(56% 0.18 285 / 0.22);
   --ns-glass: oklch(100% 0 0 / 0.1);
-  --ns-overlay: oklch(7% 0.045 282 / 0.72);
+  --ns-overlay: oklch(7% 0.045 282 / 0.42);
   --ns-bg-image: url('/assets/images/dark-bg.png');
   --ns-font-display: 'Archivo Black', 'Arial Black', Impact, system-ui, sans-serif;
   --ns-font-body: 'Rajdhani', 'Sohne', 'Avenir Next', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -93,7 +93,7 @@
   --ns-shadow-pink: 0 0 22px oklch(68% 0.19 326 / 0.28), 0 0 60px oklch(68% 0.19 326 / 0.12);
   --ns-shadow-riot: 0 0 28px oklch(72% 0.22 178 / 0.44), 0 0 84px oklch(70% 0.22 326 / 0.26), 0 0 136px oklch(67% 0.23 151 / 0.18);
   --ns-glass: oklch(100% 0.014 170 / 0.56);
-  --ns-overlay: oklch(98% 0.028 170 / 0.58);
+  --ns-overlay: oklch(98% 0.028 170 / 0.42);
   --ns-bg-image: url('/assets/images/light-bg.png');
 
   --bg: var(--ns-bg);

@@ -111,7 +111,7 @@ const UI_ASSETS = {
   empty: '/assets/cybernekos/sitting-calm_D.png',
   cart: '/assets/cybernekos/menu-scroll_N.png',
   cartMode: '/assets/cybernekos/menu-scroll_N.png',
-  open: '/assets/cybernekos/specials-board_AU.png',
+  open: '/assets/cybernekos/serving-soup_AD.png',
   menu: '/assets/cybernekos/menu-pointer_R.png',
   data: '/assets/cybernekos/data-wall_AY.png',
   history: '/assets/cybernekos/receipt-sorting_S.png',

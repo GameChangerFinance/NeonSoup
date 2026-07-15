@@ -30,35 +30,20 @@ button {
   min-height: 100svh;
   padding: 10px;
   background:
-    radial-gradient(circle at 15% 8%, color-mix(in oklch, var(--cyan) 28%, transparent), transparent 30rem),
-    radial-gradient(circle at 88% 10%, color-mix(in oklch, var(--pink) 26%, transparent), transparent 30rem),
-    radial-gradient(circle at 50% 0%, color-mix(in oklch, var(--violet) 18%, transparent), transparent 44rem),
-    linear-gradient(180deg, var(--ns-overlay), var(--bg) 48%, var(--bg) 100%),
+    linear-gradient(180deg, var(--ns-overlay), color-mix(in oklch, var(--bg) 72%, transparent) 58%, var(--bg) 100%),
     var(--ns-bg-image) center top / cover fixed;
 }
 
-.frontend-app::before,
-.frontend-app::after {
+.frontend-app::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-}
-
-.frontend-app::before {
   background:
-    linear-gradient(90deg, color-mix(in oklch, var(--cyan) 16%, transparent) 1px, transparent 1px),
-    linear-gradient(180deg, color-mix(in oklch, var(--pink) 10%, transparent) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: linear-gradient(to bottom, black 0%, transparent 74%);
-}
-
-.frontend-app::after {
-  background:
-    linear-gradient(115deg, transparent 0 18%, color-mix(in oklch, var(--cyan) 12%, transparent) 18% 18.35%, transparent 18.35% 42%, color-mix(in oklch, var(--pink) 12%, transparent) 42% 42.35%, transparent 42.35%),
-    repeating-linear-gradient(180deg, oklch(100% 0 0 / 0.026) 0 1px, transparent 1px 5px);
-  mix-blend-mode: screen;
+    radial-gradient(circle at 15% 8%, color-mix(in oklch, var(--cyan) 18%, transparent), transparent 30rem),
+    radial-gradient(circle at 88% 10%, color-mix(in oklch, var(--pink) 16%, transparent), transparent 30rem),
+    radial-gradient(circle at 50% 0%, color-mix(in oklch, var(--violet) 12%, transparent), transparent 44rem);
 }
 
 .shell {
@@ -108,15 +93,15 @@ button {
 }
 
 .brand {
-  height: 92px;
+  height: 104px;
   display: flex;
   align-items: center;
   padding: 6px 12px;
 }
 
 .brand img {
-  width: 126px;
-  max-height: 76px;
+  width: clamp(173px, 11.5vw, 212px);
+  max-height: 106px;
   object-fit: contain;
 }
 
@@ -2311,6 +2296,15 @@ button {
   .modal-card {
     width: min(860px, calc(100dvw - 36px));
     max-width: calc(100dvw - 36px);
+  }
+
+  .brand {
+    height: 92px;
+  }
+
+  .brand img {
+    width: 163px;
+    max-height: 94px;
   }
 }
 
