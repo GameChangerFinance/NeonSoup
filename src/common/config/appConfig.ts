@@ -43,8 +43,7 @@ export const APP_CONFIG = {
     frontendCartMode: false,
     options: {
       network: 'preprod',
-      // Add 'mainnet' here when mainnet frontend switching is ready.
-      availableNetworks: ['preprod'],
+      availableNetworks: ['preprod', 'mainnet'],
       provider: defaultProvider,
       providerUrl: '',
       blockfrostUrl: '',
@@ -62,6 +61,8 @@ export const APP_CONFIG = {
       theme: 'dark',
     },
     forms: {
+      defaultAmount: '0.1',
+      amountStep: '0.1',
       openOfferAmount: '0.1',
       openAskAmount: '0.1',
       swapOfferAmount: '0.1',
@@ -85,6 +86,7 @@ export const APP_CONFIG = {
   },
   networks: {
     preprod: {
+      dltTag: 'cardano',
       networkTag: 'preprod',
       hostedBlockfrostUrl: env.VITE_NEONSOUP_PREPROD_BLOCKFROST_URL || '',
       graphqlMk2Url: env.VITE_NEONSOUP_PREPROD_GRAPHQL_MK2_URL || '',
@@ -95,6 +97,7 @@ export const APP_CONFIG = {
       assets: PREPROD_ASSETS,
     },
     mainnet: {
+      dltTag: 'cardano',
       networkTag: 'mainnet',
       hostedBlockfrostUrl: env.VITE_NEONSOUP_MAINNET_BLOCKFROST_URL || '',
       graphqlMk2Url: env.VITE_NEONSOUP_MAINNET_GRAPHQL_MK2_URL || '',

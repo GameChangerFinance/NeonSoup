@@ -65,6 +65,8 @@ export async function buildBundledGcscriptIntent({
       items,
       maxIntentsPerTransaction,
       returnUrlPattern: cleanReturnUrl(),
+      networkTag: state.options.network,
+      expectedAddress: state.wallet?.address,
       serviceFees: serviceFeesForNetwork(state.options.network, state.customAssets),
       privacyMode: state.wallet?.address ? 'connected' : 'incognito',
     }),
@@ -76,6 +78,8 @@ export async function buildParallelGcscriptIntent({ state, items }: ParallelInte
     createParallelGcscriptSource({
       items,
       returnUrlPattern: cleanReturnUrl(),
+      networkTag: state.options.network,
+      expectedAddress: state.wallet?.address,
       serviceFees: serviceFeesForNetwork(state.options.network, state.customAssets),
       privacyMode: state.wallet?.address ? 'connected' : 'incognito',
     }),

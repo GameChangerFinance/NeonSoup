@@ -3,6 +3,9 @@
     "title": "Swap",
     "description": "Filling a one-way swap offer on P2P DeFi Kernel...",    
     "exportAs": "swapLimitOrder",
+    "require": {
+        "networkTag": "preprod"
+    },
     "return":{
         "mode":"last"
     },    
@@ -26,6 +29,9 @@
         "intent-id": "1"
     },
     "run": {
+        "networkInfo": {
+            "type": "getNetworkInfo"
+        },
         "myAddress": {
             "type": "getCurrentAddress"
         },
@@ -33,6 +39,8 @@
             "type": "$importAsScript",                        
             "args": {
                 "offer-policy-id"     : "{get('args.offer-policy-id')}",
+                "dltTag"              : "{get('cache.networkInfo.dltTag')}",
+                "networkTag"          : "{get('cache.networkInfo.networkTag')}",
                 "offer-asset-name"    : "{get('args.offer-asset-name')}",
                 "ask-policy-id"       : "{get('args.ask-policy-id')}",
                 "ask-asset-name"      : "{get('args.ask-asset-name')}",

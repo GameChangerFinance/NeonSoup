@@ -4,6 +4,7 @@ import { useAppDispatch } from '../../state/appState';
 import { APP_CONFIG } from '../../config/appConfig';
 import { FormAlert } from '../common/FormAlert';
 import { assetKeyOf, normalizeAssetMetadataRecord } from '../../domain/assets';
+import { clearNetworkScopedStoredData } from '../../services/storage';
 
 interface OptionsPanelProps {
   state: AppState;
@@ -117,16 +118,24 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                 id="network"
                 className="form-select"
                 value={state.options.network}
-                onChange={(event) =>
+                onChange={(event) => {
+                  clearNetworkScopedStoredData();
                   dispatch({
                     type: 'set-options',
                     options: { network: event.target.value as AppState['options']['network'] },
-                  })
-                }
+                  });
+                }}
               >
-                <option value="preprod">Preprod</option>
-                <option value="mainnet">Mainnet</option>
+                {state.options.availableNetworks.map((networkTag) => (
+                  <option value={networkTag} key={networkTag}>
+                    {networkTag}
+                  </option>
+                ))}
               </select>
+              <div className="form-text">
+                Changing network disconnects the wallet and clears Cart, order book, portfolio, history, wallet return
+                data, and network-specific endpoint overrides.
+              </div>
             </div>
             <div className="col-12 col-md-6">
               <label className="form-label" htmlFor="provider">
@@ -209,10 +218,10 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                   inside the GCScript are unchanged.
                 </div>
                 {walletUrlPattern ? (
-                  <div className="alert alert-warning mt-3 mb-0" role="alert">
+                  <FormAlert tone="warning">
                     Wallet intents will open through a custom GameChanger wallet URL pattern. Only use this with a
                     wallet deployment you trust.
-                  </div>
+                  </FormAlert>
                 ) : null}
               </div>
             ) : null}

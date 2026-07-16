@@ -84,3 +84,7 @@ export function writeWalletReturn(value: unknown): void {
 export function clearWalletReturn(): void {
   localStorage.removeItem(APP_CONFIG.walletReturnKey);
 }
+
+export function clearNetworkScopedStoredData(): void {
+  clearWalletReturn();
+}

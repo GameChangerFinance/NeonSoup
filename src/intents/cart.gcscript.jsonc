@@ -3,6 +3,9 @@
     "title": "Cart",
     "description": "Simple example on how to compose to bundle several P2P DeFi Kernel intents on a single transaction. Here we have 2 fills and 1 open being executed at once on a single transaction",
     "exportAs": "cartLimitOrder",
+    "require": {
+        "networkTag": "preprod"
+    },
     "return":{
         "mode":"last"
     },    
@@ -70,6 +73,9 @@
 
     },
     "run": {
+        "networkInfo": {
+            "type": "getNetworkInfo"
+        },
         //GCScript functions consume/request permissions, so functions like this one should be called once! Is not a good practice to abuse calling functions 
         "myAddress": {
             "type": "getCurrentAddress"
@@ -82,6 +88,8 @@
             // },
             "argsByKey":{
                 "0":{
+                    "dltTag"              : "{get('cache.networkInfo.dltTag')}",
+                    "networkTag"          : "{get('cache.networkInfo.networkTag')}",
                     "offer-policy-id"     : "{get('args.items.0.offer-policy-id')}",
                     "offer-asset-name"    : "{get('args.items.0.offer-asset-name')}",
                     "ask-policy-id"       : "{get('args.items.0.ask-policy-id')}",
@@ -101,6 +109,8 @@
                     "intent-id"           : "{get('args.items.0.intent-id')}"
                 },
                 "1":{
+                    "dltTag"              : "{get('cache.networkInfo.dltTag')}",
+                    "networkTag"          : "{get('cache.networkInfo.networkTag')}",
                     "offer-policy-id"     : "{get('args.items.1.offer-policy-id')}",
                     "offer-asset-name"    : "{get('args.items.1.offer-asset-name')}",
                     "ask-policy-id"       : "{get('args.items.1.ask-policy-id')}",
@@ -120,6 +130,8 @@
                     "intent-id"           : "{get('args.items.1.intent-id')}"
                 },
                 "2":{
+                    "dltTag"              : "{get('cache.networkInfo.dltTag')}",
+                    "networkTag"          : "{get('cache.networkInfo.networkTag')}",
                     "offer-policy-id"     : "{get('args.items.2.offer-policy-id')}",
                     "offer-asset-name"    : "{get('args.items.2.offer-asset-name')}",
                     "ask-policy-id"       : "{get('args.items.2.ask-policy-id')}",

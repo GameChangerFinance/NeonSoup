@@ -55,6 +55,8 @@ export interface BundledGcscriptSourceArgs {
   items: CartItem[];
   maxIntentsPerTransaction: number;
   returnUrlPattern: string;
+  networkTag: string;
+  expectedAddress?: string | undefined;
   executionId?: string;
   groupRootId?: string;
   serviceFees?: ServiceFeeConfig;
@@ -64,6 +66,8 @@ export interface BundledGcscriptSourceArgs {
 export interface ParallelGcscriptSourceArgs {
   items: CartItem[];
   returnUrlPattern: string;
+  networkTag: string;
+  expectedAddress?: string | undefined;
   executionId?: string;
   serviceFees?: ServiceFeeConfig;
   privacyMode?: GcscriptPrivacyMode;
@@ -119,14 +123,32 @@ function walletCredentialNodes(): GcNode {
       type: 'macro',
       run: "{get('cache.myAddressInfo.stakingScriptHash')}",
     },
-    walletStakeCredentialCheck: {
-      type: 'macro',
-      run: "{assert(or(and(not(isEmptyString(get('cache.stakingKeyHash'))),isEmptyString(get('cache.stakingScriptHash'))),and(isEmptyString(get('cache.stakingKeyHash')),not(isEmptyString(get('cache.stakingScriptHash'))))),'Wallet staking credential is ambiguous or unavailable')}",
-    },
-    walletStakeCredentialHash: {
-      type: 'macro',
-      run: "{join(get('cache.stakingKeyHash'),get('cache.stakingScriptHash'))}",
-    },
+  };
+}
+
+function walletIdentityRequirementNodes(
+  privacyMode: GcscriptPrivacyMode,
+  expectedAddress: string | undefined,
+): GcNode {
+  if (privacyMode === 'incognito') return {};
+  // TODO(wallet-devex): official require supports reward-address gates, but not
+  // a direct stake credential hash gate. Keep only the address match until
+  // wallet-side stake/reward credential enforcement has a stable schema primitive.
+  return {
+    ...(expectedAddress
+      ? {
+          walletAddressCheck: {
+            type: 'macro',
+            run: "{assert(eq(get('cache.myAddress'),get('args.expected-address')),'Wallet address does not match connected NeonSoup wallet')}",
+          },
+        }
+      : {}),
+  };
+}
+
+function networkRequirementNodes(): GcNode {
+  return {
+    networkInfo: { type: 'getNetworkInfo' },
   };
 }
 
@@ -134,6 +156,8 @@ function argRefsFor(item: CartItem, itemIndex: number, privacyMode: GcscriptPriv
   const args = Object.fromEntries(
     Object.keys(item.args).map((key) => [key, `{get('args.items.${itemIndex}.protocol-args.${key}')}`]),
   );
+  args.dltTag = "{get('cache.networkInfo.dltTag')}";
+  args.networkTag = "{get('cache.networkInfo.networkTag')}";
   if (privacyMode === 'incognito' && item.name === 'open') {
     args['owner-stake-keyhash'] = "{get('cache.stakingKeyHash')}";
     args['owner-stake-script-hash'] = "{get('cache.stakingScriptHash')}";
@@ -291,11 +315,13 @@ function receiptArgs(
   mode: 'bundle' | 'parallel',
   executionId: string,
   sources: ReceiptGroupSource[],
+  expectedAddress: string | undefined,
   serviceFees?: ServiceFeeConfig,
 ): GcscriptArgs {
   const items = sources.flatMap(({ group }) => group.items);
   return {
     mode,
+    ...(expectedAddress ? { 'expected-address': expectedAddress } : {}),
     'execution-id': executionId,
     'item-count': items.length,
     'group-count': sources.length,
@@ -341,6 +367,8 @@ export function createBundledGcscriptSource({
   items,
   maxIntentsPerTransaction,
   returnUrlPattern,
+  networkTag,
+  expectedAddress,
   executionId = shortId('execution'),
   groupRootId = shortId(groupPrefix(items)),
   serviceFees,
@@ -362,12 +390,15 @@ export function createBundledGcscriptSource({
   return {
     type: 'script',
     title: rootTitle(items),
-    args: receiptArgs('bundle', executionId, sources, serviceFees),
+    require: { networkTag },
+    args: receiptArgs('bundle', executionId, sources, expectedAddress, serviceFees),
     exportAs: NEONSOUP_EXECUTION_EXPORT,
     return: { mode: 'last' },
     returnURLPattern: returnUrlPattern,
     run: {
+      ...networkRequirementNodes(),
       ...walletCredentialNodes(),
+      ...walletIdentityRequirementNodes(privacyMode, expectedAddress),
       intents: {
         type: '$importAsScript',
         argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex, privacyMode)])),
@@ -545,6 +576,8 @@ export function createBundledGcscriptSource({
 export function createParallelGcscriptSource({
   items,
   returnUrlPattern,
+  networkTag,
+  expectedAddress,
   executionId = shortId('execution'),
   serviceFees,
   privacyMode = 'connected',
@@ -567,12 +600,15 @@ export function createParallelGcscriptSource({
   return {
     type: 'script',
     title: rootTitle(items),
-    args: receiptArgs('parallel', executionId, sources, serviceFees),
+    require: { networkTag },
+    args: receiptArgs('parallel', executionId, sources, expectedAddress, serviceFees),
     exportAs: NEONSOUP_EXECUTION_EXPORT,
     return: { mode: 'last' },
     returnURLPattern: returnUrlPattern,
     run: {
+      ...networkRequirementNodes(),
       ...walletCredentialNodes(),
+      ...walletIdentityRequirementNodes(privacyMode, expectedAddress),
       intents: {
         type: '$importAsScript',
         argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex, privacyMode)])),

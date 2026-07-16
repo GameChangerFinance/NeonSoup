@@ -16,15 +16,19 @@ export function newIntentId(prefix: string): string {
   return `${prefix}-${Date.now()}-${random.slice(0, 8)}`;
 }
 
-export function connectIntent(): IntentTemplate['code'] {
+export function connectIntent(state: AppState): IntentTemplate['code'] {
   return {
     type: 'script',
     title: 'Connect NeonSoup',
     description: 'Share public wallet data with NeonSoup.',
+    require: {
+      networkTag: state.options.network,
+    },
     exportAs: 'connect',
     return: { mode: 'last' },
     returnURLPattern: cleanReturnUrl(),
     run: {
+      networkInfo: { type: 'getNetworkInfo' },
       name: { type: 'getName' },
       address: { type: 'getCurrentAddress' },
       addressInfo: {
@@ -39,6 +43,8 @@ export function connectIntent(): IntentTemplate['code'] {
           address: "{get('cache.address')}",
           addressInfo: "{get('cache.addressInfo')}",
           stakeKeyHash: "{get('cache.stakingKey.pubKeyHashHex')}",
+          dltTag: "{get('cache.networkInfo.dltTag')}",
+          networkTag: "{get('cache.networkInfo.networkTag')}",
         },
       },
     },

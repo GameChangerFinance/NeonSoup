@@ -762,6 +762,79 @@ textarea.form-control {
   padding: 10px 12px;
 }
 
+.form-alert-text {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.form-alert-more {
+  display: none;
+  margin-top: 8px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 8px;
+  text-transform: lowercase;
+}
+
+.alert-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(3, 7, 15, 0.72);
+}
+
+.alert-modal-card {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(560px, calc(100vh - 48px));
+  padding: 74px 22px 22px;
+  border: 1px solid var(--ns-border-strong);
+  border-radius: var(--ns-radius);
+  background: var(--ns-surface);
+  box-shadow: var(--ns-shadow);
+  color: var(--ns-fg);
+}
+
+.alert-modal-art {
+  position: absolute;
+  top: -58px;
+  left: 50%;
+  width: 138px;
+  max-width: 42vw;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 14px 18px rgba(64, 215, 255, 0.3));
+  pointer-events: none;
+}
+
+.alert-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.alert-modal-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.alert-modal-text {
+  max-height: min(280px, 44vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
+  white-space: pre-wrap;
+}
+
 .alert-success {
   background: rgba(89, 230, 155, 0.08);
   border-color: rgba(89, 230, 155, 0.36);
@@ -888,6 +961,19 @@ textarea.form-control {
 .transaction-table .badge {
   font-size: 11px;
   letter-spacing: 0.02em;
+}
+
+@media (max-width: 992px) {
+  .form-alert-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .form-alert-more {
+    display: inline-flex;
+  }
 }
 
 .card {

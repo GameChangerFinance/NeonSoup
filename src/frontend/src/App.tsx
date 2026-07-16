@@ -46,7 +46,7 @@ import {
   validateCartItemsCanBeAdded,
   visibleCartItems,
 } from '../../common/services/cartIntents';
-import { readWalletReturn } from '../../common/services/storage';
+import { clearNetworkScopedStoredData, readWalletReturn } from '../../common/services/storage';
 import type {
   AppState,
   CartItem,
@@ -113,7 +113,7 @@ const HELP = {
   provider:
     'The provider only transports chain data. NeonSoup keeps swap semantics and routing on your device.',
   network:
-    'Shows which Cardano network NeonSoup is using for chain data and wallet operations. You can change networks in Options when more networks are enabled.',
+    'Shows which Cardano network NeonSoup is using for chain data and wallet operations. Changing networks disconnects the wallet and clears Cart, order book, portfolio, history, wallet return data, and network-specific endpoint overrides.',
   pending:
     'Wallet-submitted operations are not final until a provider confirms the transaction on-chain.',
 };
@@ -211,6 +211,12 @@ interface PageAlertItem {
   message: string;
 }
 
+const GOGGLES_CLEANING_ASSET = '/assets/cybernekos/goggles-cleaning_Y.png';
+const MAINNET_ALPHA_ACK_KEY = `neonsoup-mainnet-public-alpha-ack-${APP_CONFIG.version}`;
+const PUBLIC_ALPHA_COPY =
+ `NeonSoup is currently in Public Alpha because its source code is publicly available as open source for early testing and feedback, including feedback from the Gimbalabs Piece of Pie Hackathon.
+The software may be unstable, incomplete, or unavailable without notice. It is provided “as is” and used entirely at your own risk. We are not responsible for any loss, damage, misuse, or unintended consequences resulting from its use.`;
+
 const ALERT_PRIORITY: Record<NoticeTone, number> = {
   danger: 0,
   warning: 1,
@@ -226,12 +232,41 @@ function prioritizedAlert(alerts: Array<PageAlertItem | false | null | undefined
   );
 }
 
+function GraphicTextModal({ title, text, asset, onClose }: { title: string; text: string; asset: UiAsset; onClose: () => void }) {
+  return createPortal(
+    <div className="backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="modal-card graphic-text-modal" aria-modal="true" role="dialog" aria-labelledby="graphic-text-modal-title">
+        <VisualAsset asset={asset} className="modal-top-art" />
+        <div className="modal-head">
+          <h2 id="graphic-text-modal-title">{title}</h2>
+          <button type="button" className="modal-action-btn" onClick={onClose} aria-label={`Close ${title}`}>
+            <i className="bi bi-x-lg" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="modal-body-scroll modal-text-scroll">
+          <p>{text}</p>
+        </div>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
 function ValidationAlert({ tone, message }: PageAlertItem) {
+  const [modalOpen, setModalOpen] = useState(false);
   const role = tone === 'info' || tone === 'success' ? 'status' : 'alert';
+  const canExpand = message.length > 96;
+  const asset = alertAssetForMessage(tone, message);
   return (
     <div className={`alert alert-${tone} validation-alert`} role={role}>
-      <VisualAsset asset={alertAssetForMessage(tone, message)} className="ns-alert-art" />
-      <span>{message}</span>
+      <VisualAsset asset={asset} className="ns-alert-art" />
+      <span className="validation-alert-text">{message}</span>
+      {canExpand ? (
+        <button type="button" className="alert-more-btn" onClick={() => setModalOpen(true)}>
+          more
+        </button>
+      ) : null}
+      {modalOpen ? <GraphicTextModal title="" text={message} asset={asset} onClose={() => setModalOpen(false)} /> : null}
     </div>
   );
 }
@@ -834,10 +869,10 @@ function ActionButtonSuffix({ cartMode, icon }: { cartMode: boolean; icon: strin
   );
 }
 
-function Sidebar({ hideBrand = false, incognito = false }: { hideBrand?: boolean; incognito?: boolean }) {
+function Sidebar({ hideBrand = false }: { hideBrand?: boolean; incognito?: boolean }) {
   const items: Array<[ViewId, string, string, boolean?]> = [
     ['swap', 'bi-arrow-left-right', 'Swap'],
-    ['open', 'bi-plus-circle', 'Open', !incognito],
+    ['open', 'bi-plus-circle', 'Offer'],
     ['markets', 'bi-graph-up-arrow', 'Markets'],
     ['orders', 'bi-clipboard-check', 'My Orders'],
     ['portfolio', 'bi-person', 'Portfolio'],
@@ -1052,7 +1087,7 @@ function SwapScreen({
             className="amount-input"
             type="number"
             min="0"
-            step="0.1"
+            step={APP_CONFIG.defaults.forms.amountStep}
             inputMode="decimal"
             value={payValue}
             onChange={(event) => dispatch({ type: 'set-forms', forms: { swapOfferAmount: event.target.value } })}
@@ -1214,7 +1249,7 @@ function OpenScreen({
             className="amount-input open-amount"
             type="number"
             min="0"
-            step="0.1"
+            step={APP_CONFIG.defaults.forms.amountStep}
             inputMode="decimal"
             value={state.forms.openOfferAmount}
             onChange={(event) => dispatch({ type: 'set-forms', forms: { openOfferAmount: event.target.value } })}
@@ -1259,7 +1294,7 @@ function OpenScreen({
             className="amount-input open-amount"
             type="number"
             min="0"
-            step="0.1"
+            step={APP_CONFIG.defaults.forms.amountStep}
             inputMode="decimal"
             value={state.forms.openAskAmount}
             onChange={(event) => dispatch({ type: 'set-forms', forms: { openAskAmount: event.target.value } })}
@@ -1349,8 +1384,8 @@ function MarketsScreen({
     .sort((left, right) => {
       const byBalance = compareQuantityDesc(left.balance, right.balance);
       if (byBalance) return byBalance;
-      if (left.quote.rawCandidateCount !== right.quote.rawCandidateCount) {
-        return right.quote.rawCandidateCount - left.quote.rawCandidateCount;
+      if (left.quote.pairMatchCount !== right.quote.pairMatchCount) {
+        return right.quote.pairMatchCount - left.quote.pairMatchCount;
       }
       return assetTitle(left.receiveAsset).localeCompare(assetTitle(right.receiveAsset));
     });
@@ -1385,7 +1420,10 @@ function MarketsScreen({
                 </span>
               </div>
               <span className="mono">{priceText(quote.executableBestPrice, offerAsset, receiveAsset)}</span>
-              <span>{quote.rawCandidateCount} orders</span>
+              <span>
+                {quote.pairMatchCount} orders
+                {quote.rawCandidateCount !== quote.pairMatchCount ? ` / ${quote.rawCandidateCount} executable` : ''}
+              </span>
               <span className="mono">
                 {fromBase(balance, receiveAsset.decimals)} {assetTitle(receiveAsset)}
               </span>
@@ -1721,12 +1759,14 @@ function OptionsScreen({
   state,
   cartMode,
   setCartMode,
+  onNetworkChange,
   modal = false,
   hideTitle = false,
 }: {
   state: AppState;
   cartMode: boolean;
   setCartMode: (value: boolean) => void;
+  onNetworkChange: (network: NetworkTag) => void;
   modal?: boolean;
   hideTitle?: boolean;
 }) {
@@ -1757,12 +1797,12 @@ function OptionsScreen({
           <label className="option-line">
             <span>
               <b>Network</b> <HelpTooltip label="Network help">{HELP.network}</HelpTooltip>
-              <small>Cardano network used for offers, balances, history, and wallet operations.</small>
+              <small>Changing network disconnects the wallet and purges Cart, orders, balances, history, and endpoint overrides.</small>
             </span>
             <select
               className="option-input"
               value={state.options.network}
-              onChange={(event) => dispatch({ type: 'set-options', options: { network: event.target.value as NetworkTag } })}
+              onChange={(event) => onNetworkChange(event.target.value as NetworkTag)}
             >
               {state.options.availableNetworks.map((networkTag) => (
                 <option value={networkTag} key={networkTag}>
@@ -1936,6 +1976,28 @@ function AppModal({
   );
 }
 
+function MainnetAlphaModal({ onAccept }: { onAccept: () => void }) {
+  return createPortal(
+    <div className="backdrop">
+      <section className="modal-card graphic-text-modal alpha-disclaimer-modal" aria-modal="true" role="dialog" aria-labelledby="alpha-disclaimer-title">
+        <img className="modal-top-art" src={GOGGLES_CLEANING_ASSET} alt="" aria-hidden="true" />
+        <div className="modal-head">
+          <h2 id="alpha-disclaimer-title">Public Alpha</h2>
+        </div>
+        <div className="modal-body-scroll modal-text-scroll">
+          <p>{PUBLIC_ALPHA_COPY}</p>
+        </div>
+        <div className="modal-footer-actions">
+          <button type="button" className="cta" onClick={onAccept}>
+            I understand
+          </button>
+        </div>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
 function collisionSourceRefs(items: readonly CartItem[]): Set<string> {
   const counts = new Map<string, number>();
   items.forEach((item) => {
@@ -2071,6 +2133,10 @@ export default function App() {
   const [optionsModalOpen, setOptionsModalOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyNotice, setHistoryNotice] = useState('');
+  const previousNetworkRef = useRef<NetworkTag>(state.options.network);
+  const [mainnetAlphaPromptOpen, setMainnetAlphaPromptOpen] = useState(
+    () => state.options.network === 'mainnet' && localStorage.getItem(MAINNET_ALPHA_ACK_KEY) !== '1',
+  );
   const assets = assetMap(state);
   const configured = configuredAssets(state.options.network, state.customAssets);
   const configuredValues = Object.values(configured);
@@ -2087,6 +2153,23 @@ export default function App() {
   const draftCartCount = state.cart.items.filter((item) => item.status === 'draft').length;
   const pendingHashesKey = [...new Set(pendingTransactionHashes(state))].sort().join(',');
   const excludedUtxoRefs = useMemo(() => bookedSourceRefs(state.cart), [state.cart]);
+  const mainnetAlphaRequired = state.options.network === 'mainnet' && mainnetAlphaPromptOpen;
+
+  function acceptMainnetAlpha() {
+    localStorage.setItem(MAINNET_ALPHA_ACK_KEY, '1');
+    setMainnetAlphaPromptOpen(false);
+  }
+
+  function clearFrontendUserData() {
+    clearNetworkScopedStoredData();
+    setHistoryLoading(false);
+    setHistoryNotice('');
+  }
+
+  function changeNetwork(network: NetworkTag) {
+    clearFrontendUserData();
+    dispatch({ type: 'set-options', options: { network } });
+  }
 
   useLayoutEffect(() => {
     if (state.forms.openOfferAssetKey && state.forms.openOfferAssetKey === state.forms.openAskAssetKey) {
@@ -2132,6 +2215,22 @@ export default function App() {
   }, [cartMode]);
 
   useEffect(() => {
+    const previousNetwork = previousNetworkRef.current;
+    if (state.options.network === 'mainnet' && previousNetwork !== 'mainnet') {
+      setMainnetAlphaPromptOpen(true);
+    } else if (state.options.network !== 'mainnet') {
+      setMainnetAlphaPromptOpen(false);
+    }
+    if (previousNetwork !== state.options.network) {
+      clearFrontendUserData();
+      void refreshNetworkData();
+    }
+    previousNetworkRef.current = state.options.network;
+    // Network changes are the only trigger here; refreshNetworkData uses current shell state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.options.network]);
+
+  useEffect(() => {
     captureWalletReturn()
       .then(() => {
         applyWalletReturn(readWalletReturn(), true);
@@ -2140,7 +2239,7 @@ export default function App() {
         setToast({ tone: 'danger', title: 'Wallet return failed', message: safeError(error) });
       });
     applyWalletReturn(readWalletReturn(), true);
-    void refreshOffers();
+    void refreshNetworkData();
 
     function onStorage(event: StorageEvent) {
       if (event.key !== APP_CONFIG.walletReturnKey || !event.newValue) return;
@@ -2169,10 +2268,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (state.wallet?.address) {
-      void refreshPortfolio();
-      void refreshWalletHistory();
-    }
+    if (state.wallet?.address) void refreshNetworkData({ walletAddress: state.wallet.address });
+    else clearFrontendUserData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.wallet?.address]);
 
@@ -2214,11 +2311,11 @@ export default function App() {
     }
   }
 
-  async function refreshPortfolio() {
-    if (!state.wallet?.address) return;
+  async function refreshPortfolio(walletAddress = state.wallet?.address) {
+    if (!walletAddress) return;
     dispatch({ type: 'set-loading', key: 'portfolio', value: true });
     try {
-      const loaded = await loadPortfolio(state, state.wallet.address);
+      const loaded = await loadPortfolio(state, walletAddress);
       dispatch({ type: 'set-portfolio', portfolio: loaded.data });
       dispatch({ type: 'set-asset-info', assets: loaded.assets });
     } catch (error) {
@@ -2228,12 +2325,12 @@ export default function App() {
     }
   }
 
-  async function refreshWalletHistory() {
-    if (!state.wallet?.address) return;
+  async function refreshWalletHistory(walletAddress = state.wallet?.address) {
+    if (!walletAddress) return;
     setHistoryLoading(true);
     setHistoryNotice('');
     try {
-      const chainTransactions = await loadAddressTransactions(state, state.wallet.address, state.options.historyFetchLimit);
+      const chainTransactions = await loadAddressTransactions(state, walletAddress, state.options.historyFetchLimit);
       const protocolTransactions = protocolRowsFromChainTransactions(state, chainTransactions);
       dispatch({ type: 'merge-transactions', transactions: protocolTransactions });
       setHistoryNotice(
@@ -2246,6 +2343,13 @@ export default function App() {
     } finally {
       setHistoryLoading(false);
     }
+  }
+
+  async function refreshNetworkData(options: { walletAddress?: string | null } = {}) {
+    await refreshOffers();
+    const walletAddress = options.walletAddress ?? state.wallet?.address;
+    if (!walletAddress) return;
+    await Promise.all([refreshPortfolio(walletAddress), refreshWalletHistory(walletAddress)]);
   }
 
   async function reconcileChainTransactions(txHashes: readonly string[]): Promise<void> {
@@ -2289,8 +2393,7 @@ export default function App() {
       const notice = walletReturnToast(receipt, incognitoStatus);
       setToast(summary ? { ...notice, message: `${notice.message} ${summary}` } : notice);
     }
-    void refreshOffers();
-    if (wallet?.address || state.wallet?.address) void refreshPortfolio();
+    void refreshNetworkData({ walletAddress: wallet?.address || state.wallet?.address || null });
   }
 
   function addItemsToCart(items: CartItem[]): { ok: boolean; openedEmptyCart: boolean } {
@@ -2315,6 +2418,10 @@ export default function App() {
   }
 
   async function runItems(items: CartItem[], options: { clearAfterOpen?: boolean } = {}) {
+    if (mainnetAlphaRequired) {
+      setToast({ tone: 'warning', title: 'Public Alpha', message: 'Read and accept the Public Alpha disclaimer before opening the wallet on mainnet.' });
+      return;
+    }
     if (!items.length) {
       setToast({ tone: 'warning', title: 'Nothing selected', message: 'No draft or failed Cart operations are selected to run.' });
       return;
@@ -2415,8 +2522,12 @@ export default function App() {
   }
 
   async function connectWallet() {
+    if (mainnetAlphaRequired) {
+      setToast({ tone: 'warning', title: 'Public Alpha', message: 'Read and accept the Public Alpha disclaimer before connecting on mainnet.' });
+      return;
+    }
     try {
-      await openWalletCode(state, connectIntent());
+      await openWalletCode(state, connectIntent(state));
       setToast({ tone: 'info', title: 'Wallet opened', message: 'Approve the public-data request to connect NeonSoup.' });
     } catch (error) {
       setToast({ tone: 'danger', title: 'Could not open wallet', message: safeError(error) });
@@ -2424,6 +2535,7 @@ export default function App() {
   }
 
   function disconnectWallet() {
+    clearFrontendUserData();
     dispatch({ type: 'set-wallet', wallet: null });
     setToast({ tone: 'info', title: 'Wallet disconnected', message: 'Local wallet connection data was cleared.' });
   }
@@ -2597,7 +2709,10 @@ export default function App() {
                   />
                 }
               />
-              <Route path="/options" element={<OptionsScreen state={state} cartMode={cartMode} setCartMode={setCartMode} />} />
+              <Route
+                path="/options"
+                element={<OptionsScreen state={state} cartMode={cartMode} setCartMode={setCartMode} onNetworkChange={changeNetwork} />}
+              />
               <Route path="*" element={<Navigate to="/swap" replace />} />
             </Routes>
           </main>
@@ -2633,10 +2748,11 @@ export default function App() {
       ) : null}
       {optionsModalOpen ? (
         <AppModal title="Options" onClose={() => setOptionsModalOpen(false)} asset="options">
-          <OptionsScreen state={state} cartMode={cartMode} setCartMode={setCartMode} modal hideTitle />
+          <OptionsScreen state={state} cartMode={cartMode} setCartMode={setCartMode} onNetworkChange={changeNetwork} modal hideTitle />
         </AppModal>
       ) : null}
       {drawerOpen ? <Drawer close={() => setDrawerOpen(false)} incognito={!state.wallet} /> : null}
+      {mainnetAlphaRequired ? <MainnetAlphaModal onAccept={acceptMainnetAlpha} /> : null}
       {toast ? <AppToast toast={toast} onClose={() => setToast(null)} /> : null}
     </main>
   );

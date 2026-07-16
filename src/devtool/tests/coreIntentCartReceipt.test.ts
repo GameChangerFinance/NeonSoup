@@ -233,6 +233,7 @@ const bundled = createBundledGcscriptSource({
   items: [legacyFillItem, closeItem],
   maxIntentsPerTransaction: 1,
   returnUrlPattern: 'https://example.test/neonsoup',
+  networkTag: 'preprod',
   executionId: 'execution-fixed',
   groupRootId: 'bundle-fixed',
 });
@@ -254,6 +255,7 @@ assert((bundledRun.submit as Record<string, unknown>).noFail === true, 'bundle s
 const parallel = createParallelGcscriptSource({
   items: [legacyFillItem, closeItem],
   returnUrlPattern: 'https://example.test/neonsoup',
+  networkTag: 'preprod',
   executionId: 'parallel-fixed',
 });
 const parallelRun = parallel.run as Record<string, Record<string, unknown>>;

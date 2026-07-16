@@ -269,8 +269,7 @@ export default function App() {
       },
     });
 
-    void refreshOffers(receipt ? [...new Set(receipt.items.map((item) => item.txHash))] : []);
-    if (state.wallet?.address || wallet?.address) void refreshPortfolio();
+    void refreshNetworkData(receipt ? [...new Set(receipt.items.map((item) => item.txHash))] : [], wallet?.address || state.wallet?.address || null);
   }
 
   useEffect(() => {
@@ -323,15 +322,13 @@ export default function App() {
   }, [dispatch]);
 
   useEffect(() => {
-    void refreshOffers();
-    if (state.wallet?.address) void refreshPortfolio();
-    else portfolioRefreshId.current += 1;
+    void refreshNetworkData();
     // Network/provider changes should refresh data; avoid depending on all state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.options.network, state.options.provider]);
 
   useEffect(() => {
-    if (state.wallet?.address) void refreshPortfolio();
+    if (state.wallet?.address) void refreshNetworkData([], state.wallet.address);
     else portfolioRefreshId.current += 1;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.wallet?.address]);
@@ -361,8 +358,7 @@ export default function App() {
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      void refreshOffers();
-      if (state.wallet?.address) void refreshPortfolio();
+      void refreshNetworkData();
     }, APP_CONFIG.pollingIntervalMs);
     return () => window.clearInterval(id);
     // Polling uses current visible network/wallet state through dependency reset.
@@ -461,8 +457,8 @@ export default function App() {
     }
   }
 
-  async function refreshPortfolio() {
-    if (!state.wallet?.address) {
+  async function refreshPortfolio(walletAddress = state.wallet?.address) {
+    if (!walletAddress) {
       dispatch({
         type: 'set-notice',
         key: 'portfolio',
@@ -473,7 +469,7 @@ export default function App() {
     const refreshId = ++portfolioRefreshId.current;
     dispatch({ type: 'set-loading', key: 'portfolio', value: true });
     try {
-      const loaded = await loadPortfolio(state, state.wallet.address);
+      const loaded = await loadPortfolio(state, walletAddress);
       if (refreshId !== portfolioRefreshId.current) return;
       dispatch({ type: 'set-asset-info', assets: loaded.assets });
       dispatch({ type: 'set-portfolio', portfolio: loaded.data });
@@ -496,6 +492,12 @@ export default function App() {
         dispatch({ type: 'set-loading', key: 'portfolio', value: false });
       }
     }
+  }
+
+  async function refreshNetworkData(extraPendingHashes: string[] = [], walletAddress: string | null | undefined = state.wallet?.address): Promise<void> {
+    await refreshOffers(extraPendingHashes);
+    if (walletAddress) await refreshPortfolio(walletAddress);
+    else portfolioRefreshId.current += 1;
   }
 
   function selectFill(item: OpenOffer) {

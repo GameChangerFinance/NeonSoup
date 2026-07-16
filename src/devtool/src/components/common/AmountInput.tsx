@@ -1,3 +1,5 @@
+import { APP_CONFIG } from '../../config/appConfig';
+
 interface AmountInputProps {
   id: string;
   label: string;
@@ -19,7 +21,7 @@ export function AmountInput({ id, label, value, onChange, readOnly = false, help
         className="form-control form-control-lg"
         value={value}
         min="0"
-        step="0.1"
+        step={APP_CONFIG.defaults.forms.amountStep}
         readOnly={readOnly}
         onChange={(event) => onChange(event.target.value)}
       />

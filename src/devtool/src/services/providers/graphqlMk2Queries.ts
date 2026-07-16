@@ -42,7 +42,6 @@ export const GRAPHQL_MK2_QUERIES = {
         name
         ticker
         description
-        logo
       }
     }
   }
@@ -72,7 +71,6 @@ export const GRAPHQL_MK2_QUERIES = {
         name
         ticker
         description
-        logo
       }
     }
   }

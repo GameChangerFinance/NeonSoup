@@ -50,6 +50,10 @@ function walletFromDecoded(decoded: unknown): WalletConnection | null {
       ? (connect.stakingKey as Record<string, unknown>)
       : {};
   const walletType = text(connect.walletType || connect.type || root.walletType || root.type || root.walletKind);
+  const dltTag = text(connect.dltTag || root.dltTag);
+  const networkTag = text(connect.networkTag || root.networkTag);
+  const walletNetworkTag: WalletConnection['networkTag'] | undefined =
+    networkTag === 'preprod' || networkTag === 'mainnet' ? networkTag : undefined;
   const wallet = {
     name: text(connect.name || root.walletName || 'Connected wallet'),
     address: text(connect.address || root.address),
@@ -60,6 +64,8 @@ function walletFromDecoded(decoded: unknown): WalletConnection | null {
         root.stakeKeyHash,
     ),
     ...(walletType ? { walletType } : {}),
+    ...(dltTag ? { dltTag } : {}),
+    ...(walletNetworkTag ? { networkTag: walletNetworkTag } : {}),
   };
   return wallet.address || wallet.stakeKeyHash ? wallet : null;
 }

@@ -5,6 +5,7 @@ export type CartExecutionMode = 'bundle' | 'parallel';
 export type CartItemStatus = 'draft' | 'pending' | 'confirmed' | 'failed';
 export type ProtocolAction = ActionMode | 'mixed' | 'unknown' | 'swap';
 export type OrderKind = 'one-way' | 'two-way' | 'future' | 'unknown';
+export type AssetTag = 'coin' | 'stablecoin' | 'mainstream' | 'community' | 'experimental';
 
 export interface AssetRef {
   policyId: string;
@@ -25,6 +26,7 @@ export interface AssetMetadata extends AssetRef {
   fingerprint?: string;
   registered?: boolean;
   known?: boolean;
+  tag?: AssetTag;
 }
 
 export interface ResolvedAsset extends AssetMetadata {
@@ -218,4 +220,6 @@ export interface WalletConnection {
   address: string;
   stakeKeyHash: string;
   walletType?: string;
+  dltTag?: string;
+  networkTag?: NetworkTag;
 }

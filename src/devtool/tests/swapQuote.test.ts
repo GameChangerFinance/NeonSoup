@@ -1,5 +1,6 @@
 import { createOpenBookSnapshot, openBookSnapshotIsFresh } from '../src/domain/openBook';
 import { assetMetadataWarningText } from '../src/domain/assetWarnings';
+import { parseSwapDatum } from '../src/domain/cardano';
 import {
   defaultMinExecutableOfferQuantity,
   defaultMinMakerRemainderQuantity,
@@ -12,6 +13,18 @@ import type { OpenOffer, ResolvedAsset } from '../src/state/types';
 function assert(condition: unknown, message: string): void {
   if (!condition) throw new Error(message);
 }
+
+const mainnetUsdmDatum = parseSwapDatum(
+  'd8799f581cc4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e2095820ad02cd8545df05b9982c030a26a93d51fcb3784ddf6381ffa3b5a9cb275c4ca5404058204bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d582078972b4dafbb82894e044ca5bd262798316abb12cd9c2aaa1986ebf6ea35e039d8799f1913bd197a12ffd8799fd8799fd8799f5820763c06b46ac504a63fc4a77b44ac48b48a5bb334a594bedc07ab0b0166fca41dff00ffffd87a80ff',
+);
+
+assert(mainnetUsdmDatum?.offerPolicyId === 'ada', 'mainnet sample datum decodes ADA as the offered asset');
+assert(mainnetUsdmDatum?.offerAssetName === 'ada', 'mainnet sample datum normalizes empty ADA asset name');
+assert(
+  mainnetUsdmDatum?.askPolicyId === 'c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad',
+  'mainnet sample datum decodes USDM ask policy',
+);
+assert(mainnetUsdmDatum?.askAssetName === '0014df105553444d', 'mainnet sample datum decodes USDM asset name');
 
 const offered: ResolvedAsset = {
   policyId: 'policy-a',
@@ -176,6 +189,7 @@ assert(minExecutableFiltered.bookMinExecutableFilteredCount === 1, 'filters orde
 assert(minExecutableFiltered.bookMinExecutableFilteredOfferQuantity === 1n, 'reports filtered below-minimum liquidity amount');
 assert(minExecutableFiltered.filteredOffers[0]?.reason === 'min-executable-offer', 'minimum executable filtering is normalized before route math');
 assert(minExecutableFiltered.segments.length === 1, 'does not route through below-minimum executable liquidity');
+assert(minExecutableFiltered.pairMatchCount === 2, 'live pair-match count includes below-policy open orders for market visibility');
 assert(minExecutableFiltered.rawCandidateCount === 2, 'keeps raw canonical candidates separate from policy executable candidates');
 assert(minExecutableFiltered.candidateCount === 1, 'policy executable candidates exclude below-minimum offers');
 

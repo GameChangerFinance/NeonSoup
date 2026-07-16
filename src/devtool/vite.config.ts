@@ -70,6 +70,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: 'src/devtool',
     envDir,
+    publicDir: '../frontend/public',
     plugins: [react(), googleAnalyticsPlugin(googleAnalyticsId), devIntentMiddleware()],
     build: {
       outDir: '../../dist',

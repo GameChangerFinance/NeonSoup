@@ -51,6 +51,7 @@ import type {
 
 export interface AppOptions {
   network: NetworkTag;
+  availableNetworks: NetworkTag[];
   provider: NetworkProviderKind;
   providerUrl: string;
   blockfrostUrl: string;

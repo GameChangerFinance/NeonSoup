@@ -86,6 +86,7 @@ export interface SwapQuote {
   unfilledExecutionQuantity: bigint;
   routeDisplayQuantity: bigint;
   rawCandidateCount: number;
+  pairMatchCount: number;
   candidateCount: number;
   skippedUnsupportedCount: number;
   bookMinExecutableFilteredCount: number;
@@ -297,6 +298,7 @@ function emptyQuote(requestedInputQuantity: bigint): SwapQuote {
     unfilledExecutionQuantity: requestedInputQuantity,
     routeDisplayQuantity: requestedInputQuantity,
     rawCandidateCount: 0,
+    pairMatchCount: 0,
     candidateCount: 0,
     skippedUnsupportedCount: 0,
     bookMinExecutableFilteredCount: 0,
@@ -453,6 +455,7 @@ export function quoteSwap({
     unfilledExecutionQuantity: remainingInput,
     routeDisplayQuantity,
     rawCandidateCount: normalized.rawCandidates.length,
+    pairMatchCount: normalized.pairMatches.length,
     candidateCount: normalized.candidates.length,
     skippedUnsupportedCount: normalized.skippedUnsupportedCount,
     bookMinExecutableFilteredCount: normalized.bookMinExecutableFilteredCount,
