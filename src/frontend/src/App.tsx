@@ -161,6 +161,7 @@ const UI_ASSETS = {
 } as const;
 
 type UiAsset = keyof typeof UI_ASSETS;
+const MARKET_QUOTE_ASSET_TAGS = new Set<ResolvedAsset['tag']>(['coin', 'stablecoin', 'mainstream']);
 
 function VisualAsset({ asset, className = '' }: { asset: UiAsset; className?: string }) {
   return <img className={`ns-helper-art ${className}`} src={UI_ASSETS[asset]} alt="" aria-hidden="true" />;
@@ -695,6 +696,25 @@ function AssetPairStack({ offerAsset, askAsset }: { offerAsset: ResolvedAsset | 
       <AssetIcon asset={askAsset} />
     </span>
   );
+}
+
+function assetRefValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function cartItemPairAssets(state: AppState, item: CartItem): { offerAsset: ResolvedAsset | undefined; askAsset: ResolvedAsset | undefined } {
+  const offer = item.pair?.offer || {
+    policyId: assetRefValue(item.args['offer-policy-id']),
+    assetNameHex: assetRefValue(item.args['offer-asset-name']),
+  };
+  const ask = item.pair?.ask || {
+    policyId: assetRefValue(item.args['ask-policy-id']),
+    assetNameHex: assetRefValue(item.args['ask-asset-name']),
+  };
+  return {
+    offerAsset: offer.policyId ? resolveAsset(state, offer.policyId, offer.assetNameHex) : undefined,
+    askAsset: ask.policyId ? resolveAsset(state, ask.policyId, ask.assetNameHex) : undefined,
+  };
 }
 
 function AssetPicker({
@@ -1360,23 +1380,44 @@ function MarketsScreen({
   refreshing: boolean;
 }) {
   const excludedUtxoRefs = bookedSourceRefs(state.cart);
-  const baseOfferAsset = assets[state.forms.openOfferAssetKey];
+  const registeredAssets = configuredAssets(state.options.network, state.customAssets);
   const marketPairs = new Map<string, { offerAsset: ResolvedAsset; receiveAsset: ResolvedAsset }>();
+  const registeredAsset = (asset: ResolvedAsset): ResolvedAsset => {
+    const resolved = assets[asset.assetKey];
+    if (!resolved) return asset;
+    const merged = { ...asset, ...resolved };
+    return asset.tag && !merged.tag ? { ...merged, tag: asset.tag } : merged;
+  };
+  const isMarketQuoteAsset = (asset: ResolvedAsset): boolean => MARKET_QUOTE_ASSET_TAGS.has(asset.tag);
   const addMarketPair = (offerAsset: ResolvedAsset | undefined, receiveAsset: ResolvedAsset | undefined) => {
     if (!offerAsset?.known || !receiveAsset?.known || offerAsset.assetKey === receiveAsset.assetKey) return;
+    if (!isMarketQuoteAsset(offerAsset)) return;
     marketPairs.set(`${offerAsset.assetKey}->${receiveAsset.assetKey}`, { offerAsset, receiveAsset });
   };
-  Object.values(assets)
-    .filter((asset) => asset.known && asset.assetKey !== state.forms.openOfferAssetKey)
-    .forEach((receiveAsset) => addMarketPair(baseOfferAsset, receiveAsset));
+  const registeredValues = Object.values(registeredAssets).filter((asset) => asset.known);
+  const quoteAssets = registeredValues.filter(isMarketQuoteAsset);
+  quoteAssets.forEach((offerAsset) => {
+    registeredValues.forEach((receiveAsset) => addMarketPair(registeredAsset(offerAsset), registeredAsset(receiveAsset)));
+  });
   state.openOffers.forEach((offer) => {
     const offerAsset = assets[assetKeyOf(offer.askPolicyId, offer.askAssetName)];
     const receiveAsset = assets[assetKeyOf(offer.offerPolicyId, offer.offerAssetName)];
-    addMarketPair(offerAsset, receiveAsset);
+    if (offerAsset && receiveAsset && registeredAssets[offerAsset.assetKey] && registeredAssets[receiveAsset.assetKey]) {
+      addMarketPair(offerAsset, receiveAsset);
+    }
   });
   const rows = [...marketPairs.values()]
     .map(({ offerAsset, receiveAsset }) => {
-      const balance = balanceOf(state, receiveAsset.policyId, receiveAsset.assetNameHex);
+      const receiveBalance = balanceOf(state, receiveAsset.policyId, receiveAsset.assetNameHex);
+      const offerBalance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
+      const hasReceiveBalance = receiveBalance > 0n;
+      const hasOfferBalance = offerBalance > 0n;
+      const openOfferAsset = !state.wallet || hasReceiveBalance ? receiveAsset : hasOfferBalance ? offerAsset : undefined;
+      const openAskAsset = openOfferAsset?.assetKey === receiveAsset.assetKey ? offerAsset : receiveAsset;
+      const swapPayAsset = !state.wallet || hasOfferBalance ? offerAsset : hasReceiveBalance ? receiveAsset : undefined;
+      const swapReceiveAsset = swapPayAsset?.assetKey === offerAsset.assetKey ? receiveAsset : offerAsset;
+      const balance = receiveBalance > offerBalance ? receiveBalance : offerBalance;
+      const hasBalance = hasReceiveBalance || hasOfferBalance;
       const quote = quoteSwap({
         offers: state.openOffers,
         offerAsset,
@@ -1391,14 +1432,18 @@ function MarketsScreen({
         warningSlippageMultiplier: APP_CONFIG.defaults.quote.warningSlippageMultiplier,
         payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
       });
-      return { receiveAsset, offerAsset, quote, balance };
+      return { receiveAsset, offerAsset, quote, balance, hasBalance, openOfferAsset, openAskAsset, swapPayAsset, swapReceiveAsset };
     })
     .sort((left, right) => {
-      const byBalance = compareQuantityDesc(left.balance, right.balance);
-      if (byBalance) return byBalance;
+      if (left.hasBalance !== right.hasBalance) return left.hasBalance ? -1 : 1;
+      if (left.quote.rawCandidateCount !== right.quote.rawCandidateCount) {
+        return right.quote.rawCandidateCount - left.quote.rawCandidateCount;
+      }
       if (left.quote.pairMatchCount !== right.quote.pairMatchCount) {
         return right.quote.pairMatchCount - left.quote.pairMatchCount;
       }
+      const byBalance = compareQuantityDesc(left.balance, right.balance);
+      if (byBalance) return byBalance;
       return assetTitle(left.receiveAsset).localeCompare(assetTitle(right.receiveAsset));
     });
   return (
@@ -1416,14 +1461,13 @@ function MarketsScreen({
               <span>Pair</span>
               <span>Best price</span>
               <span>Open offers</span>
-              <span>Your balance</span>
               <span>Actions</span>
             </div>
           </div>
         }
       >
         <div className="table-list dex-table markets-table">
-          {rows.map(({ receiveAsset, offerAsset, quote, balance }) => (
+          {rows.map(({ receiveAsset, offerAsset, quote, openOfferAsset, openAskAsset, swapPayAsset, swapReceiveAsset }) => (
             <div className="market-row" key={`${offerAsset.assetKey}->${receiveAsset.assetKey}`}>
               <div className="pair-cell">
                 <AssetPairStack offerAsset={receiveAsset} askAsset={offerAsset} />
@@ -1436,18 +1480,21 @@ function MarketsScreen({
                 {quote.pairMatchCount} orders
                 {quote.rawCandidateCount !== quote.pairMatchCount ? ` / ${quote.rawCandidateCount} executable` : ''}
               </span>
-              <span className="mono">
-                {fromBase(balance, receiveAsset.decimals)} {assetTitle(receiveAsset)}
-              </span>
               <span className="row-actions">
-                {!state.wallet || balance > 0n ? (
-                  <button type="button" className="mini-btn" onClick={() => onOffer(receiveAsset.assetKey, offerAsset.assetKey)}>
+                {openOfferAsset ? (
+                  <button type="button" className="mini-btn" onClick={() => onOffer(openOfferAsset.assetKey, openAskAsset.assetKey)}>
                     <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
                   </button>
-                ) : null}
-                <button type="button" className="mini-btn" onClick={() => onSelect(offerAsset.assetKey, receiveAsset.assetKey)}>
-                  <i className="bi bi-arrow-left-right" aria-hidden="true" /> Swap
-                </button>
+                ) : (
+                  <span className="action-placeholder" aria-hidden="true" />
+                )}
+                {swapPayAsset ? (
+                  <button type="button" className="mini-btn" onClick={() => onSelect(swapPayAsset.assetKey, swapReceiveAsset.assetKey)}>
+                    <i className="bi bi-arrow-left-right" aria-hidden="true" /> Swap
+                  </button>
+                ) : (
+                  <span className="action-placeholder" aria-hidden="true" />
+                )}
               </span>
             </div>
           ))}
@@ -2047,26 +2094,30 @@ function CartModal({
                 {items.map((item) => {
                   const ref = sourceRef(item);
                   const hasCollision = Boolean(ref && collisionRefs.has(ref));
+                  const { offerAsset, askAsset } = cartItemPairAssets(state, item);
                   return (
                     <div className="cart-item" key={item.id}>
-                      <div>
-                        <div className="cart-item-title">
-                          <b>{item.name === 'fill' ? 'Swap' : item.name}</b>
-                          {hasCollision ? (
-                            <span className="cart-collision-badge">
-                              Collision
-                              <HelpTooltip label="Cart collision help">
-                                {`Source UTxO ${short(ref)} appears in more than one Cart item. Remove one of the colliding items before running the Cart.`}
-                              </HelpTooltip>
-                            </span>
+                      <div className="cart-item-main">
+                        <AssetPairStack offerAsset={offerAsset} askAsset={askAsset} />
+                        <div>
+                          <div className="cart-item-title">
+                            <b>{item.name === 'fill' ? 'Swap' : item.name}</b>
+                            {hasCollision ? (
+                              <span className="cart-collision-badge">
+                                Collision
+                                <HelpTooltip label="Cart collision help">
+                                  {`Source UTxO ${short(ref)} appears in more than one Cart item. Remove one of the colliding items before running the Cart.`}
+                                </HelpTooltip>
+                              </span>
+                            ) : null}
+                          </div>
+                          <small>{item.sourceLabel || item.id}</small>
+                          {item.status !== 'draft' ? (
+                            <small>
+                              {item.status} <HelpTooltip label="Pending help">{HELP.pending}</HelpTooltip>
+                            </small>
                           ) : null}
                         </div>
-                        <small>{item.sourceLabel || item.id}</small>
-                        {item.status !== 'draft' ? (
-                          <small>
-                            {item.status} <HelpTooltip label="Pending help">{HELP.pending}</HelpTooltip>
-                          </small>
-                        ) : null}
                       </div>
                       <button type="button" className="modal-action-btn danger-action" aria-label={`Remove ${item.id}`} onClick={() => onRemove(item.id)}>
                         <i className="bi bi-trash" aria-hidden="true" />

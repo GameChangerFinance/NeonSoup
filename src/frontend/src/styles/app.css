@@ -1249,6 +1249,10 @@ button {
     transform 0.16s ease;
 }
 
+.markets-table .market-row {
+  grid-template-columns: minmax(220px, 1.25fr) minmax(110px, 0.75fr) minmax(170px, 0.75fr) 190px;
+}
+
 .portfolio-table .market-row {
   grid-template-columns: 1.4fr 0.9fr auto;
 }
@@ -1300,6 +1304,17 @@ button {
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.markets-table .row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(88px, 1fr));
+  justify-self: stretch;
+  flex-wrap: initial;
+}
+
+.action-placeholder {
+  min-width: 0;
 }
 
 .asset-stack {
@@ -2185,6 +2200,14 @@ button {
   color: var(--sub);
   display: block;
   overflow-wrap: anywhere;
+}
+
+.cart-item-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .cart-item-title {
