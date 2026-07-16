@@ -66,6 +66,10 @@ implementation details.
 - Frontend Google Analytics uses the same `VITE_NEONSOUP_GOOGLE_ANALYTICS_ID`
   env var pattern as DevTool. Do not commit analytics secrets or private env
   files.
+- Mainnet/preprod support is network-aware across GCScript intent deployment
+  constants, wallet launch requirements, app cleanup/refetch, and user-facing
+  mainnet disclaimer behavior. Keep those layers aligned across Frontend,
+  DevTool, common state, and intent generation.
 
 ## Provider Goals
 
@@ -231,6 +235,13 @@ loading.
   erase or ignore the configured `gcWalletUrlPattern` value. Route all wallet
   launches through the centralized `gcWallet.ts` option handling and show a
   warning in Options when the editable field is enabled and non-empty.
+- Network changes must continue to use one centralized cleanup/refetch path:
+  disconnect wallet state, purge Cart/history/open-offer/portfolio/wallet-return
+  and network-specific endpoint state, then refetch network data. Preserve only
+  preferences that are not network-specific.
+- The mainnet disclaimer should appear whenever the user sets mainnet,
+  including app-default-mainnet cases, but should not reappear on ordinary
+  reload after the same mainnet selection was acknowledged.
 - The shared app version uses legal SemVer build metadata:
   `package.json` version + `VITE_NEONSOUP_BUILD_TAG`, for example
   `0.0.1+local`. Use that build tag to intentionally force local-state update
@@ -272,6 +283,17 @@ loading.
 - Multiple output asset rows with the same asset are acceptable in GCScript tx
   builder flows; the builder can sum them. Do not add app-side aggregation unless
   there is a concrete reason.
+- For bundled Cart open transactions, same-policy beacon mints should be grouped
+  under one mint entry/consumer/witness, but grouping is not a substitute for
+  valid reference-script deployment constants.
+- If Plutus evaluation reports a missing mint script witness, compare the
+  selected deployment constants with the known-good branch and live chain
+  reference-script UTxOs before rewriting transaction composition. The preprod
+  one-way-swap deployment used by NeonSoup should be verified against the live
+  official references from
+  `7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0#0`
+  for beacons and `#1` for the spending validator before preserving or changing
+  those constants.
 - Blockchain asset quantities, lovelace, token amounts, price numerators, price
   denominators, and UTxO value fields are BigNum-domain values. All arithmetic
   on them must stay BigNum-based: use TypeScript `bigint` in app/domain code and
@@ -282,6 +304,9 @@ loading.
   `policyId.assetNameHex`. ADA is keyed as `ada.ada`; native assets with an
   empty asset name are keyed as `policyId.`. Do not use friendly aliases such as
   `usdm` as map keys.
+- Asset metadata fixes must use MKII or another primary/live provider source.
+  If metadata such as decimals is missing or null, leave that configured asset
+  untouched instead of guessing.
 - Prefer `assetId` for provider/GC asset identifiers such as `lovelace` or
   `policyId + assetNameHex`; do not use the older provider label in app code.
 - Do not add ad hoc localStorage migrations for old persisted app state shapes.
@@ -411,11 +436,11 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
 - Avoid developer jargon in user-facing toasts, notices, cards, and transaction
   detail modals. Do not show messages about internal wallet-return export
   plumbing when the user only needs connection or execution status.
-- `Swap` is the primary user action. `Open offer` means create/open a new maker
+- `Swap` is the primary user action. `Offer` means create/open a new maker
   offer from Markets or Portfolio when the wallet has the asset balance.
-- The Open view exists as a distinct page from Swap; its nav entry can remain
-  hidden for future use. Options also exists as both a hidden route/page and the
-  modal opened by the `...` button.
+- The Offer/Open view exists as a distinct page from Swap and should always be
+  visible in user navigation with the label `Offer`. Options also exists as
+  both a hidden route/page and the modal opened by the `...` button.
 - User-facing forms must block invalid actions with Bootstrap alerts and
   disabled CTAs. DevTool may remain more permissive for protocol debugging.
 - Incognito Mode allows Swap/Open-style execution without a connected wallet
@@ -452,6 +477,18 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
 - Markets, Portfolio, My Orders, and History lists/tables should have clear
   column headers and user-meaningful columns, with larger readable amounts and
   zero/small amounts sorted after larger amounts.
+- Markets should list only registered asset pairs in the shape
+  `[all registered assets] / [coin | stablecoin | mainstream]`, avoiding
+  unpopular or random provider-discovered markets.
+- Markets sorting preference is wallet-owned asset presence first, then more
+  executable/available orders, then total matching orders, then balance amount
+  as a tie-breaker.
+- Markets row actions should be wallet-context-aware. If the wallet owns either
+  asset, `Offer` and `Swap` should use that owned asset as the offered/pay
+  asset; if both are owned, choose the direction that best fits the listed pair
+  and available liquidity.
+- Markets should not show a `Your balance` column. Keep action columns stable
+  with reserved slots/placeholders when an action button is unavailable.
 - Transaction hashes and UTxO references should render short forms such as
   `abcd...1234` with compact copy-to-clipboard icon buttons.
 - Hide or disable market-data cards until provider-backed market data exists;
@@ -472,6 +509,8 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
   hidden on small/mobile screens.
 - Mobile cards must preserve enough top padding for page titles; titles should
   not touch card borders.
+- Alert read-more modals must reuse the same graphical asset as the originating
+  alert.
 - Modal cards must be vertically centered in the viewport, fit mobile
   width/height, use internal scrolling, keep helper art at the bottom-left with
   enough padding, and avoid body/page overflow.
@@ -535,6 +574,9 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
 - Cart collision badges are diagnostic; correct routing and reducer/domain
   guards should prevent new collisions by excluding already booked source UTxOs
   before quote/cart-item creation.
+- Cart item labels and metadata must derive from each item's immutable protocol
+  args, not from a selected or stale source offer. Cart rows should render the
+  normalized asset pair icon/label primitives when asset metadata is available.
 - Routing math, route behavior, segment logic, and segment styling are easy to
   break. Be extra careful with route changes and ask before changing route-bar
   semantics when the requested fix is ambiguous.
@@ -604,6 +646,11 @@ components, reducers, or provider call sites.
   execution.
 - When a blockchain-backed source of truth exists, prefer it over wallet-return
   payloads, metadata, or UI state snapshots for categorization.
+- For financial table sorting, prefer explicit rank fields over raw numeric sort
+  when rows meeting multiple user-relevant criteria should go first, such as
+  wallet balance presence before amount and then available order count.
+- For iconized transaction/cart rows, reuse normalized asset/pair primitives
+  instead of rebuilding per-row icon or label logic.
 
 ## Consuming APIs
 
@@ -621,6 +668,9 @@ components, reducers, or provider call sites.
 - History views should avoid duplicate rows across wallet-return hints and
   chain-backed rows. Treat returned hashes, pending local entries, and
   provider-confirmed chain transactions as different evidence levels.
+- Preserve `docs/STATE.md` as the live validator/liquidity report format for
+  mainnet/preprod validator hash, deployed UTxO, UTxO count, addresses, ADA
+  locked, token counts, and token samples.
 
 ## Design Principles
 
