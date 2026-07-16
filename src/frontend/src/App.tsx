@@ -7,7 +7,7 @@ import logoUrl from '/assets/logo/icon.png';
 import { APP_CONFIG } from '../../common/config/appConfig';
 import { useAppDispatch, useAppState } from '../../common/state/appState';
 import { assetMap, balanceOf, resolveAsset, visiblePortfolio } from '../../common/state/selectors';
-import { assetTitle, configuredAssets } from '../../common/domain/assets';
+import { assetKeyOf, assetTitle, configuredAssets } from '../../common/domain/assets';
 import { createOpenBookSnapshot } from '../../common/domain/openBook';
 import { isCurrentOutputOwner } from '../../common/domain/ownership';
 import { fromBase, percent, ratioDecimal, toBase } from '../../common/domain/quantities';
@@ -1360,10 +1360,22 @@ function MarketsScreen({
   refreshing: boolean;
 }) {
   const excludedUtxoRefs = bookedSourceRefs(state.cart);
-  const rows = Object.values(assets)
+  const baseOfferAsset = assets[state.forms.openOfferAssetKey];
+  const marketPairs = new Map<string, { offerAsset: ResolvedAsset; receiveAsset: ResolvedAsset }>();
+  const addMarketPair = (offerAsset: ResolvedAsset | undefined, receiveAsset: ResolvedAsset | undefined) => {
+    if (!offerAsset?.known || !receiveAsset?.known || offerAsset.assetKey === receiveAsset.assetKey) return;
+    marketPairs.set(`${offerAsset.assetKey}->${receiveAsset.assetKey}`, { offerAsset, receiveAsset });
+  };
+  Object.values(assets)
     .filter((asset) => asset.known && asset.assetKey !== state.forms.openOfferAssetKey)
-    .map((receiveAsset) => {
-      const offerAsset = assets[state.forms.openOfferAssetKey];
+    .forEach((receiveAsset) => addMarketPair(baseOfferAsset, receiveAsset));
+  state.openOffers.forEach((offer) => {
+    const offerAsset = assets[assetKeyOf(offer.askPolicyId, offer.askAssetName)];
+    const receiveAsset = assets[assetKeyOf(offer.offerPolicyId, offer.offerAssetName)];
+    addMarketPair(offerAsset, receiveAsset);
+  });
+  const rows = [...marketPairs.values()]
+    .map(({ offerAsset, receiveAsset }) => {
       const balance = balanceOf(state, receiveAsset.policyId, receiveAsset.assetNameHex);
       const quote = quoteSwap({
         offers: state.openOffers,
@@ -1412,7 +1424,7 @@ function MarketsScreen({
       >
         <div className="table-list dex-table markets-table">
           {rows.map(({ receiveAsset, offerAsset, quote, balance }) => (
-            <div className="market-row" key={receiveAsset.assetKey}>
+            <div className="market-row" key={`${offerAsset.assetKey}->${receiveAsset.assetKey}`}>
               <div className="pair-cell">
                 <AssetPairStack offerAsset={receiveAsset} askAsset={offerAsset} />
                 <span>
@@ -1429,11 +1441,11 @@ function MarketsScreen({
               </span>
               <span className="row-actions">
                 {!state.wallet || balance > 0n ? (
-                  <button type="button" className="mini-btn" onClick={() => onOffer(receiveAsset.assetKey, state.forms.openOfferAssetKey)}>
+                  <button type="button" className="mini-btn" onClick={() => onOffer(receiveAsset.assetKey, offerAsset.assetKey)}>
                     <i className="bi bi-plus-circle" aria-hidden="true" /> Offer
                   </button>
                 ) : null}
-                <button type="button" className="mini-btn" onClick={() => onSelect(state.forms.openOfferAssetKey, receiveAsset.assetKey)}>
+                <button type="button" className="mini-btn" onClick={() => onSelect(offerAsset.assetKey, receiveAsset.assetKey)}>
                   <i className="bi bi-arrow-left-right" aria-hidden="true" /> Swap
                 </button>
               </span>

@@ -24,20 +24,20 @@
                 "cardano-preprod": {
                     "beaconsPolicy": {
                         "scriptHashHex": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
-                        "scriptSize": 4592,
+                        "scriptSize": 4595,
                         "lang": "plutus_v2",
                         "input": {
-                            "index": 1,
-                            "txHash": "9b8b0e3544e9adc23a2e24df4365a8adcf671f4fe65fee3e52503a486cc2f026"
+                            "index": 0,
+                            "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
                         }
                     },
                     "spendingValidator": {
                         "scriptHashHex": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
-                        "scriptSize": 4502,
+                        "scriptSize": 4505,
                         "lang": "plutus_v2",
                         "input": {
-                            "txHash": "9b8b0e3544e9adc23a2e24df4365a8adcf671f4fe65fee3e52503a486cc2f026",
-                            "index": 0
+                            "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
+                            "index": 1
                         }
                     }
                 },

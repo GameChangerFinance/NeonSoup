@@ -18,6 +18,7 @@ export const PREPROD_ASSETS: Record<string, AssetMetadata> = {
     policyId: 'd4fece6b39f7cd78a3f036b2ae6508c13524b863922da80f68dd9ab7',
     assetNameHex: '5553444d',
     decimals: 6,
+    description: 'A currency for the Plastiks.',
     tag: 'stablecoin',
   },
   '044f78848ab25cbe7a84c0c6768d7fb98d7a99cad21e6f8298354923.46616b65555344': {
@@ -98,6 +99,7 @@ export const MAINNET_ASSETS: Record<string, AssetMetadata> = {
     policyId: 'a0028f350aaabe0545fdcb56b039bfb08e4bb4d8c4d7c3c7d481c235',
     assetNameHex: '484f534b59',
     decimals: 0,
+    description: 'The PREMIERE low-quality s**t coin doggo meme token, exclusively on the Cardano Ecosystem. We are THE s**t, we are NOT s**t.',
     tag: 'community',
   },
   '2b0a04a7b60132b1805b296c7fcb3b217ff14413991bf76f72663c30.67696d62616c': {
@@ -106,6 +108,7 @@ export const MAINNET_ASSETS: Record<string, AssetMetadata> = {
     policyId: '2b0a04a7b60132b1805b296c7fcb3b217ff14413991bf76f72663c30',
     assetNameHex: '67696d62616c',
     decimals: 6,
+    description: 'Gimbalabs Community Token',
     tag: 'community',
   },
   '5612bee388219c1b76fd527ed0fa5aa1d28652838bcab4ee4ee63197.446973636f696e': {
@@ -113,7 +116,8 @@ export const MAINNET_ASSETS: Record<string, AssetMetadata> = {
     ticker: 'DIS',
     policyId: '5612bee388219c1b76fd527ed0fa5aa1d28652838bcab4ee4ee63197',
     assetNameHex: '446973636f696e',
-    decimals: 6,
+    decimals: 8,
+    description: 'discoin',
     tag: 'community',
   },
   '37f9b0f7e6a46d03b46c8f167f3e8f27008bbfe68b2908d34bd5a673.414c444541': {
@@ -122,6 +126,7 @@ export const MAINNET_ASSETS: Record<string, AssetMetadata> = {
     policyId: '37f9b0f7e6a46d03b46c8f167f3e8f27008bbfe68b2908d34bd5a673',
     assetNameHex: '414c444541',
     decimals: 6,
+    description: 'ALDEA, la DAO de América Latina.',
     tag: 'community',
   },
   '29d222ce763455e3d7a09a665ce554f00ac89d2e99a1a83d267170c6.4d494e': {
@@ -130,6 +135,7 @@ export const MAINNET_ASSETS: Record<string, AssetMetadata> = {
     policyId: '29d222ce763455e3d7a09a665ce554f00ac89d2e99a1a83d267170c6',
     assetNameHex: '4d494e',
     decimals: 6,
+    description: 'Minswap is a multi-pool decentralize exchange protocol on Cardano',
     tag: 'mainstream',
   },
   '279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f.534e454b': {
@@ -138,6 +144,7 @@ export const MAINNET_ASSETS: Record<string, AssetMetadata> = {
     policyId: '279c909f348e533da5808898f87f9a14bb2c3dfbbacccd631d927a3f',
     assetNameHex: '534e454b',
     decimals: 0,
+    description: 'A meme, and a memecoin',
     tag: 'community',
   },
 };

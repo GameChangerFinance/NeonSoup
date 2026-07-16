@@ -311,6 +311,65 @@ function outputArgs(item: CartItem): Array<{ role: ExecutionReceiptItem['outputs
   return [{ role: 'closedFunds', idPattern: `${tag}-unfilledOffer` }];
 }
 
+function hasBeaconMint(entry: ComposeEntry): boolean {
+  return entry.item.name === 'open' || entry.item.name === 'close';
+}
+
+function groupedBeaconMintIdPattern(group: ComposeGroup): string {
+  return `P2PDeFiKernel-OWS-${group.id}-beacons`;
+}
+
+function groupedBeaconMints(group: ComposeGroup, entries: ComposeEntry[]): GcNode[] {
+  const mintEntries = entries.filter(hasBeaconMint);
+  const first = mintEntries[0];
+  if (!first) return [];
+
+  return [
+    {
+      idPattern: groupedBeaconMintIdPattern(group),
+      policyId: `{get('cache.${first.cachePath}.tx.mints.beacons.policyId')}`,
+      assets: mintEntries.flatMap(({ cachePath }) => [
+        `{get('cache.${cachePath}.tx.mints.beacons.assets.0')}`,
+        `{get('cache.${cachePath}.tx.mints.beacons.assets.1')}`,
+        `{get('cache.${cachePath}.tx.mints.beacons.assets.2')}`,
+      ]),
+    },
+  ];
+}
+
+function groupedPlutusScripts(entries: ComposeEntry[]): string[] {
+  const beaconScript = entries.find(hasBeaconMint);
+  const spendingScript = entries.find(({ item }) => item.name === 'fill' || item.name === 'close');
+  return [
+    ...(beaconScript ? [`{get('cache.${beaconScript.cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`] : []),
+    ...(spendingScript ? [`{get('cache.${spendingScript.cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`] : []),
+  ];
+}
+
+function groupedPlutusConsumers(group: ComposeGroup, entries: ComposeEntry[]): Array<GcNode | string> {
+  const beaconConsumer = entries.find(hasBeaconMint);
+  const consumers: Array<GcNode | string> = [];
+
+  if (beaconConsumer) {
+    consumers.push({
+      scriptHashHex: `{get('cache.${beaconConsumer.cachePath}.tx.witnesses.plutus.consumers.beaconsMint.scriptHashHex')}`,
+      redeemer: {
+        dataHex: `{get('cache.${beaconConsumer.cachePath}.tx.witnesses.plutus.consumers.beaconsMint.redeemer.dataHex')}`,
+        type: 'mint',
+        itemIdPattern: groupedBeaconMintIdPattern(group),
+      },
+    });
+  }
+
+  consumers.push(
+    ...entries
+      .filter(({ item }) => item.name === 'fill' || item.name === 'close')
+      .map(({ cachePath }) => `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`),
+  );
+
+  return consumers;
+}
+
 function receiptArgs(
   mode: 'bundle' | 'parallel',
   executionId: string,
@@ -409,9 +468,7 @@ export function createBundledGcscriptSource({
           const txStep = `tx${index}`;
           const buildStep = source.buildCachePath;
           const argsPath = `args.groups.${index}`;
-          const mints = source.entries
-            .filter(({ item }) => item.name === 'open' || item.name === 'close')
-            .map(({ cachePath }) => `{get('cache.${cachePath}.tx.mints.beacons')}`);
+          const mints = groupedBeaconMints(source.group, source.entries);
           const inputs = source.entries
             .filter(({ item }) => item.name === 'fill' || item.name === 'close')
             .map(({ cachePath }) => `{get('cache.${cachePath}.tx.inputs.offerWithBeacons')}`);
@@ -430,30 +487,8 @@ export function createBundledGcscriptSource({
               (_, feeIndex) => `{get('${argsPath}.service-fees.${feeIndex}')}`,
             ),
           ];
-          const scripts = source.entries.flatMap(({ item, cachePath }) => {
-            if (item.name === 'open') {
-              return [`{get('cache.${cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`];
-            }
-            if (item.name === 'fill') {
-              return [`{get('cache.${cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`];
-            }
-            return [
-              `{get('cache.${cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`,
-              `{get('cache.${cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`,
-            ];
-          });
-          const consumers = source.entries.flatMap(({ item, cachePath }) => {
-            if (item.name === 'open') {
-              return [`{get('cache.${cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`];
-            }
-            if (item.name === 'fill') {
-              return [`{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`];
-            }
-            return [
-              `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`,
-              `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`,
-            ];
-          });
+          const scripts = groupedPlutusScripts(source.entries);
+          const consumers = groupedPlutusConsumers(source.group, source.entries);
           const requiredSigners = source.entries
             .filter(({ item }) => item.name === 'close')
             .map(({ cachePath }) => `{get('cache.${cachePath}.tx.requiredSigners.0')}`);

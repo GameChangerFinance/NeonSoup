@@ -252,6 +252,46 @@ assert((bundledRun.submit as Record<string, unknown>).type === 'submitTxs', 'bun
 assert((bundledRun.submit as Record<string, unknown>).extras === true, 'bundle submit keeps extras enabled');
 assert((bundledRun.submit as Record<string, unknown>).noFail === true, 'bundle submit keeps noFail enabled');
 
+const openItemA: CartItem = createCartItemSnapshot({
+  action: 'open',
+  args: openArgs,
+  intentId: 'open-a',
+  createdAt: 1000,
+});
+const openItemB: CartItem = createCartItemSnapshot({
+  action: 'open',
+  args: {
+    ...openArgs,
+    'intent-id': 'open-b',
+    'offer-quantity': '8',
+  },
+  intentId: 'open-b',
+  createdAt: 1001,
+});
+const bundledOpen = createBundledGcscriptSource({
+  items: [openItemA, openItemB],
+  maxIntentsPerTransaction: 20,
+  returnUrlPattern: 'https://example.test/neonsoup',
+  networkTag: 'preprod',
+  executionId: 'execution-open-fixed',
+  groupRootId: 'open-bundle-fixed',
+});
+const bundledOpenRun = bundledOpen.run as Record<string, Record<string, unknown>>;
+const bundledOpenTx0 = (bundledOpenRun.tx0 as Record<string, unknown>).run as Record<string, unknown>;
+const bundledOpenMints = bundledOpenTx0.mints as Array<Record<string, unknown>>;
+const bundledOpenWitnesses = bundledOpenTx0.witnesses as Record<string, Record<string, unknown>>;
+const bundledOpenPlutus = bundledOpenWitnesses.plutus as Record<string, unknown>;
+const bundledOpenConsumers = bundledOpenPlutus.consumers as Array<Record<string, unknown>>;
+const bundledOpenMint = bundledOpenMints[0] as Record<string, unknown>;
+
+assert(bundledOpenMints.length === 1, 'bundle mode groups same-policy beacon mints into one mint entry');
+assert((bundledOpenMint.assets as string[]).length === 6, 'grouped open beacon mint preserves all per-offer beacon assets');
+assert(bundledOpenConsumers.length === 1, 'bundle mode uses one mint consumer for the grouped beacon mint');
+assert(
+  (bundledOpenConsumers[0]?.redeemer as Record<string, unknown>).itemIdPattern === bundledOpenMint.idPattern,
+  'grouped beacon mint consumer points at the grouped mint idPattern',
+);
+
 const parallel = createParallelGcscriptSource({
   items: [legacyFillItem, closeItem],
   returnUrlPattern: 'https://example.test/neonsoup',
