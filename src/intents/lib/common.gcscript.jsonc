@@ -49,8 +49,8 @@
                         "scriptSize": 4414,
                         "lang": "plutus_v2",
                         "input": {
-                            "txHash": "",
-                            "index": 0
+                            "index": 0,
+                            "txHash": "1d2f40cede4c9aace33f4fcdf7c69005befc5896f14dffc51e6f16c466ee11b0"
                         }
                     },
                     "spendingValidator": {
@@ -58,8 +58,8 @@
                         "scriptSize": 4823,
                         "lang": "plutus_v2",
                         "input": {
-                            "txHash": "",
-                            "index": 0
+                            "txHash": "1d2f40cede4c9aace33f4fcdf7c69005befc5896f14dffc51e6f16c466ee11b0",
+                            "index": 1
                         }
                     }
                 }                

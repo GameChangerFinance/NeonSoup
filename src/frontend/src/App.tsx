@@ -217,8 +217,8 @@ interface PageAlertItem {
 const GOGGLES_CLEANING_ASSET = '/assets/cybernekos/goggles-cleaning_Y.png';
 const MAINNET_ALPHA_ACK_KEY = `neonsoup-mainnet-public-alpha-ack-${APP_CONFIG.version}`;
 const PUBLIC_ALPHA_COPY =
- `NeonSoup is currently in Public Alpha because its source code is publicly available as open source for early testing and feedback, including feedback from the Gimbalabs Piece of Pie Hackathon.
-The software may be unstable, incomplete, or unavailable without notice. It is provided “as is” and used entirely at your own risk. We are not responsible for any loss, damage, misuse, or unintended consequences resulting from its use.`;
+ `NeonSoup is currently under development, but because it's code is already released as open source and anyone can deploy it we consider this release as Public Alpha for early testing and feedback, including feedback from the Gimbalabs Piece of Pie Hackathon.
+The software may be unstable, incomplete, or unavailable without notice. It is provided “as is”, use it at your own risk. We are not responsible for any loss, damage, misuse, or unintended consequences resulting from its use.`;
 
 const ALERT_PRIORITY: Record<NoticeTone, number> = {
   danger: 0,
