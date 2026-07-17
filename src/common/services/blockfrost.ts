@@ -129,7 +129,7 @@ export async function fetchOpenOffers(context: ProviderContext): Promise<OpenOff
         (item) => (item[blockfrostAssetIdField] || '').startsWith(beacon) && item.quantity === '1',
       ).length;
       if (beaconCount < 3) continue;
-      const datum = parseSwapDatum(utxo.inline_datum);
+      const datum = parseSwapDatum(utxo.inline_datum, APP_CONFIG.networks[context.networkTag].validatorInfo.protocolVersion);
       if (!datum) continue;
       const offerAssetId = assetIdOf(datum.offerPolicyId, datum.offerAssetName);
       const askAssetId = assetIdOf(datum.askPolicyId, datum.askAssetName);
@@ -149,6 +149,8 @@ export async function fetchOpenOffers(context: ProviderContext): Promise<OpenOff
         utxoCoinQuantity: lovelace,
         utxoOfferQuantity: offered,
         utxoAskQuantity: asked,
+        originalOfferQuantity: offered,
+        accumulatedAskQuantity: asked,
         ...datum,
       });
     }

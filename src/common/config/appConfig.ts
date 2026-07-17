@@ -16,6 +16,7 @@ const textEncoder = new TextEncoder();
 export const P2P_DEFI_KERNEL_VALIDATOR_INFO = {
   //description: 'P2P DeFi Kernel OWS V2 (Live, not audited) - ecbf5da',
   description: 'P2P DeFi Kernel OWS V1 (Live, audited) - 9ec41e7',
+  protocolVersion: 'v1',
   sourceURL: 'https://github.com/fallen-icarus/cardano-swaps/blob/main/VERSIONS.md',
 } as const;
 
@@ -153,7 +154,7 @@ export const APP_CONFIG = {
       gcWalletUrlPattern,
       swapSlippageTolerancePercent: 5.0,
       swapPayUpPercent: 5,
-      toastAutoHideMs: 30000,
+      toastAutoHideMs: 90000,
       historyFetchLimit: 50,
       cardanoscanTxUrlPattern: '',
       popupMode: true,

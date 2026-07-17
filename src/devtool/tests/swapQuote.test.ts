@@ -14,9 +14,13 @@ function assert(condition: unknown, message: string): void {
   if (!condition) throw new Error(message);
 }
 
-const mainnetUsdmDatum = parseSwapDatum(
-  'd8799f581cc4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e2095820ad02cd8545df05b9982c030a26a93d51fcb3784ddf6381ffa3b5a9cb275c4ca5404058204bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d582078972b4dafbb82894e044ca5bd262798316abb12cd9c2aaa1986ebf6ea35e039d8799f1913bd197a12ffd8799fd8799fd8799f5820763c06b46ac504a63fc4a77b44ac48b48a5bb334a594bedc07ab0b0166fca41dff00ffffd87a80ff',
-);
+const v2MainnetUsdmDatumHex =
+  'd8799f581cc4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e2095820ad02cd8545df05b9982c030a26a93d51fcb3784ddf6381ffa3b5a9cb275c4ca5404058204bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d582078972b4dafbb82894e044ca5bd262798316abb12cd9c2aaa1986ebf6ea35e039d8799f1913bd197a12ffd8799fd8799fd8799f5820763c06b46ac504a63fc4a77b44ac48b48a5bb334a594bedc07ab0b0166fca41dff00ffffd87a80ff';
+const v1PreprodUsdmDatumHex =
+  'd8799f581c47cec2a1404ed91fc31124f29db15dc1aae77e0617868bcef351b8fd582068821a75a63e555d1b1e41512a4071a0ec379136d2e0a6e9e77b5b65db37df33404058204bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a581cd4fece6b39f7cd78a3f036b2ae6508c13524b863922da80f68dd9ab7445553444d58202750c41544d0d20278f60e01a94716c58094e2c4b8d4fd69007f9a5f7bb7fa4bd8799f0103ffd87a80ff';
+
+const mainnetUsdmDatum = parseSwapDatum(v2MainnetUsdmDatumHex, 'v2');
+const preprodV1UsdmDatum = parseSwapDatum(v1PreprodUsdmDatumHex, 'v1');
 
 assert(mainnetUsdmDatum?.offerPolicyId === 'ada', 'mainnet sample datum decodes ADA as the offered asset');
 assert(mainnetUsdmDatum?.offerAssetName === 'ada', 'mainnet sample datum normalizes empty ADA asset name');
@@ -25,6 +29,17 @@ assert(
   'mainnet sample datum decodes USDM ask policy',
 );
 assert(mainnetUsdmDatum?.askAssetName === '0014df105553444d', 'mainnet sample datum decodes USDM asset name');
+assert(preprodV1UsdmDatum?.offerPolicyId === 'ada', 'preprod v1 sample datum decodes ADA as the offered asset');
+assert(preprodV1UsdmDatum?.offerAssetName === 'ada', 'preprod v1 sample datum normalizes empty ADA asset name');
+assert(
+  preprodV1UsdmDatum?.askPolicyId === 'd4fece6b39f7cd78a3f036b2ae6508c13524b863922da80f68dd9ab7',
+  'preprod v1 sample datum decodes USDM ask policy',
+);
+assert(preprodV1UsdmDatum?.askAssetName === '5553444d', 'preprod v1 sample datum decodes USDM asset name');
+assert(preprodV1UsdmDatum?.priceNumerator === '1', 'preprod v1 sample datum decodes price numerator');
+assert(preprodV1UsdmDatum?.priceDenominator === '3', 'preprod v1 sample datum decodes price denominator');
+assert(preprodV1UsdmDatum?.previousInput === null, 'preprod v1 open datum has no previous input');
+assert(parseSwapDatum(v1PreprodUsdmDatumHex, 'v2') === null, 'v2 parsing rejects the shorter audited v1 datum shape');
 
 const offered: ResolvedAsset = {
   policyId: 'policy-a',

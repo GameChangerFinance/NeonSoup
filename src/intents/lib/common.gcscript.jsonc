@@ -26,7 +26,7 @@
                 "cardano-preprod": {
                     "beaconsPolicy": {
                         "scriptHashHex": "47cec2a1404ed91fc31124f29db15dc1aae77e0617868bcef351b8fd",
-                        "scriptSize": 4414,
+                        "scriptSize": 4414, // Live MKII reference script serialisedSize: 4411.
                         "lang": "plutus_v2",
                         "input": {
                             "txHash": "4cede5c4ca5a22969aef708a61f12d786180e2679a438812c6bda99364934652",
@@ -35,7 +35,7 @@
                     },
                     "spendingValidator": {
                         "scriptHashHex": "01fa36465dfe36e26c21fdbf720e4bdafcc0b86bb5367fca46012f56",
-                        "scriptSize": 4823,
+                        "scriptSize": 4823, // Live MKII reference script serialisedSize: 4820.
                         "lang": "plutus_v2",
                         "input": {
                             "txHash": "4cede5c4ca5a22969aef708a61f12d786180e2679a438812c6bda99364934652",

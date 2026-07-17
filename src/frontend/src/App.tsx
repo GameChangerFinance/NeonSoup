@@ -422,6 +422,30 @@ function formQuantity(value: string, asset: ResolvedAsset): bigint {
   return toBase(value, asset.decimals);
 }
 
+function minExecutableOfferQuantity(asset: ResolvedAsset): bigint {
+  try {
+    const quantity = BigInt(asset.minExecutableOfferQuantity || '0');
+    return quantity > 0n ? quantity : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
+function belowMinExecutableOfferMessage(quantity: bigint, asset: ResolvedAsset, side: 'offer' | 'request' = 'offer'): string {
+  const minimum = minExecutableOfferQuantity(asset);
+  if (minimum <= 0n || quantity <= 0n || quantity >= minimum) return '';
+  const verb = side === 'request' ? 'Request' : 'Offer';
+  const subject = side === 'request' ? 'requested amounts' : 'offers';
+  return `${verb} at least ${fromBase(minimum, asset.decimals)} ${assetTitle(asset)}. Smaller ${subject} are excluded from executable swap routes for this asset.`;
+}
+
+function swapMinExecutableFilterMessage(quote: SwapQuote, receiveAsset: ResolvedAsset | undefined): string {
+  if (!receiveAsset || quote.rawCandidateCount <= 0 || quote.candidateCount > 0 || quote.bookMinExecutableFilteredCount <= 0) return '';
+  const minimum = minExecutableOfferQuantity(receiveAsset);
+  if (minimum <= 0n) return '';
+  return `Matching offers exist, but their ${assetTitle(receiveAsset)} amounts are below the ${fromBase(minimum, receiveAsset.decimals)} ${assetTitle(receiveAsset)} executable minimum.`;
+}
+
 function scaledDecimal(value: string, decimals = 8): bigint {
   return toBase(value, decimals);
 }
@@ -433,12 +457,30 @@ function askQuantityFromPrice(offerQuantity: bigint, price: string, offerAsset: 
   return (offerQuantity * priceScaled * 10n ** BigInt(askAsset.decimals)) / (10n ** BigInt(scaleDecimals + offerAsset.decimals));
 }
 
-function filledOfferEquivalent(offer: OpenOffer): bigint {
-  const askQuantity = BigInt(offer.utxoAskQuantity || '0');
+function safeBigIntQuantity(value: string | number | bigint | null | undefined): bigint {
+  try {
+    return BigInt(value || '0');
+  } catch {
+    return 0n;
+  }
+}
+
+function filledOfferEquivalent(offer: OpenOffer, accumulatedAskQuantity = safeBigIntQuantity(offer.utxoAskQuantity)): bigint {
+  const askQuantity = accumulatedAskQuantity;
   const numerator = BigInt(offer.priceNumerator || '0');
   const denominator = BigInt(offer.priceDenominator || '0');
   if (askQuantity <= 0n || numerator <= 0n || denominator <= 0n) return 0n;
   return (askQuantity * denominator) / numerator;
+}
+
+function accumulatedAskQuantityForOrder(offer: OpenOffer): bigint {
+  return safeBigIntQuantity(offer.accumulatedAskQuantity ?? offer.utxoAskQuantity);
+}
+
+function totalOfferQuantityForOrder(offer: OpenOffer, remaining: bigint, filledOffer: bigint): bigint {
+  const original = safeBigIntQuantity(offer.originalOfferQuantity);
+  const computed = remaining + filledOffer;
+  return original > computed ? original : computed;
 }
 
 function pendingTransactionHashes(state: AppState): string[] {
@@ -1093,6 +1135,7 @@ function SwapScreen({
       ? ['Price impact is above your slippage tolerance. Increase tolerance or choose a smaller swap.']
       : []),
   ];
+  const minExecutableFilterProblem = swapMinExecutableFilterMessage(quote, receiveAsset);
   const swapProblems = [
     ...(!receiveAsset ? ['Select the asset you want to receive before swapping.'] : []),
     ...(receiveAsset && receiveAsset.assetKey === offerAsset.assetKey ? ['Select a different asset to receive before swapping.'] : []),
@@ -1103,7 +1146,8 @@ function SwapScreen({
     ...(hasPair && requestedQuantity > 0n && hasTrueLiquidityShortage
       ? ['Not enough available liquidity for this swap right now.']
       : []),
-    ...(receiveAsset && hasPair && requestedQuantity > 0n && !hasExecutableRoute
+    ...(minExecutableFilterProblem ? [minExecutableFilterProblem] : []),
+    ...(receiveAsset && hasPair && requestedQuantity > 0n && !hasExecutableRoute && !minExecutableFilterProblem
       ? [`No available offers can sell ${assetTitle(receiveAsset)} for ${assetTitle(offerAsset)} right now.`]
       : []),
   ];
@@ -1264,11 +1308,15 @@ function OpenScreen({
   const askQuantity = askAsset ? formQuantity(state.forms.openAskAmount, askAsset) : 0n;
   const priceValue = askAsset ? openPriceText(offerQuantity, askQuantity, offerAsset, askAsset) : '-';
   const incognito = !state.wallet;
+  const minExecutableOfferProblem = belowMinExecutableOfferMessage(offerQuantity, offerAsset);
+  const minExecutableRequestProblem = askAsset ? belowMinExecutableOfferMessage(askQuantity, askAsset, 'request') : '';
   const openProblems = [
     ...(!askAsset ? ['Select the asset you want to receive before opening an offer.'] : []),
     ...(askAsset && offerAsset.assetKey === askAsset.assetKey ? ['Select a different asset to receive before opening an offer.'] : []),
     ...(offerQuantity <= 0n ? ['Enter the amount you want to offer.'] : []),
+    ...(minExecutableOfferProblem ? [minExecutableOfferProblem] : []),
     ...(askQuantity <= 0n ? ['Enter the amount you want to receive.'] : []),
+    ...(minExecutableRequestProblem ? [minExecutableRequestProblem] : []),
     ...(state.wallet && offerQuantity > offerBalance
       ? [`Your balance is ${fromBase(offerBalance, offerAsset.decimals)} ${assetTitle(offerAsset)}, which is not enough for this offer.`]
       : []),
@@ -1563,11 +1611,11 @@ function OrdersScreen({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
-  const owned = state.openOffers
-    .filter((offer) => isCurrentOutputOwner(offer, state.wallet?.stakeKeyHash))
+  const ownedUnsorted = state.openOffers.filter((offer) => isCurrentOutputOwner(offer, state.wallet?.stakeKeyHash));
+  const owned = ownedUnsorted
     .sort((left, right) => {
-      const byFilled = compareQuantityDesc(BigInt(left.utxoAskQuantity || '0'), BigInt(right.utxoAskQuantity || '0'));
-      return byFilled || compareQuantityDesc(BigInt(left.utxoOfferQuantity || '0'), BigInt(right.utxoOfferQuantity || '0'));
+      const byFilled = compareQuantityDesc(accumulatedAskQuantityForOrder(left), accumulatedAskQuantityForOrder(right));
+      return byFilled || compareQuantityDesc(safeBigIntQuantity(left.utxoOfferQuantity), safeBigIntQuantity(right.utxoOfferQuantity));
     });
   return (
     <section className="panel-card">
@@ -1584,14 +1632,15 @@ function OrdersScreen({
           {owned.map((offer) => {
             const offered = resolveAsset(state, offer.offerPolicyId, offer.offerAssetName);
             const asked = resolveAsset(state, offer.askPolicyId, offer.askAssetName);
-            const hasAccumulatedAsk = BigInt(offer.utxoAskQuantity || '0') > 0n;
-            const remaining = BigInt(offer.utxoOfferQuantity || '0');
-            const accumulated = BigInt(offer.utxoAskQuantity || '0');
-            const filledOffer = filledOfferEquivalent(offer);
-            const totalOffer = remaining + filledOffer;
+            const accumulated = accumulatedAskQuantityForOrder(offer);
+            const hasAccumulatedAsk = accumulated > 0n;
+            const remaining = safeBigIntQuantity(offer.utxoOfferQuantity);
+            const filledOffer = filledOfferEquivalent(offer, accumulated);
+            const totalOffer = totalOfferQuantityForOrder(offer, remaining, filledOffer);
             const filledPct =
               totalOffer > 0n ? Number((filledOffer * 10_000n) / totalOffer) / 100 : 0;
             const progressLabel = `${filledPct.toFixed(filledPct % 1 === 0 ? 0 : 2)}% filled: ${fromBase(filledOffer, offered.decimals)} ${assetTitle(offered)} of ${fromBase(totalOffer, offered.decimals)} ${assetTitle(offered)}. Received ${fromBase(accumulated, asked.decimals)} ${assetTitle(asked)} so far.`;
+            const fillStatus = remaining <= 0n && hasAccumulatedAsk ? 'Filled' : hasAccumulatedAsk ? 'Partially filled' : 'Waiting for fills';
             return (
               <article className="order-card" key={offer.id}>
                 <div className="order-head">
@@ -1605,7 +1654,7 @@ function OrdersScreen({
                 </div>
                 <div className="order-fill-card">
                   <span>
-                    Filled / Total <HelpTooltip label="Order progress help">Filled is estimated from the requested asset accumulated in the order and the order limit price.</HelpTooltip>
+                    Filled / Total <HelpTooltip label="Order progress help">Filled is calculated from the requested asset accumulated in the order and the order limit price.</HelpTooltip>
                   </span>
                   <strong>
                     {fromBase(filledOffer, offered.decimals)} / {fromBase(totalOffer, offered.decimals)} {assetTitle(offered)}
@@ -1622,7 +1671,7 @@ function OrdersScreen({
                   <span>
                     Limit price {orderLimitPriceText(offer, offered, asked)} {assetTitle(asked)} / {assetTitle(offered)}
                   </span>
-                  <span>{hasAccumulatedAsk ? 'Partially filled' : 'Waiting for fills'}</span>
+                  <span>{fillStatus}</span>
                 </div>
                 <button type="button" className="mini-btn" onClick={() => onCloseOrder(offer)}>
                   Close order <ActionButtonSuffix cartMode={cartMode} icon="bi-x-circle" />
@@ -2509,7 +2558,9 @@ export default function App() {
       dispatch({ type: 'merge-transactions', transactions: transactionsFromReceipt(receipt, at) });
     }
     if (receipt || incognitoStatus || wallet) {
-      const summary = executionSummaryForItems(state, state.cart.items, receipt);
+      // Too long to read!
+      //const summary = executionSummaryForItems(state, state.cart.items, receipt);
+      const summary='';
       const notice = walletReturnToast(receipt, incognitoStatus);
       setToast(summary ? { ...notice, message: `${notice.message} ${summary}` } : notice);
     }
@@ -2569,6 +2620,7 @@ export default function App() {
   async function swap() {
     const requestedQuantity = formQuantity(state.forms.swapOfferAmount, offerAsset);
     const balance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
+    const minExecutableFilterProblem = swapMinExecutableFilterMessage(quote, receiveAsset);
     if (
       !receiveAsset ||
       offerAsset.assetKey === receiveAsset.assetKey ||
@@ -2577,7 +2629,7 @@ export default function App() {
       !quoteHasExecutableRoute(quote) ||
       quoteHasTrueLiquidityShortage(quote)
     ) {
-      setToast({ tone: 'warning', title: 'Swap unavailable', message: 'Fix the highlighted swap amount before continuing.' });
+      setToast({ tone: 'warning', title: 'Swap unavailable', message: minExecutableFilterProblem || 'Fix the highlighted swap amount before continuing.' });
       return;
     }
     const refreshedOffers = await refreshOffers();
@@ -2595,12 +2647,17 @@ export default function App() {
       warningSlippageMultiplier: APP_CONFIG.defaults.quote.warningSlippageMultiplier,
       payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
     });
+    const freshMinExecutableFilterProblem = swapMinExecutableFilterMessage(freshQuote, receiveAsset);
     if (
       (state.wallet && freshQuote.executionInputQuantity > balance) ||
       !quoteHasExecutableRoute(freshQuote) ||
       quoteHasTrueLiquidityShortage(freshQuote)
     ) {
-      setToast({ tone: 'warning', title: 'Swap unavailable', message: 'Available offers changed. Review the updated quote before continuing.' });
+      setToast({
+        tone: 'warning',
+        title: 'Swap unavailable',
+        message: freshMinExecutableFilterProblem || 'Available offers changed. Review the updated quote before continuing.',
+      });
       return;
     }
     const items = createSwapCartItems(state, freshQuote);
@@ -2622,8 +2679,22 @@ export default function App() {
     const offerBalance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
     const offerQuantity = formQuantity(state.forms.openOfferAmount, offerAsset);
     const askQuantity = receiveAsset ? formQuantity(state.forms.openAskAmount, receiveAsset) : 0n;
-    if (!receiveAsset || offerAsset.assetKey === receiveAsset.assetKey || offerQuantity <= 0n || askQuantity <= 0n || (state.wallet && offerQuantity > offerBalance)) {
-      setToast({ tone: 'warning', title: 'Open offer unavailable', message: 'Fix the highlighted offer terms before continuing.' });
+    const minExecutableOfferProblem = belowMinExecutableOfferMessage(offerQuantity, offerAsset);
+    const minExecutableRequestProblem = receiveAsset ? belowMinExecutableOfferMessage(askQuantity, receiveAsset, 'request') : '';
+    if (
+      !receiveAsset ||
+      offerAsset.assetKey === receiveAsset.assetKey ||
+      offerQuantity <= 0n ||
+      Boolean(minExecutableOfferProblem) ||
+      askQuantity <= 0n ||
+      Boolean(minExecutableRequestProblem) ||
+      (state.wallet && offerQuantity > offerBalance)
+    ) {
+      setToast({
+        tone: 'warning',
+        title: 'Open offer unavailable',
+        message: minExecutableOfferProblem || minExecutableRequestProblem || 'Fix the highlighted offer terms before continuing.',
+      });
       return;
     }
     const item = createCartItemFromCurrentIntent({ ...state, action: 'open' });

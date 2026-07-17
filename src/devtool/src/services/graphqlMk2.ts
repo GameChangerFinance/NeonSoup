@@ -152,7 +152,7 @@ function mapOpenOffer(context: ProviderContext, utxo: Mk2Utxo): OpenOffer | null
   const txHash = utxo.txHash || '';
   const txIndex = utxo.index == null ? '' : String(utxo.index);
   const address = utxo.address || '';
-  const datum = parseSwapDatum(utxo.datum?.bytes || '');
+  const datum = parseSwapDatum(utxo.datum?.bytes || '', APP_CONFIG.networks[context.networkTag].validatorInfo.protocolVersion);
   const tokens = utxo.tokens || [];
   const beaconPolicy = APP_CONFIG.networks[context.networkTag].validator.beaconsPolicy.scriptHashHex;
   if (!txHash || !txIndex || !address || !datum || !validBeaconTokens(tokens, beaconPolicy, datum)) return null;

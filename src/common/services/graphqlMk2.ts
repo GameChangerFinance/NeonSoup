@@ -135,7 +135,25 @@ function nestedAssets(context: ProviderContext, tokens: readonly Mk2Token[]): Re
 }
 
 function tokenQuantity(tokens: readonly Mk2Token[], assetId: string): string {
-  return tokens.find((token) => token.assetId === assetId)?.quantity || '0';
+  return (
+    tokens.find((token) => (token.assetId || assetIdOf(token.policyId || '', token.assetName || '')) === assetId)
+      ?.quantity || '0'
+  );
+}
+
+function openOfferAssetQuantity(utxo: Mk2Utxo, policyId: string, assetNameHex: string): string {
+  const assetId = assetIdOf(policyId, assetNameHex);
+  return assetId === 'lovelace' ? utxo.value || '0' : tokenQuantity(utxo.tokens || [], assetId);
+}
+
+function positiveDelta(value: string | null | undefined, baseline: string | null | undefined): string {
+  try {
+    const quantity = BigInt(value || '0');
+    const base = BigInt(baseline || '0');
+    return quantity > base ? (quantity - base).toString() : '0';
+  } catch {
+    return '0';
+  }
 }
 
 function validBeaconTokens(tokens: readonly Mk2Token[], beaconPolicy: string, datum: NonNullable<ReturnType<typeof parseSwapDatum>>) {
@@ -152,12 +170,14 @@ function mapOpenOffer(context: ProviderContext, utxo: Mk2Utxo): OpenOffer | null
   const txHash = utxo.txHash || '';
   const txIndex = utxo.index == null ? '' : String(utxo.index);
   const address = utxo.address || '';
-  const datum = parseSwapDatum(utxo.datum?.bytes || '');
+  const datum = parseSwapDatum(utxo.datum?.bytes || '', APP_CONFIG.networks[context.networkTag].validatorInfo.protocolVersion);
   const tokens = utxo.tokens || [];
   const beaconPolicy = APP_CONFIG.networks[context.networkTag].validator.beaconsPolicy.scriptHashHex;
   if (!txHash || !txIndex || !address || !datum || !validBeaconTokens(tokens, beaconPolicy, datum)) return null;
   const offerAssetId = assetIdOf(datum.offerPolicyId, datum.offerAssetName);
   const askAssetId = assetIdOf(datum.askPolicyId, datum.askAssetName);
+  const utxoOfferQuantity = offerAssetId === 'lovelace' ? utxo.value || '0' : tokenQuantity(tokens, offerAssetId);
+  const utxoAskQuantity = askAssetId === 'lovelace' ? '0' : tokenQuantity(tokens, askAssetId);
   return {
     id: `${txHash}:${txIndex}`,
     txHash,
@@ -165,10 +185,68 @@ function mapOpenOffer(context: ProviderContext, utxo: Mk2Utxo): OpenOffer | null
     address,
     ownerStakeKeyHash: stakeFromAddress(address),
     utxoCoinQuantity: utxo.value || '0',
-    utxoOfferQuantity: offerAssetId === 'lovelace' ? utxo.value || '0' : tokenQuantity(tokens, offerAssetId),
-    utxoAskQuantity: askAssetId === 'lovelace' ? '0' : tokenQuantity(tokens, askAssetId),
+    utxoOfferQuantity,
+    utxoAskQuantity,
+    originalOfferQuantity: utxoOfferQuantity,
+    accumulatedAskQuantity: utxoAskQuantity,
     ...datum,
   };
+}
+
+async function hydrateOpenOfferAccounting(context: ProviderContext, offers: readonly OpenOffer[]): Promise<OpenOffer[]> {
+  const sourceOutputs = new Map<string, Mk2Utxo>();
+  let pending = new Map<string, { txHash: string; index: string }>();
+  offers.forEach((offer) => {
+    if (offer.previousInput) pending.set(`${offer.previousInput.txHash}:${offer.previousInput.index}`, offer.previousInput);
+  });
+
+  for (let depth = 0; pending.size > 0 && depth < 10; depth += 1) {
+    const missing = [...pending.values()].filter((ref) => !sourceOutputs.has(`${ref.txHash}:${ref.index}`));
+    pending = new Map<string, { txHash: string; index: string }>();
+    if (!missing.length) break;
+    const fetched = await getSourceOutputsByRef(context, missing.map((ref) => ref.txHash));
+    fetched.forEach((output, key) => sourceOutputs.set(key, output));
+    missing.forEach((ref) => {
+      const output = fetched.get(`${ref.txHash}:${ref.index}`);
+      const datum = parseSwapDatum(output?.datum?.bytes || '', APP_CONFIG.networks[context.networkTag].validatorInfo.protocolVersion);
+      if (datum?.previousInput) {
+        pending.set(`${datum.previousInput.txHash}:${datum.previousInput.index}`, datum.previousInput);
+      }
+    });
+  }
+
+  return offers.map((offer) => {
+    let root: { utxo: Mk2Utxo; datum: NonNullable<ReturnType<typeof parseSwapDatum>> } | null = null;
+    let previousInput = offer.previousInput;
+    const seen = new Set<string>();
+    while (previousInput) {
+      const key = `${previousInput.txHash}:${previousInput.index}`;
+      if (seen.has(key)) break;
+      seen.add(key);
+      const utxo = sourceOutputs.get(key);
+      const datum = parseSwapDatum(utxo?.datum?.bytes || '', APP_CONFIG.networks[context.networkTag].validatorInfo.protocolVersion);
+      if (!utxo || !datum) break;
+      root = { utxo, datum };
+      previousInput = datum.previousInput;
+    }
+
+    const askAssetId = assetIdOf(offer.askPolicyId, offer.askAssetName);
+    const originalOfferQuantity = root
+      ? openOfferAssetQuantity(root.utxo, root.datum.offerPolicyId, root.datum.offerAssetName)
+      : offer.originalOfferQuantity || offer.utxoOfferQuantity;
+    const accumulatedAskQuantity =
+      askAssetId === 'lovelace'
+        ? root
+          ? positiveDelta(offer.utxoCoinQuantity, root.utxo.value || '0')
+          : offer.accumulatedAskQuantity || '0'
+        : offer.utxoAskQuantity || '0';
+
+    return {
+      ...offer,
+      originalOfferQuantity,
+      accumulatedAskQuantity: askAssetId === 'lovelace' ? accumulatedAskQuantity : offer.utxoAskQuantity || '0',
+    };
+  });
 }
 
 function mapTransactionOutput(utxo: Mk2Utxo, source = false): ChainTransactionOutput {
@@ -342,7 +420,8 @@ async function getOpenOffers(context: ProviderContext) {
   if (result.page.truncated) {
     throw new Error(`${GRAPHQL_MK2_OPERATIONS.openOffers} reached the ${MAX_PAGES}-page safety cap.`);
   }
-  const data = result.items.map((utxo) => mapOpenOffer(context, utxo)).filter((offer): offer is OpenOffer => Boolean(offer));
+  const baseData = result.items.map((utxo) => mapOpenOffer(context, utxo)).filter((offer): offer is OpenOffer => Boolean(offer));
+  const data = await hydrateOpenOfferAccounting(context, baseData);
   const nested = Object.assign({}, ...result.items.map((utxo) => nestedAssets(context, utxo.tokens || [])));
   const pairAssets = await getAssetsInfo(
     { ...context, assetInfo: { ...context.assetInfo, ...nested } },

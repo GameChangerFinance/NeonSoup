@@ -74,6 +74,9 @@ export interface OpenOffer {
   askBeacon: string;
   priceNumerator: string;
   priceDenominator: string;
+  previousInput?: { txHash: string; index: string } | null;
+  originalOfferQuantity?: string;
+  accumulatedAskQuantity?: string;
 }
 
 export interface OpenBookSnapshot {

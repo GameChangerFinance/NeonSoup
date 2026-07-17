@@ -149,6 +149,8 @@ function normalizeTxAsset(policyId: string, assetNameHex: string) {
     : { policyId, assetNameHex };
 }
 
+export type SwapDatumProtocolVersion = 'v1' | 'v2';
+
 export interface ParsedSwapDatum {
   pairBeacon: string;
   offerPolicyId: string;
@@ -162,10 +164,14 @@ export interface ParsedSwapDatum {
   previousInput: { txHash: string; index: string } | null;
 }
 
-export function parseSwapDatum(datumHex: string): ParsedSwapDatum | null {
+function minimumSwapDatumFields(protocolVersion: SwapDatumProtocolVersion): number {
+  return protocolVersion === 'v2' ? 11 : 10;
+}
+
+export function parseSwapDatum(datumHex: string, protocolVersion: SwapDatumProtocolVersion = 'v1'): ParsedSwapDatum | null {
   try {
     const fields = plutusFields(decodeCbor(datumHex));
-    if (fields.length < 11) return null;
+    if (fields.length < minimumSwapDatumFields(protocolVersion)) return null;
     const price = plutusFields(fields[8] ?? null);
     const offer = normalizeTxAsset(asBytes(fields[2]), asBytes(fields[3]));
     const ask = normalizeTxAsset(asBytes(fields[5]), asBytes(fields[6]));

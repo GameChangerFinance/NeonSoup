@@ -751,6 +751,33 @@ components, reducers, or provider call sites.
   treatment; clean-execution round-up and maker-remainder segments should not
   look like normal fills.
 
+## Protocol Migrations
+
+- The current protocol target is audited CardanoSwaps v1 one-way at commit
+  `9ec41e7619f5ba9d3dd46dd194e2146098093721`.
+- Audited v1 one-way `BeaconRedeemer` uses constructor `0` for
+  `CreateOrCloseSwaps` minting/burning and constructor `1` for `UpdateSwaps`
+  staking. Open and close mint/burn beacons, so their beacon mint consumer must
+  use constructor `0`; constructor `1` fails with
+  `Redeemer not used with staking execution`.
+- Audited v1 one-way `SwapDatum` has one trailing option field after price:
+  `prev_input`. Open offers set it to `None`; fill/swap continuing outputs set
+  it to `Some(input_ref)`. v1 datums must not include the old extra v2-era
+  trailing option field.
+- While the active deployment is v1, keep `src/intents/lib/swap.gcscript.jsonc`
+  with the v1 continuing datum fields in place. The old v2-only extra trailing
+  option field should stay commented out as an upgrade note, not selected by a
+  runtime multi-protocol switch.
+- Before switching back to a v2 validator set, re-check the v2 Aiken source for
+  `BeaconRedeemer`, `SwapRedeemer`, and `SwapDatum` constructor/field ordering,
+  then update `validatorInfo.protocolVersion`, uncomment the v2 datum field in
+  `src/intents/lib/open.gcscript.jsonc` and `src/intents/lib/swap.gcscript.jsonc`,
+  update `src/intents/lib/close.gcscript.jsonc` if needed, and rebuild any
+  generated intent artifacts together.
+- When changing protocol versions, verify reference script UTxOs live per
+  network and record both configured `scriptSize` and live MKII
+  `serialisedSize` if they differ.
+
 ## Debugging
 
 When wallet execution fails, ask for or inspect:
