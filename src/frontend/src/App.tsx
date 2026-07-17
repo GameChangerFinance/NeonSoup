@@ -93,6 +93,8 @@ const HELP = {
   swapReceive:
     'Asset and estimated amount you may receive from the current route. The final amount depends on live order availability when you submit.',
   bestExecutablePrice: 'Best currently available limit price from executable live offers for this pair.',
+  finalPay:
+    'The executable amount NeonSoup will ask the wallet to pay. It includes your typed amount plus any round-up needed to fully consume a tiny maker remainder and keep the order book cleanly executable.',
   balanceUsed: 'Share of your connected wallet balance used by the executable part of this swap.',
   serviceFee: 'NeonSoup service fee added to the wallet transaction for this swap action.',
   openOfferAsset: 'Asset and amount you lock into a new one-way offer for other users to fill.',
@@ -1118,8 +1120,13 @@ function SwapScreen({
   const hasPair = Boolean(receiveAsset && receiveAsset.assetKey !== offerAsset.assetKey);
   const output = receiveAsset && hasPair ? fromBase(quotePreviewOutput(quote), receiveAsset.decimals) : '0';
   const balance = balanceOf(state, offerAsset.policyId, offerAsset.assetNameHex);
-  const balancePercent = percent(quote.requestedInputQuantity, balance);
   const executionQuantity = quote.executionInputQuantity;
+  const isPayAltered = executionQuantity !== requestedQuantity;
+  const balancePercent = percent(executionQuantity, balance);
+  const finalPayText = hasPair && executionQuantity > 0n ? `${fromBase(executionQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)}` : '-';
+  const roundUpText = quote.roundUpInputQuantity > 0n
+    ? `${fromBase(quote.roundUpInputQuantity, offerAsset.decimals)} ${assetTitle(offerAsset)}`
+    : '';
   const hasExecutableRoute = quoteHasExecutableRoute(quote);
   const hasTrueLiquidityShortage = quoteHasTrueLiquidityShortage(quote);
   const incognito = !state.wallet;
@@ -1194,7 +1201,7 @@ function SwapScreen({
         <div className="token-amount">
           <input
             id="swap-pay-amount"
-            className="amount-input"
+            className={`amount-input${isPayAltered ? ' amount-input-warning' : ''}`}
             type="number"
             min="0"
             step={APP_CONFIG.defaults.forms.amountStep}
@@ -1268,6 +1275,20 @@ function SwapScreen({
         <div>
           Price impact <HelpTooltip label="Price impact help">{HELP.priceImpact}</HelpTooltip>
           <strong className={`severity-${severity}`}>{formatBps(quote.weightedSlippageBps)}</strong>
+        </div>
+        <div>
+          Final you pay{' '}
+          <HelpTooltip label="Final pay amount help">
+            {HELP.finalPay}
+            {roundUpText ? (
+              <>
+                <br />
+                <br />
+                This quote includes {roundUpText} beyond the typed amount.
+              </>
+            ) : null}
+          </HelpTooltip>
+          <strong className={isPayAltered ? 'severity-warning' : undefined}>{finalPayText}</strong>
         </div>
         <div>
           Balance used <HelpTooltip label="Balance used help">{HELP.balanceUsed}</HelpTooltip>
