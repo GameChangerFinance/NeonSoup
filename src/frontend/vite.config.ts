@@ -72,6 +72,7 @@ export default defineConfig(({ mode }) => {
     envDir,
     plugins: [react(), googleAnalyticsPlugin(googleAnalyticsId), devIntentMiddleware()],
     build: {
+      target: 'esnext',
       outDir: '../../dist/frontend',
       emptyOutDir: true,
     },

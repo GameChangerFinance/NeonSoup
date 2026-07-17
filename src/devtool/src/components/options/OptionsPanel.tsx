@@ -3,6 +3,7 @@ import type { AppState, AssetMetadata, NoticeTone } from '../../state/types';
 import { useAppDispatch } from '../../state/appState';
 import { APP_CONFIG } from '../../config/appConfig';
 import { FormAlert } from '../common/FormAlert';
+import { CopyIcon } from '../common/CopyIcon';
 import { assetKeyOf, normalizeAssetMetadataRecord } from '../../domain/assets';
 import { clearNetworkScopedStoredData } from '../../services/storage';
 
@@ -72,10 +73,64 @@ function optionPercent(value: number, fallback: number): number {
   return Math.max(0, Math.min(50, value));
 }
 
+function shortHash(value: string): string {
+  return value.length > 12 ? `${value.slice(0, 4)}...${value.slice(-4)}` : value;
+}
+
+function ProtocolInfoModal({ state, onClose }: { state: AppState; onClose: () => void }) {
+  const network = APP_CONFIG.networks[state.options.network];
+  const fields = [
+    ['Description', network.validatorInfo.description],
+    ['Beacons Policy', network.validator.beaconsPolicy.scriptHashHex],
+    ['Spending Validator', network.validator.spendingValidator.scriptHashHex],
+  ] as const;
+
+  return (
+    <>
+      <div className="modal d-block" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="protocol-info-title">
+        <div className="modal-dialog modal-lg modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2 id="protocol-info-title" className="modal-title h5">
+                Protocol Info
+              </h2>
+              <button type="button" className="btn-close" aria-label="Close Protocol Info" onClick={onClose} />
+            </div>
+            <div className="modal-body">
+              <div className="vstack gap-3">
+                {fields.map(([label, value]) => (
+                  <div key={label}>
+                    <div className="form-label mb-1">{label}</div>
+                    <div className="d-flex align-items-center gap-2 rounded border p-2 font-monospace">
+                      <span className="text-break">{label === 'Description' ? value : shortHash(value)}</span>
+                      <CopyIcon value={value} label={`Copy ${label}`} />
+                    </div>
+                  </div>
+                ))}
+                <div>
+                  <div className="form-label mb-1">Source</div>
+                  <div className="d-flex align-items-center gap-2 rounded border p-2">
+                    <a href={network.validatorInfo.sourceURL} target="_blank" rel="noreferrer">
+                      {network.validatorInfo.sourceURL}
+                    </a>
+                    <CopyIcon value={network.validatorInfo.sourceURL} label="Copy Source" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="modal-backdrop show" onClick={onClose} />
+    </>
+  );
+}
+
 export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: OptionsPanelProps) {
   const dispatch = useAppDispatch();
   const [assetJson, setAssetJson] = useState(() => JSON.stringify(editableAssets(state), null, 2));
   const [assetNotice, setAssetNotice] = useState<{ tone: NoticeTone; message: string } | null>(null);
+  const [protocolInfoOpen, setProtocolInfoOpen] = useState(false);
 
   useEffect(() => {
     setAssetJson(JSON.stringify(editableAssets(state), null, 2));
@@ -321,6 +376,9 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
               <button type="button" className="btn btn-outline-primary" onClick={onRefreshPortfolio}>
                 Refresh portfolio
               </button>
+              <button type="button" className="btn btn-outline-info" onClick={() => setProtocolInfoOpen(true)}>
+                Protocol Info
+              </button>
             </div>
           </div>
         </div>
@@ -351,6 +409,7 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
           </div>
         </div>
       </section>
+      {protocolInfoOpen ? <ProtocolInfoModal state={state} onClose={() => setProtocolInfoOpen(false)} /> : null}
     </div>
   );
 }

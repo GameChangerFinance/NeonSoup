@@ -1,11 +1,113 @@
 import { MAINNET_ASSETS, PREPROD_ASSETS } from './assets';
 import packageJson from '../../../package.json';
+import gc from '@gamechanger-finance/gc';
+import commonLibSource from '../../intents/lib/common.gcscript.jsonc?raw';
+import openLibSource from '../../intents/lib/open.gcscript.jsonc?raw';
+import closeLibSource from '../../intents/lib/close.gcscript.jsonc?raw';
+import swapLibSource from '../../intents/lib/swap.gcscript.jsonc?raw';
 
 const env = import.meta.env as ImportMetaEnv & Record<string, string | undefined>;
 const buildTag = env.VITE_NEONSOUP_BUILD_TAG || 'local';
 const appVersion = `${packageJson.version}+${buildTag}`;
 const defaultProvider = 'graphqlMk2';
 const gcWalletUrlPattern = env.VITE_NEONSOUP_GC_WALLET_URL_PATTERN || '';
+const textEncoder = new TextEncoder();
+
+export const P2P_DEFI_KERNEL_VALIDATOR_INFO = {
+  //description: 'P2P DeFi Kernel OWS V2 (Live, not audited) - ecbf5da',
+  description: 'P2P DeFi Kernel OWS V1 (Live, audited) - 9ec41e7',
+  sourceURL: 'https://github.com/fallen-icarus/cardano-swaps/blob/main/VERSIONS.md',
+} as const;
+
+const RAW_GCSCRIPT_P2P_DEFI_KERNEL_LIB = {
+  'lib/common.gcscript.jsonc': commonLibSource,
+  'lib/open.gcscript.jsonc': openLibSource,
+  'lib/close.gcscript.jsonc': closeLibSource,
+  'lib/swap.gcscript.jsonc': swapLibSource,
+} as const;
+
+type GcscriptCode = Record<string, unknown>;
+type GcscriptSourceMap = Record<string, string>;
+type GcscriptVirtualFiles = Record<string, { data: Uint8Array; mimeType: string }>;
+
+interface ValidatorDeployment {
+  beaconsPolicy: {
+    scriptHashHex: string;
+    scriptSize: number;
+    lang: string;
+    input: {
+      txHash: string;
+      index: number;
+    };
+  };
+  spendingValidator: {
+    scriptHashHex: string;
+    scriptSize: number;
+    lang: string;
+    input: {
+      txHash: string;
+      index: number;
+    };
+  };
+  [key: string]: unknown;
+}
+
+function virtualFiles(sources: GcscriptSourceMap): GcscriptVirtualFiles {
+  return Object.fromEntries(
+    Object.entries(sources).map(([name, source]) => [
+      name,
+      {
+        data: textEncoder.encode(source),
+        mimeType: 'application/json',
+      },
+    ]),
+  );
+}
+
+export async function buildRuntimeGcscript(
+  source: string | GcscriptCode,
+  {
+    fileUri = 'app:///main.gcscript',
+    files = virtualFiles(GCSCRIPT_P2P_DEFI_KERNEL_LIB),
+  }: { fileUri?: string; files?: GcscriptVirtualFiles } = {},
+): Promise<GcscriptCode> {
+  const dataUri = await gc.build.file({
+    input: typeof source === 'string' ? source : JSON.stringify(source),
+    fileUri,
+    files,
+    doValidate: false,
+    compactOutput: true,
+  });
+  return (await (await fetch(dataUri)).json()) as GcscriptCode;
+}
+
+async function buildGcscriptLib(): Promise<Record<keyof typeof RAW_GCSCRIPT_P2P_DEFI_KERNEL_LIB, string>> {
+  const rawFiles = virtualFiles(RAW_GCSCRIPT_P2P_DEFI_KERNEL_LIB);
+  const entries = await Promise.all(
+    Object.entries(RAW_GCSCRIPT_P2P_DEFI_KERNEL_LIB).map(async ([name, source]) => [
+      name,
+      JSON.stringify(await buildRuntimeGcscript(source, { fileUri: `app:///${name}`, files: rawFiles })),
+    ]),
+  );
+  return Object.fromEntries(entries) as Record<keyof typeof RAW_GCSCRIPT_P2P_DEFI_KERNEL_LIB, string>;
+}
+
+export const GCSCRIPT_P2P_DEFI_KERNEL_LIB = await buildGcscriptLib();
+
+function deploymentConstants(commonLib: string): Record<string, ValidatorDeployment> {
+  const parsed = JSON.parse(commonLib) as {
+    run?: { deploymentConstants?: { value?: Record<string, ValidatorDeployment> } };
+  };
+  return parsed.run?.deploymentConstants?.value || {};
+}
+
+export const P2P_DEFI_KERNEL_VALIDATOR_DEPLOYMENTS = deploymentConstants(GCSCRIPT_P2P_DEFI_KERNEL_LIB['lib/common.gcscript.jsonc']);
+
+function validatorFor(dltTag: string, networkTag: string): ValidatorDeployment {
+  const validator = P2P_DEFI_KERNEL_VALIDATOR_DEPLOYMENTS[`${dltTag}-${networkTag}`];
+  if (!validator) throw new Error(`Missing P2P DeFi Kernel deployment for ${dltTag}-${networkTag}.`);
+  return validator;
+}
 
 function envFlag(value: string | undefined): boolean {
   return value === '1' || value?.toLowerCase() === 'true';
@@ -36,9 +138,9 @@ export const APP_CONFIG = {
   popupFeatures: 'noopener,width=480,height=800',
   walletUrlPatternOverrideEnabled: envFlag(env.VITE_NEONSOUP_ENABLE_WALLET_URL_PATTERN_OVERRIDE),
   gcWalletUrlPattern,
+  gcscriptLib: GCSCRIPT_P2P_DEFI_KERNEL_LIB,
   pollingIntervalMs: 10 * 60 * 1000,
   confirmationPollingIntervalMs: 15 * 1000,
-  beaconPolicy: 'c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209',
   defaults: {
     frontendCartMode: false,
     options: {
@@ -92,7 +194,8 @@ export const APP_CONFIG = {
       graphqlMk2Url: env.VITE_NEONSOUP_PREPROD_GRAPHQL_MK2_URL || '',
       blockfrostUrl: '',
       apiKey: env.VITE_NEONSOUP_PREPROD_BLOCKFROST_KEY || '',
-      beaconPolicy: 'c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209',
+      validator: validatorFor('cardano', 'preprod'),
+      validatorInfo: P2P_DEFI_KERNEL_VALIDATOR_INFO,
       serviceFees: serviceFees('PREPROD'),
       assets: PREPROD_ASSETS,
     },
@@ -103,7 +206,8 @@ export const APP_CONFIG = {
       graphqlMk2Url: env.VITE_NEONSOUP_MAINNET_GRAPHQL_MK2_URL || '',
       blockfrostUrl: '',
       apiKey: env.VITE_NEONSOUP_MAINNET_BLOCKFROST_KEY || '',
-      beaconPolicy: 'c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209',
+      validator: validatorFor('cardano', 'mainnet'),
+      validatorInfo: P2P_DEFI_KERNEL_VALIDATOR_INFO,
       serviceFees: serviceFees('MAINNET'),
       assets: MAINNET_ASSETS,
     },

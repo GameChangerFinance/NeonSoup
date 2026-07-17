@@ -395,7 +395,7 @@ export default function App() {
         transactions: confirmedChainTransactions.map((transaction) =>
           protocolTransactionFromChain(
             transaction,
-            APP_CONFIG.networks[state.options.network].beaconPolicy || APP_CONFIG.beaconPolicy,
+            APP_CONFIG.networks[state.options.network].validator.beaconsPolicy.scriptHashHex,
           ),
         ),
       });

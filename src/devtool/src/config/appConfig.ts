@@ -1,11 +1,25 @@
 import { MAINNET_ASSETS, PREPROD_ASSETS } from './assets';
 import packageJson from '../../../../package.json';
+import {
+  buildRuntimeGcscript,
+  GCSCRIPT_P2P_DEFI_KERNEL_LIB,
+  P2P_DEFI_KERNEL_VALIDATOR_DEPLOYMENTS,
+  P2P_DEFI_KERNEL_VALIDATOR_INFO,
+} from '../../../common/config/appConfig';
+
+export { buildRuntimeGcscript, GCSCRIPT_P2P_DEFI_KERNEL_LIB };
 
 const env = import.meta.env as ImportMetaEnv & Record<string, string | undefined>;
 const buildTag = env.VITE_NEONSOUP_BUILD_TAG || 'local';
 const appVersion = `${packageJson.version}+${buildTag}`;
 const defaultProvider = 'graphqlMk2';
 const gcWalletUrlPattern = env.VITE_NEONSOUP_GC_WALLET_URL_PATTERN || '';
+
+function validatorFor(dltTag: string, networkTag: string) {
+  const validator = P2P_DEFI_KERNEL_VALIDATOR_DEPLOYMENTS[`${dltTag}-${networkTag}`];
+  if (!validator) throw new Error(`Missing P2P DeFi Kernel deployment for ${dltTag}-${networkTag}.`);
+  return validator;
+}
 
 function envFlag(value: string | undefined): boolean {
   return value === '1' || value?.toLowerCase() === 'true';
@@ -36,9 +50,9 @@ export const APP_CONFIG = {
   popupFeatures: 'noopener,width=480,height=800',
   walletUrlPatternOverrideEnabled: envFlag(env.VITE_NEONSOUP_ENABLE_WALLET_URL_PATTERN_OVERRIDE),
   gcWalletUrlPattern,
+  gcscriptLib: GCSCRIPT_P2P_DEFI_KERNEL_LIB,
   pollingIntervalMs: 10 * 60 * 1000,
   confirmationPollingIntervalMs: 15 * 1000,
-  beaconPolicy: 'c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209',
   defaults: {
     frontendCartMode: false,
     options: {
@@ -92,7 +106,8 @@ export const APP_CONFIG = {
       graphqlMk2Url: env.VITE_NEONSOUP_PREPROD_GRAPHQL_MK2_URL || '',
       blockfrostUrl: '',
       apiKey: env.VITE_NEONSOUP_PREPROD_BLOCKFROST_KEY || '',
-      beaconPolicy: 'c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209',
+      validator: validatorFor('cardano', 'preprod'),
+      validatorInfo: P2P_DEFI_KERNEL_VALIDATOR_INFO,
       serviceFees: serviceFees('PREPROD'),
       assets: PREPROD_ASSETS,
     },
@@ -103,7 +118,8 @@ export const APP_CONFIG = {
       graphqlMk2Url: env.VITE_NEONSOUP_MAINNET_GRAPHQL_MK2_URL || '',
       blockfrostUrl: '',
       apiKey: env.VITE_NEONSOUP_MAINNET_BLOCKFROST_KEY || '',
-      beaconPolicy: 'c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209',
+      validator: validatorFor('cardano', 'mainnet'),
+      validatorInfo: P2P_DEFI_KERNEL_VALIDATOR_INFO,
       serviceFees: serviceFees('MAINNET'),
       assets: MAINNET_ASSETS,
     },

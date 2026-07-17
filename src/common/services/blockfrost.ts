@@ -109,7 +109,7 @@ export async function fetchAssetInfo(
 }
 
 export async function fetchOpenOffers(context: ProviderContext): Promise<OpenOffer[]> {
-  const beacon = APP_CONFIG.networks[context.networkTag].beaconPolicy || APP_CONFIG.beaconPolicy;
+  const beacon = APP_CONFIG.networks[context.networkTag].validator.beaconsPolicy.scriptHashHex;
   const beaconAssets = await pages<BlockfrostPolicyAsset>(`/assets/policy/${beacon}`, context);
   const live = beaconAssets.filter((asset) => asset.quantity !== '0');
   const addresses = new Set<string>();

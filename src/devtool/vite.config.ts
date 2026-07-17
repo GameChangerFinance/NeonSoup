@@ -73,6 +73,7 @@ export default defineConfig(({ mode }) => {
     publicDir: '../frontend/public',
     plugins: [react(), googleAnalyticsPlugin(googleAnalyticsId), devIntentMiddleware()],
     build: {
+      target: 'esnext',
       outDir: '../../dist',
       emptyOutDir: false,
     },

@@ -453,7 +453,7 @@ function protocolRowsFromChainTransactions(state: AppState, transactions: Parame
     .map((transaction) =>
       protocolTransactionFromChain(
         transaction,
-        APP_CONFIG.networks[state.options.network].beaconPolicy || APP_CONFIG.beaconPolicy,
+        APP_CONFIG.networks[state.options.network].validator.beaconsPolicy.scriptHashHex,
       ),
     )
     .filter((transaction) => transaction.status === 'failed' || Boolean(transaction.actions?.length));
@@ -637,6 +637,52 @@ function CopyIcon({ value, label = 'Copy value' }: { value: string; label?: stri
     <button type="button" className="copy-icon" onClick={copy} title={copied ? 'Copied' : label} aria-label={copied ? 'Copied' : label}>
       <i className={`bi ${copied ? 'bi-check2' : 'bi-copy'}`} aria-hidden="true" />
     </button>
+  );
+}
+
+function ProtocolInfoModal({ state, onClose }: { state: AppState; onClose: () => void }) {
+  const network = APP_CONFIG.networks[state.options.network];
+  const fields = [
+    ['Description', network.validatorInfo.description],
+    ['Beacons Policy', network.validator.beaconsPolicy.scriptHashHex],
+    ['Spending Validator', network.validator.spendingValidator.scriptHashHex],
+  ] as const;
+
+  return createPortal(
+    <div className="backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="modal-card graphic-text-modal protocol-info-modal" aria-modal="true" role="dialog" aria-labelledby="protocol-info-title">
+        <img className="modal-top-art" src={GOGGLES_CLEANING_ASSET} alt="" aria-hidden="true" />
+        <div className="modal-head">
+          <h2 id="protocol-info-title">Protocol Info</h2>
+          <button type="button" className="modal-action-btn" onClick={onClose} aria-label="Close Protocol Info">
+            <i className="bi bi-x-lg" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="modal-body-scroll modal-text-scroll">
+          <div className="protocol-info-list">
+            {fields.map(([label, value]) => (
+              <div className="protocol-info-row" key={label}>
+                <span>{label}</span>
+                <strong className="mono inline-copy">
+                  {label === 'Description' ? value : short(value)}
+                  <CopyIcon value={value} label={`Copy ${label}`} />
+                </strong>
+              </div>
+            ))}
+            <div className="protocol-info-row">
+              <span>Source</span>
+              <strong className="inline-copy">
+                <a href={network.validatorInfo.sourceURL} target="_blank" rel="noreferrer">
+                  Open source
+                </a>
+                <CopyIcon value={network.validatorInfo.sourceURL} label="Copy Source" />
+              </strong>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>,
+    document.body,
   );
 }
 
@@ -1830,6 +1876,7 @@ function OptionsScreen({
   hideTitle?: boolean;
 }) {
   const dispatch = useAppDispatch();
+  const [protocolInfoOpen, setProtocolInfoOpen] = useState(false);
   const optionProblems = [
     ...(state.options.swapPayUpPercent < 0 ? ['Pay-up premium cannot be negative.'] : []),
     ...(state.options.swapSlippageTolerancePercent <= 0 ? ['Slippage tolerance must be greater than 0%.'] : []),
@@ -2001,8 +2048,18 @@ function OptionsScreen({
             onChange={(event) => dispatch({ type: 'set-options', options: { providerUrl: event.target.value } })}
           />
           </label>
+          <div className="option-line option-line-wide">
+            <span>
+              <b>Protocol Info</b>
+              <small>Audit the configured P2P DeFi Kernel validator hashes.</small>
+            </span>
+            <button type="button" className="option-action-btn" onClick={() => setProtocolInfoOpen(true)}>
+              Protocol Info
+            </button>
+          </div>
         </div>
       </ScrollFade>
+      {protocolInfoOpen ? <ProtocolInfoModal state={state} onClose={() => setProtocolInfoOpen(false)} /> : null}
     </section>
   );
 }

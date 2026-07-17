@@ -21,46 +21,90 @@
         "deploymentConstants": {
             "type": "data",
             "value": {
+                // V1 - Audited
+                // Commit: 9ec41e7619f5ba9d3dd46dd194e2146098093721
                 "cardano-preprod": {
                     "beaconsPolicy": {
-                        "scriptHashHex": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
-                        "scriptSize": 4595,
+                        "scriptHashHex": "47cec2a1404ed91fc31124f29db15dc1aae77e0617868bcef351b8fd",
+                        "scriptSize": 4414,
                         "lang": "plutus_v2",
                         "input": {
-                            "index": 0,
-                            "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
+                            "txHash": "4cede5c4ca5a22969aef708a61f12d786180e2679a438812c6bda99364934652",
+                            "index": 5
                         }
                     },
                     "spendingValidator": {
-                        "scriptHashHex": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
-                        "scriptSize": 4505,
+                        "scriptHashHex": "01fa36465dfe36e26c21fdbf720e4bdafcc0b86bb5367fca46012f56",
+                        "scriptSize": 4823,
                         "lang": "plutus_v2",
                         "input": {
-                            "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
-                            "index": 1
+                            "txHash": "4cede5c4ca5a22969aef708a61f12d786180e2679a438812c6bda99364934652",
+                            "index": 6
                         }
                     }
                 },
                 "cardano-mainnet": {
                     "beaconsPolicy": {
-                        "scriptHashHex": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
-                        "scriptSize": 4595,
+                        "scriptHashHex": "47cec2a1404ed91fc31124f29db15dc1aae77e0617868bcef351b8fd",
+                        "scriptSize": 4414,
                         "lang": "plutus_v2",
                         "input": {
-                            "index": 0,
-                            "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
+                            "txHash": "",
+                            "index": 0
                         }
                     },
                     "spendingValidator": {
-                        "scriptHashHex": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
-                        "scriptSize": 4505,
+                        "scriptHashHex": "01fa36465dfe36e26c21fdbf720e4bdafcc0b86bb5367fca46012f56",
+                        "scriptSize": 4823,
                         "lang": "plutus_v2",
                         "input": {
-                            "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
-                            "index": 1
+                            "txHash": "",
+                            "index": 0
                         }
                     }
-                }
+                }                
+                // V2 - PlutusV2 - Not Audited
+                // Commit: ecbf5daf8f28ac6e56adc8cc28d2a0931e01194a
+                // "cardano-preprod": {
+                //     "beaconsPolicy": {
+                //         "scriptHashHex": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
+                //         "scriptSize": 4595,
+                //         "lang": "plutus_v2",
+                //         "input": {
+                //             "index": 0,
+                //             "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
+                //         }
+                //     },
+                //     "spendingValidator": {
+                //         "scriptHashHex": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
+                //         "scriptSize": 4505,
+                //         "lang": "plutus_v2",
+                //         "input": {
+                //             "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
+                //             "index": 1
+                //         }
+                //     }
+                // },
+                // "cardano-mainnet": {
+                //     "beaconsPolicy": {
+                //         "scriptHashHex": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
+                //         "scriptSize": 4595,
+                //         "lang": "plutus_v2",
+                //         "input": {
+                //             "index": 0,
+                //             "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
+                //         }
+                //     },
+                //     "spendingValidator": {
+                //         "scriptHashHex": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
+                //         "scriptSize": 4505,
+                //         "lang": "plutus_v2",
+                //         "input": {
+                //             "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
+                //             "index": 1
+                //         }
+                //     }
+                // }
             }
         },
         "networkKey": {

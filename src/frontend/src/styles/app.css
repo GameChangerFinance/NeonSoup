@@ -1994,6 +1994,22 @@ button {
   width: min(430px, 100%);
 }
 
+.option-action-btn {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 14px 5px 14px 8px;
+  background: color-mix(in oklch, var(--cyan) 12%, transparent);
+  color: var(--text);
+  padding: 6px 12px;
+  font-weight: 800;
+}
+
+.option-action-btn:hover,
+.option-action-btn:focus-visible {
+  border-color: color-mix(in oklch, var(--cyan) 72%, var(--line));
+  box-shadow: 0 0 20px color-mix(in oklch, var(--cyan) 18%, transparent);
+}
+
 .empty-state {
   text-align: center;
   color: var(--sub);
@@ -2117,6 +2133,34 @@ button {
 .modal-text-scroll p {
   margin: 0;
   white-space: pre-wrap;
+}
+
+.protocol-info-modal .modal-text-scroll {
+  max-height: min(380px, 52vh);
+}
+
+.protocol-info-list {
+  display: grid;
+  gap: 12px;
+}
+
+.protocol-info-row {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--soft-border);
+  border-radius: 18px 6px 18px 10px;
+  background: var(--soft-row);
+  padding: 12px;
+}
+
+.protocol-info-row > span {
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.protocol-info-row strong {
+  overflow-wrap: anywhere;
 }
 
 .modal-footer-actions {

@@ -154,7 +154,7 @@ function mapOpenOffer(context: ProviderContext, utxo: Mk2Utxo): OpenOffer | null
   const address = utxo.address || '';
   const datum = parseSwapDatum(utxo.datum?.bytes || '');
   const tokens = utxo.tokens || [];
-  const beaconPolicy = APP_CONFIG.networks[context.networkTag].beaconPolicy || APP_CONFIG.beaconPolicy;
+  const beaconPolicy = APP_CONFIG.networks[context.networkTag].validator.beaconsPolicy.scriptHashHex;
   if (!txHash || !txIndex || !address || !datum || !validBeaconTokens(tokens, beaconPolicy, datum)) return null;
   const offerAssetId = assetIdOf(datum.offerPolicyId, datum.offerAssetName);
   const askAssetId = assetIdOf(datum.askPolicyId, datum.askAssetName);
@@ -270,7 +270,7 @@ async function fetchOpenOfferPage(context: ProviderContext, page: PageRequest): 
     GRAPHQL_MK2_QUERIES.openOffers,
     {
       ...page,
-      beaconPolicyId: APP_CONFIG.networks[context.networkTag].beaconPolicy || APP_CONFIG.beaconPolicy,
+      beaconPolicyId: APP_CONFIG.networks[context.networkTag].validator.beaconsPolicy.scriptHashHex,
     },
   );
   const items = Array.isArray(result.utxos) ? result.utxos : [];
