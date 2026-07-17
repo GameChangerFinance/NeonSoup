@@ -107,6 +107,16 @@ implementation details.
 - When sorting or filtering is needed, map app-level enums through a closed
   allowlist to provider-level query arguments. Do not forward arbitrary UI values
   directly into GraphQL `order_by` or filter shapes.
+- MKII open-offer normalization must hydrate `previousInput` source outputs when
+  available so My Orders can show original offer quantity and accumulated ask
+  quantity correctly.
+- For ADA-ask orders, accumulated fills are coin value deltas from the
+  original/root output; for native-asset asks, accumulated fills are token
+  quantities. Do not infer ADA fills from visible-row reserve heuristics.
+- API/provider mistakes that hide protocol data include matching tokens only by
+  missing `assetId`, treating absent ADA token rows as zero fills, skipping
+  protocol-version parse arguments, and promoting wallet/hash evidence to
+  confirmed chain state.
 - Prefer deterministic pagination helpers over ad hoc page merging. Pagination
   should normalize `limit`, `offset`, `nextOffset`, and deduplication by
   canonical identity.
@@ -529,6 +539,13 @@ the order book. Hide order-book complexity without pretending it is an AMM pool.
 - User-facing warnings should block truly impossible or risky trades such as
   insufficient live liquidity, but must not expose advanced
   remainder/min-UTxO internals as end-user copy.
+- User-facing Swap must distinguish typed pay amount, final executable pay
+  amount, round-up amount, received amount, balance used, and service fee.
+  Warning color belongs only where the final executable amount differs from the
+  typed amount or another real risk threshold is crossed.
+- Stats/amount UI must remain readable on medium/large screens and stack on
+  mobile; verify with rendered screenshots or concrete dimensions after visual
+  changes.
 - Frontend slippage policy is config-driven: warn at
   `tolerance * warningSlippageMultiplier`, block with danger severity at
   `tolerance`, block zero tolerance, and block tolerances at or above the
@@ -755,6 +772,8 @@ components, reducers, or provider call sites.
 
 - The current protocol target is audited CardanoSwaps v1 one-way at commit
   `9ec41e7619f5ba9d3dd46dd194e2146098093721`.
+- Protocol-version config, source intents, parser defaults, and generated
+  artifacts must stay aligned while audited v1 is active.
 - Audited v1 one-way `BeaconRedeemer` uses constructor `0` for
   `CreateOrCloseSwaps` minting/burning and constructor `1` for `UpdateSwaps`
   staking. Open and close mint/burn beacons, so their beacon mint consumer must
@@ -767,13 +786,14 @@ components, reducers, or provider call sites.
 - While the active deployment is v1, keep `src/intents/lib/swap.gcscript.jsonc`
   with the v1 continuing datum fields in place. The old v2-only extra trailing
   option field should stay commented out as an upgrade note, not selected by a
-  runtime multi-protocol switch.
-- Before switching back to a v2 validator set, re-check the v2 Aiken source for
+  runtime multi-protocol switch unless there is a coordinated migration.
+- Before switching back to a v2 or other validator set, re-check the source for
   `BeaconRedeemer`, `SwapRedeemer`, and `SwapDatum` constructor/field ordering,
-  then update `validatorInfo.protocolVersion`, uncomment the v2 datum field in
-  `src/intents/lib/open.gcscript.jsonc` and `src/intents/lib/swap.gcscript.jsonc`,
-  update `src/intents/lib/close.gcscript.jsonc` if needed, and rebuild any
-  generated intent artifacts together.
+  then update `validatorInfo.protocolVersion`, uncomment or change datum fields
+  in `src/intents/lib/open.gcscript.jsonc` and
+  `src/intents/lib/swap.gcscript.jsonc`, update
+  `src/intents/lib/close.gcscript.jsonc` if needed, and rebuild any generated
+  intent artifacts together.
 - When changing protocol versions, verify reference script UTxOs live per
   network and record both configured `scriptSize` and live MKII
   `serialisedSize` if they differ.
