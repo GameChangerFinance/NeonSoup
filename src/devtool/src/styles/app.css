@@ -181,6 +181,34 @@ body {
   width: 1em;
 }
 
+.wallet-action-wrap {
+  display: inline-flex;
+  position: relative;
+}
+
+.wallet-action-copy {
+  align-items: center;
+  background: var(--ns-panel);
+  border: 1px solid var(--ns-border);
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgba(35, 237, 255, 0.18);
+  color: var(--ns-cyan);
+  height: 1.25rem;
+  justify-content: center;
+  margin: 0;
+  min-width: 1.25rem;
+  position: absolute;
+  right: -0.45rem;
+  top: -0.45rem;
+  width: 1.25rem;
+  z-index: 2;
+}
+
+.wallet-action-copy:hover,
+.wallet-action-copy:focus-visible {
+  background: rgba(35, 237, 255, 0.16);
+}
+
 .progress-over {
   background-color: rgba(255, 255, 255, 0.08);
 }

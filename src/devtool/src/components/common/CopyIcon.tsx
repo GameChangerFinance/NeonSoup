@@ -1,26 +1,61 @@
 import { useState } from 'react';
 
-interface CopyIconProps {
-  value: string;
-  label?: string;
+export interface CopyMessage {
+  subject?: string;
+  extra?: string;
 }
 
-export function CopyIcon({ value, label = 'Copy value' }: CopyIconProps) {
+interface CopyIconProps {
+  value: string | (() => string | Promise<string>);
+  label?: string;
+  className?: string;
+  disabled?: boolean;
+  copyMessage?: CopyMessage;
+}
+
+function copySubject(label: string, copyMessage: CopyMessage | undefined): string {
+  return copyMessage?.subject || label.replace(/^Copy\s+/i, '').trim().toLowerCase() || 'value';
+}
+
+function copiedMessage(label: string, copyMessage: CopyMessage | undefined): string {
+  const base = `${copySubject(label, copyMessage)} copied to clipboard.`;
+  return copyMessage?.extra ? `${base} ${copyMessage.extra}` : base;
+}
+
+export function CopyIcon({ value, label = 'Copy value', className = '', disabled = false, copyMessage }: CopyIconProps) {
   const [copied, setCopied] = useState(false);
+  const staticValue = typeof value === 'string' ? value : null;
 
   async function copy() {
-    await navigator.clipboard?.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+    try {
+      const text = typeof value === 'function' ? await value() : value;
+      if (!text) return;
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API is not available in this browser context.');
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.dispatchEvent(
+        new CustomEvent('neonsoup-copy', {
+          detail: { tone: 'info', message: copiedMessage(label, copyMessage) },
+        }),
+      );
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch (error) {
+      window.dispatchEvent(
+        new CustomEvent('neonsoup-copy', {
+          detail: { tone: 'danger', message: error instanceof Error ? error.message : 'Clipboard copy failed.' },
+        }),
+      );
+    }
   }
 
-  if (!value) return null;
+  if (staticValue === '') return null;
 
   return (
     <button
       type="button"
-      className="copy-icon"
+      className={`copy-icon${className ? ` ${className}` : ''}`}
       onClick={copy}
+      disabled={disabled}
       title={copied ? 'Copied' : label}
       aria-label={copied ? 'Copied' : label}
     >

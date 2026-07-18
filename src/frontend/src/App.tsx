@@ -30,7 +30,7 @@ import {
 } from '../../common/domain/swapQuote';
 import { loadAddressTransactions, loadOpenOffers, loadPortfolio, loadTransactions } from '../../common/services/networkProvider';
 import { cardanoscanTxUrl, openExternalUrl } from '../../common/services/explorers';
-import { captureWalletReturn, consumeWalletReturn, openWalletCode } from '../../common/services/gcWallet';
+import { captureWalletReturn, consumeWalletReturn, openWalletCode, walletUrlForCode } from '../../common/services/gcWallet';
 import { connectIntent } from '../../common/services/intents';
 import {
   buildBundledGcscriptIntent,
@@ -669,18 +669,83 @@ function ScrollFade({ children, className = '', header }: { children: ReactNode;
   );
 }
 
-function CopyIcon({ value, label = 'Copy value' }: { value: string; label?: string }) {
+interface CopyMessage {
+  subject?: string;
+  extra?: string;
+}
+
+function copySubject(label: string, copyMessage: CopyMessage | undefined): string {
+  return copyMessage?.subject || label.replace(/^Copy\s+/i, '').trim().toLowerCase() || 'value';
+}
+
+function copiedMessage(label: string, copyMessage: CopyMessage | undefined): string {
+  const base = `${copySubject(label, copyMessage)} copied to clipboard.`;
+  return copyMessage?.extra ? `${base} ${copyMessage.extra}` : base;
+}
+
+function CopyIcon({
+  value,
+  label = 'Copy value',
+  className = '',
+  disabled = false,
+  copyMessage,
+}: {
+  value: string | (() => string | Promise<string>);
+  label?: string;
+  className?: string;
+  disabled?: boolean;
+  copyMessage?: CopyMessage;
+}) {
   const [copied, setCopied] = useState(false);
-  if (!value) return null;
+  const staticValue = typeof value === 'string' ? value : null;
+  if (staticValue === '') return null;
   async function copy() {
-    await navigator.clipboard?.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+    try {
+      const text = typeof value === 'function' ? await value() : value;
+      if (!text) return;
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API is not available in this browser context.');
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.dispatchEvent(
+        new CustomEvent('neonsoup-copy', {
+          detail: { tone: 'info', message: copiedMessage(label, copyMessage) },
+        }),
+      );
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch (error) {
+      window.dispatchEvent(
+        new CustomEvent('neonsoup-copy', {
+          detail: { tone: 'danger', message: safeError(error) },
+        }),
+      );
+    }
   }
   return (
-    <button type="button" className="copy-icon" onClick={copy} title={copied ? 'Copied' : label} aria-label={copied ? 'Copied' : label}>
+    <button
+      type="button"
+      className={`copy-icon${className ? ` ${className}` : ''}`}
+      onClick={copy}
+      disabled={disabled}
+      title={copied ? 'Copied' : label}
+      aria-label={copied ? 'Copied' : label}
+    >
       <i className={`bi ${copied ? 'bi-check2' : 'bi-copy'}`} aria-hidden="true" />
     </button>
+  );
+}
+
+const WALLET_ACTION_COPY_EXTRA = 'Open this URL on the device where you want the wallet execute this action.';
+
+function WalletActionCopyButton({ value, disabled = false }: { value: () => string | Promise<string>; disabled?: boolean }) {
+  if (disabled) return null;
+  return (
+    <CopyIcon
+      value={value}
+      label="Copy wallet action URL"
+      className="wallet-action-copy"
+      disabled={disabled}
+      copyMessage={{ subject: 'wallet action URL', extra: WALLET_ACTION_COPY_EXTRA }}
+    />
   );
 }
 
@@ -1054,15 +1119,23 @@ function Topbar({
       {wallet ? (
         <div className="wallet-group" aria-label="Connected wallet">
           <span className="wallet-help-wrap wallet-widget-wrap">
-            <button type="button" className="wallet-btn wallet-connected" onClick={() => void navigator.clipboard?.writeText(wallet.address)}>
+            <span className="wallet-btn wallet-connected">
               <i className="bi bi-wallet2" aria-hidden="true" />
               <span className="wallet-text">
                 <span className="wallet-name">{wallet.name || 'Connected wallet'}</span>
-                <span className="wallet-address">{short(wallet.address, 16, 8)}</span>
+                <span className="wallet-address-row">
+                  <span className="wallet-address">{short(wallet.address, 16, 8)}</span>
+                  <CopyIcon
+                    value={wallet.address}
+                    label="Copy wallet address"
+                    className="wallet-address-copy"
+                    copyMessage={{ subject: 'wallet address' }}
+                  />
+                </span>
               </span>
               {wallet.walletType ? <span className="wallet-type">{wallet.walletType}</span> : null}
-            </button>
-            <HelpTooltip label="Wallet widget help">Shows the connected wallet. Click it to copy the wallet address.</HelpTooltip>
+            </span>
+            <HelpTooltip label="Wallet widget help">Shows the connected wallet. Use the copy button next to the address to copy it.</HelpTooltip>
           </span>
           <span className="wallet-help-wrap wallet-disconnect-wrap">
             <button type="button" className="wallet-disconnect" aria-label="Disconnect wallet" onClick={onDisconnect}>
@@ -1098,6 +1171,7 @@ function SwapScreen({
   receiveAsset,
   cartMode,
   onSwap,
+  onCopyWalletActionUrl,
   onFlip,
   onRefresh,
   refreshing,
@@ -1109,6 +1183,7 @@ function SwapScreen({
   receiveAsset: ResolvedAsset | undefined;
   cartMode: boolean;
   onSwap: () => void;
+  onCopyWalletActionUrl: () => string | Promise<string>;
   onFlip: () => void;
   onRefresh: () => void;
   refreshing: boolean;
@@ -1261,9 +1336,18 @@ function SwapScreen({
         ]}
       />
 
-      <button type="button" className="cta" onClick={onSwap} disabled={swapDisabled}>
-        Swap <ActionButtonSuffix cartMode={cartMode} icon="bi-arrow-right" />
-      </button>
+      {cartMode ? (
+        <button type="button" className="cta" onClick={onSwap} disabled={swapDisabled}>
+          Swap <ActionButtonSuffix cartMode={cartMode} icon="bi-arrow-right" />
+        </button>
+      ) : (
+        <span className="wallet-action-wrap wallet-action-wrap-cta">
+          <button type="button" className="cta" onClick={onSwap} disabled={swapDisabled}>
+            Swap <ActionButtonSuffix cartMode={cartMode} icon="bi-arrow-right" />
+          </button>
+          <WalletActionCopyButton value={onCopyWalletActionUrl} disabled={swapDisabled} />
+        </span>
+      )}
 
       <div className="stats">
         <div>
@@ -1310,6 +1394,7 @@ function OpenScreen({
   askAsset,
   cartMode,
   onOpen,
+  onCopyWalletActionUrl,
   onRefresh,
   refreshing,
 }: {
@@ -1319,6 +1404,7 @@ function OpenScreen({
   askAsset: ResolvedAsset | undefined;
   cartMode: boolean;
   onOpen: () => void;
+  onCopyWalletActionUrl: () => string | Promise<string>;
   onRefresh: () => void;
   refreshing: boolean;
 }) {
@@ -1472,9 +1558,18 @@ function OpenScreen({
         ]}
       />
 
-      <button type="button" className="cta open-cta" onClick={onOpen} disabled={disabled}>
-        Open Offer <ActionButtonSuffix cartMode={cartMode} icon="bi-plus-circle" />
-      </button>
+      {cartMode ? (
+        <button type="button" className="cta open-cta" onClick={onOpen} disabled={disabled}>
+          Open Offer <ActionButtonSuffix cartMode={cartMode} icon="bi-plus-circle" />
+        </button>
+      ) : (
+        <span className="wallet-action-wrap wallet-action-wrap-cta">
+          <button type="button" className="cta open-cta" onClick={onOpen} disabled={disabled}>
+            Open Offer <ActionButtonSuffix cartMode={cartMode} icon="bi-plus-circle" />
+          </button>
+          <WalletActionCopyButton value={onCopyWalletActionUrl} disabled={disabled} />
+        </span>
+      )}
     </section>
   );
 }
@@ -1623,12 +1718,14 @@ function OrdersScreen({
   state,
   cartMode,
   onCloseOrder,
+  onCopyCloseOrderUrl,
   onRefresh,
   refreshing,
 }: {
   state: AppState;
   cartMode: boolean;
   onCloseOrder: (offer: OpenOffer) => void;
+  onCopyCloseOrderUrl: (offer: OpenOffer) => string | Promise<string>;
   onRefresh: () => void;
   refreshing: boolean;
 }) {
@@ -1694,9 +1791,20 @@ function OrdersScreen({
                   </span>
                   <span>{fillStatus}</span>
                 </div>
-                <button type="button" className="mini-btn" onClick={() => onCloseOrder(offer)}>
-                  Close order <ActionButtonSuffix cartMode={cartMode} icon="bi-x-circle" />
-                </button>
+                <div className="order-actions">
+                  {cartMode ? (
+                    <button type="button" className="primary-btn" onClick={() => onCloseOrder(offer)}>
+                      Close order <ActionButtonSuffix cartMode={cartMode} icon="bi-x-circle" />
+                    </button>
+                  ) : (
+                    <span className="wallet-action-wrap">
+                      <button type="button" className="primary-btn" onClick={() => onCloseOrder(offer)}>
+                        Close order <ActionButtonSuffix cartMode={cartMode} icon="bi-x-circle" />
+                      </button>
+                      <WalletActionCopyButton value={() => onCopyCloseOrderUrl(offer)} />
+                    </span>
+                  )}
+                </div>
               </article>
             );
           })}
@@ -2199,6 +2307,7 @@ function CartModal({
   incognito,
   onClose,
   onRun,
+  onCopyRunUrl,
   onRemove,
   onSwitchCartMode,
 }: {
@@ -2207,6 +2316,7 @@ function CartModal({
   incognito: boolean;
   onClose: () => void;
   onRun: () => void;
+  onCopyRunUrl: () => string | Promise<string>;
   onRemove: (itemId: string) => void;
   onSwitchCartMode: () => void;
 }) {
@@ -2258,9 +2368,12 @@ function CartModal({
               <button type="button" className="secondary-btn" onClick={onClose}>
                 <i className="bi bi-x-lg" aria-hidden="true" /> Close
               </button>
-              <button type="button" className="primary-btn" onClick={onRun}>
-                <i className="bi bi-play-fill" aria-hidden="true" /> Run {items.length}
-              </button>
+              <span className="wallet-action-wrap">
+                <button type="button" className="primary-btn" onClick={onRun}>
+                  <i className="bi bi-play-fill" aria-hidden="true" /> Run {items.length}
+                </button>
+                <WalletActionCopyButton value={onCopyRunUrl} />
+              </span>
             </div>
           </>
         ) : (
@@ -2481,6 +2594,20 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [state.options.toastAutoHideMs, toast]);
 
+  useEffect(() => {
+    function onCopy(event: Event) {
+      if (!(event instanceof CustomEvent) || typeof event.detail?.message !== 'string') return;
+      setToast({
+        tone: event.detail.tone === 'danger' ? 'danger' : 'info',
+        title: event.detail.tone === 'danger' ? 'Copy failed' : 'Copied',
+        message: event.detail.message,
+      });
+    }
+
+    window.addEventListener('neonsoup-copy', onCopy);
+    return () => window.removeEventListener('neonsoup-copy', onCopy);
+  }, []);
+
   async function refreshOffers(): Promise<OpenOffer[] | null> {
     dispatch({ type: 'set-loading', key: 'offers', value: true });
     try {
@@ -2607,6 +2734,48 @@ export default function App() {
     if (cartMode && result.openedEmptyCart) {
       dispatch({ type: 'set-cart-modal-open', open: true });
     }
+  }
+
+  async function walletUrlForItems(items: CartItem[]): Promise<string> {
+    if (mainnetAlphaRequired) {
+      throw new Error('Read and accept the Public Alpha disclaimer before opening the wallet on mainnet.');
+    }
+    if (!items.length) {
+      throw new Error('No draft or failed Cart operations are selected to run.');
+    }
+    const code =
+      state.cart.mode === 'bundle'
+        ? await buildBundledGcscriptIntent({
+            state,
+            items,
+            maxIntentsPerTransaction: state.cart.maxIntentsPerTransaction,
+          })
+        : await buildParallelGcscriptIntent({ state, items });
+    return walletUrlForCode(state, code);
+  }
+
+  function walletUrlForSwapAction(): Promise<string> {
+    return walletUrlForItems(createSwapCartItems(state, quote));
+  }
+
+  function walletUrlForOpenAction(): Promise<string> {
+    return walletUrlForItems([createCartItemFromCurrentIntent(state)]);
+  }
+
+  function closeOrderItem(offer: OpenOffer): CartItem {
+    return createCartItemFromCurrentIntent({
+      ...state,
+      action: 'close',
+      selectedOrderId: offer.id,
+    });
+  }
+
+  function walletUrlForCloseOrderAction(offer: OpenOffer): Promise<string> {
+    return walletUrlForItems([closeOrderItem(offer)]);
+  }
+
+  function walletUrlForSelectedCart(): Promise<string> {
+    return walletUrlForItems(selectedCartItems(state.cart).filter((item) => item.status === 'draft' || item.status === 'failed'));
   }
 
   async function runItems(items: CartItem[], options: { clearAfterOpen?: boolean } = {}) {
@@ -2754,12 +2923,7 @@ export default function App() {
 
   async function closeOrder(offer: OpenOffer) {
     dispatch({ type: 'select-offer-for-close', offer });
-    const nextState = {
-      ...state,
-      action: 'close' as const,
-      selectedOrderId: offer.id,
-    };
-    const item = createCartItemFromCurrentIntent(nextState);
+    const item = closeOrderItem(offer);
     const addResult = addItemsToCart([item]);
     if (!addResult.ok) return;
     if (!cartMode) await runItems([item]);
@@ -2852,6 +3016,7 @@ export default function App() {
                     receiveAsset={receiveAsset}
                     cartMode={cartMode}
                     onSwap={() => void swap()}
+                    onCopyWalletActionUrl={walletUrlForSwapAction}
                     onFlip={flipAssets}
                     onRefresh={() => void refreshOffers()}
                     refreshing={state.loading.offers}
@@ -2868,6 +3033,7 @@ export default function App() {
                     askAsset={receiveAsset}
                     cartMode={cartMode}
                     onOpen={() => void openOffer()}
+                    onCopyWalletActionUrl={walletUrlForOpenAction}
                     onRefresh={() => void refreshPortfolio()}
                     refreshing={state.loading.portfolio}
                   />
@@ -2893,6 +3059,7 @@ export default function App() {
                     state={state}
                     cartMode={cartMode}
                     onCloseOrder={(offer) => void closeOrder(offer)}
+                    onCopyCloseOrderUrl={walletUrlForCloseOrderAction}
                     onRefresh={() => void refreshOffers()}
                     refreshing={state.loading.offers}
                   />
@@ -2956,6 +3123,7 @@ export default function App() {
               clearAfterOpen: !state.wallet,
             })
           }
+          onCopyRunUrl={walletUrlForSelectedCart}
         />
       ) : null}
       {optionsModalOpen ? (
