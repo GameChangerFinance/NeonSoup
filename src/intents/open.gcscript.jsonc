@@ -4,7 +4,13 @@
     "description": "Opening a one-way swap offer on P2P DeFi Kernel...",    
     "exportAs": "openLimitOrder",
     "require": {
-        "networkTag": "preprod"
+        "networkTag": "preprod",
+        "not": {
+            "walletTypeIn": [
+                "burner",
+                "gift"
+            ]
+        }
     },
     "return":{
         "mode":"last"
