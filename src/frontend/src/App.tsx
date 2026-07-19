@@ -2869,7 +2869,7 @@ export default function App() {
     }
     try {
       await openWalletCode(state, connectIntent(state));
-      setToast({ tone: 'info', title: 'Wallet opened', message: 'Approve the public-data request to connect NeonSoup.' });
+      setToast({ tone: 'info', title: 'Wallet opened', message: 'Approve the request to connect your wallet with NeonSoup.' });
     } catch (error) {
       setToast({ tone: 'danger', title: 'Could not open wallet', message: safeError(error) });
     }
