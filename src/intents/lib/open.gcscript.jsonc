@@ -15,6 +15,14 @@
     "type": "script",
     "title": "Preparing Offer...",
     "description": "Preparing a composable intent to open a one-way swap offer on P2P DeFi Kernel...",    
+    "require": {
+        "not": {
+            "walletTypeIn": [
+                "burner",
+                "gift"
+            ]
+        }
+    },
     "return":{
         "mode":"last"
     },   

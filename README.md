@@ -17,6 +17,15 @@ Inspect the recipe. Fork it. Compose your own flavors. Deploy kitchens on your o
 
 **Public Alpha Release: Now also on Cardano Mainnet for pioneers and early testers.**
 
+## Known Issues
+
+### Burner and gift wallets are not allowed to open offers yet
+
+NeonSoup currently blocks `burner` and `gift` GameChanger Wallet types from
+opening new P2P DeFi Kernel offers. This is a temporary safety restriction while
+we investigate a credential edge case found during testing. The restriction is 
+intended to prevent users from locking funds.
+
 ## 🥣 Frontend And DevTool
 
 The repo now contains two Vite + React + TypeScript shells:
