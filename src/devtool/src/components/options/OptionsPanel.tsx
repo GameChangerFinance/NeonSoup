@@ -3,7 +3,9 @@ import type { AppState, AssetMetadata, NoticeTone } from '../../state/types';
 import { useAppDispatch } from '../../state/appState';
 import { APP_CONFIG } from '../../config/appConfig';
 import { FormAlert } from '../common/FormAlert';
+import { CopyIcon } from '../common/CopyIcon';
 import { assetKeyOf, normalizeAssetMetadataRecord } from '../../domain/assets';
+import { clearNetworkScopedStoredData } from '../../services/storage';
 
 interface OptionsPanelProps {
   state: AppState;
@@ -71,10 +73,64 @@ function optionPercent(value: number, fallback: number): number {
   return Math.max(0, Math.min(50, value));
 }
 
+function shortHash(value: string): string {
+  return value.length > 12 ? `${value.slice(0, 4)}...${value.slice(-4)}` : value;
+}
+
+function ProtocolInfoModal({ state, onClose }: { state: AppState; onClose: () => void }) {
+  const network = APP_CONFIG.networks[state.options.network];
+  const fields = [
+    ['Description', network.validatorInfo.description],
+    ['Beacons Policy', network.validator.beaconsPolicy.scriptHashHex],
+    ['Spending Validator', network.validator.spendingValidator.scriptHashHex],
+  ] as const;
+
+  return (
+    <>
+      <div className="modal d-block" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="protocol-info-title">
+        <div className="modal-dialog modal-lg modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2 id="protocol-info-title" className="modal-title h5">
+                Protocol Info
+              </h2>
+              <button type="button" className="btn-close" aria-label="Close Protocol Info" onClick={onClose} />
+            </div>
+            <div className="modal-body">
+              <div className="vstack gap-3">
+                {fields.map(([label, value]) => (
+                  <div key={label}>
+                    <div className="form-label mb-1">{label}</div>
+                    <div className="d-flex align-items-center gap-2 rounded border p-2 font-monospace">
+                      <span className="text-break">{label === 'Description' ? value : shortHash(value)}</span>
+                      <CopyIcon value={value} label={`Copy ${label}`} />
+                    </div>
+                  </div>
+                ))}
+                <div>
+                  <div className="form-label mb-1">Source</div>
+                  <div className="d-flex align-items-center gap-2 rounded border p-2">
+                    <a href={network.validatorInfo.sourceURL} target="_blank" rel="noreferrer">
+                      {network.validatorInfo.sourceURL}
+                    </a>
+                    <CopyIcon value={network.validatorInfo.sourceURL} label="Copy Source" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="modal-backdrop show" onClick={onClose} />
+    </>
+  );
+}
+
 export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: OptionsPanelProps) {
   const dispatch = useAppDispatch();
   const [assetJson, setAssetJson] = useState(() => JSON.stringify(editableAssets(state), null, 2));
   const [assetNotice, setAssetNotice] = useState<{ tone: NoticeTone; message: string } | null>(null);
+  const [protocolInfoOpen, setProtocolInfoOpen] = useState(false);
 
   useEffect(() => {
     setAssetJson(JSON.stringify(editableAssets(state), null, 2));
@@ -117,16 +173,24 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                 id="network"
                 className="form-select"
                 value={state.options.network}
-                onChange={(event) =>
+                onChange={(event) => {
+                  clearNetworkScopedStoredData();
                   dispatch({
                     type: 'set-options',
                     options: { network: event.target.value as AppState['options']['network'] },
-                  })
-                }
+                  });
+                }}
               >
-                <option value="preprod">Preprod</option>
-                <option value="mainnet">Mainnet</option>
+                {state.options.availableNetworks.map((networkTag) => (
+                  <option value={networkTag} key={networkTag}>
+                    {networkTag}
+                  </option>
+                ))}
               </select>
+              <div className="form-text">
+                Changing network disconnects the wallet and clears Cart, order book, portfolio, history, wallet return
+                data, and network-specific endpoint overrides.
+              </div>
             </div>
             <div className="col-12 col-md-6">
               <label className="form-label" htmlFor="provider">
@@ -147,6 +211,19 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                 <option value="graphqlMk2">Cardano GraphQL MKII</option>
               </select>
               <div className="form-text">{providerHelp}</div>
+            </div>
+            <div className="col-12">
+              <label className="form-label" htmlFor="providerUrl">
+                API provider URL override
+              </label>
+              <input
+                id="providerUrl"
+                className="form-control"
+                value={state.options.providerUrl}
+                placeholder="Use configured default for selected provider"
+                onChange={(event) => dispatch({ type: 'set-options', options: { providerUrl: event.target.value } })}
+              />
+              <div className="form-text">Overrides the selected provider endpoint. Empty keeps the configured default.</div>
             </div>
             <div className="col-12">
               <label className="form-label" htmlFor="blockfrostUrl">
@@ -196,10 +273,10 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                   inside the GCScript are unchanged.
                 </div>
                 {walletUrlPattern ? (
-                  <div className="alert alert-warning mt-3 mb-0" role="alert">
+                  <FormAlert tone="warning">
                     Wallet intents will open through a custom GameChanger wallet URL pattern. Only use this with a
                     wallet deployment you trust.
-                  </div>
+                  </FormAlert>
                 ) : null}
               </div>
             ) : null}
@@ -260,7 +337,10 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                     dispatch({
                       type: 'set-options',
                       options: {
-                        swapSlippageTolerancePercent: optionPercent(Number(event.target.value), 0.5),
+                        swapSlippageTolerancePercent: optionPercent(
+                          Number(event.target.value),
+                          APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
+                        ),
                       },
                     })
                   }
@@ -282,7 +362,7 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
                     dispatch({
                       type: 'set-options',
                       options: {
-                        swapPayUpPercent: optionPercent(Number(event.target.value), 1),
+                        swapPayUpPercent: optionPercent(Number(event.target.value), APP_CONFIG.defaults.quote.payUpPercentFallback),
                       },
                     })
                   }
@@ -295,6 +375,9 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
               </button>
               <button type="button" className="btn btn-outline-primary" onClick={onRefreshPortfolio}>
                 Refresh portfolio
+              </button>
+              <button type="button" className="btn btn-outline-info" onClick={() => setProtocolInfoOpen(true)}>
+                Protocol Info
               </button>
             </div>
           </div>
@@ -326,6 +409,7 @@ export function OptionsPanel({ state, onRefreshOffers, onRefreshPortfolio }: Opt
           </div>
         </div>
       </section>
+      {protocolInfoOpen ? <ProtocolInfoModal state={state} onClose={() => setProtocolInfoOpen(false)} /> : null}
     </div>
   );
 }

@@ -55,6 +55,40 @@ export function sourceRef(item: Pick<CartItem, 'args'>): string {
   return txHash && txIndex ? `${txHash}#${txIndex}` : '';
 }
 
+export function bookedSourceRefs(cart: Pick<CartState, 'items'>): Set<string> {
+  const refs = new Set<string>();
+  for (const item of cart.items) {
+    if (item.name !== 'fill' && item.name !== 'close') continue;
+    const ref = sourceRef(item);
+    if (ref) refs.add(ref);
+  }
+  return refs;
+}
+
+export function cartItemsWithoutSourceCollisions(
+  cart: Pick<CartState, 'items'>,
+  items: readonly CartItem[],
+): CartItem[] {
+  const existingIds = new Set(cart.items.map((item) => item.id));
+  const activeRefs = bookedSourceRefs(cart);
+  const accepted: CartItem[] = [];
+
+  for (const item of items) {
+    if (existingIds.has(item.id)) continue;
+    existingIds.add(item.id);
+
+    if (item.name === 'fill' || item.name === 'close') {
+      const ref = sourceRef(item);
+      if (ref && activeRefs.has(ref)) continue;
+      if (ref) activeRefs.add(ref);
+    }
+
+    accepted.push(item);
+  }
+
+  return accepted;
+}
+
 export function selectedCartItems(cart: CartState): CartItem[] {
   return cart.items.filter((item) => item.selected);
 }
@@ -74,19 +108,14 @@ export function validateCartItemsCanBeAdded(cart: CartState, items: CartItem[]):
     existingIds.add(item.id);
   }
 
-  const activeRefs = new Map<string, string>();
-  for (const item of cart.items) {
-    if (item.status !== 'draft' || (item.name !== 'fill' && item.name !== 'close')) continue;
-    const ref = sourceRef(item);
-    if (ref) activeRefs.set(ref, item.id);
-  }
+  const activeRefs = bookedSourceRefs(cart);
   for (const item of items) {
     if (item.name !== 'fill' && item.name !== 'close') continue;
     const ref = sourceRef(item);
     if (ref && activeRefs.has(ref)) {
-      return { ok: false, message: `Source UTxO ${ref} is already used by another draft Cart item.` };
+      return { ok: false, message: `Source UTxO ${ref} is already used by another Cart item.` };
     }
-    if (ref) activeRefs.set(ref, item.id);
+    if (ref) activeRefs.add(ref);
   }
 
   return { ok: true };

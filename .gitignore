@@ -7,7 +7,6 @@ node_modules/
 .env.*.local
 dist/
 tmp/
-docs/
 
 # Schemas not committed.
 **/.lang.def

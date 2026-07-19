@@ -1,13 +1,10 @@
-import commonLibSource from '../../../intents/lib/common.gcscript.jsonc?raw';
-import openLibSource from '../../../intents/lib/open.gcscript.jsonc?raw';
-import closeLibSource from '../../../intents/lib/close.gcscript.jsonc?raw';
-import swapLibSource from '../../../intents/lib/swap.gcscript.jsonc?raw';
 import type {
   AppState,
   CartItem,
   IntentTemplate,
 } from '../state/types';
-import { getGcRuntime } from './gcRuntime';
+import { APP_CONFIG, buildRuntimeGcscript } from '../config/appConfig';
+import { serviceFeesForNetwork } from '../../../common/domain/serviceFees';
 import { cleanReturnUrl } from './intents';
 export { executionReceiptFromWalletReturn } from '../../../core/wallet/receipts';
 import { createBundledGcscriptSource, createParallelGcscriptSource } from '../../../core/gcscript/composer';
@@ -30,48 +27,38 @@ function virtualFiles(): Record<string, { data: Uint8Array; mimeType: string }> 
     data: textEncoder.encode(source),
     mimeType: 'application/json',
   });
-  return {
-    'lib/common.gcscript.jsonc': file(commonLibSource),
-    'lib/open.gcscript.jsonc': file(openLibSource),
-    'lib/close.gcscript.jsonc': file(closeLibSource),
-    'lib/swap.gcscript.jsonc': file(swapLibSource),
-  };
-}
-
-async function parseBuiltDataUri(dataUri: string): Promise<IntentTemplate['code']> {
-  const response = await fetch(dataUri);
-  return (await response.json()) as IntentTemplate['code'];
-}
-
-async function buildRuntimeGcscript(source: IntentTemplate['code']): Promise<IntentTemplate['code']> {
-  const dataUri = await getGcRuntime().build.file({
-    input: JSON.stringify(source),
-    fileUri: 'app:///main.gcscript',
-    files: virtualFiles(),
-    doValidate: false,
-    compactOutput: true,
-  });
-  return parseBuiltDataUri(dataUri);
+  return Object.fromEntries(Object.entries(APP_CONFIG.gcscriptLib).map(([name, source]) => [name, file(source)]));
 }
 
 export async function buildBundledGcscriptIntent({
+  state,
   items,
   maxIntentsPerTransaction,
 }: BundledIntentArgs): Promise<IntentTemplate['code']> {
-  return buildRuntimeGcscript(
+  return (await buildRuntimeGcscript(
     createBundledGcscriptSource({
       items,
       maxIntentsPerTransaction,
       returnUrlPattern: cleanReturnUrl(),
+      networkTag: state.options.network,
+      expectedAddress: state.wallet?.address,
+      serviceFees: serviceFeesForNetwork(state.options.network, state.customAssets),
+      privacyMode: state.wallet?.address ? 'connected' : 'incognito',
     }),
-  );
+    { files: virtualFiles() },
+  )) as IntentTemplate['code'];
 }
 
-export async function buildParallelGcscriptIntent({ items }: ParallelIntentArgs): Promise<IntentTemplate['code']> {
-  return buildRuntimeGcscript(
+export async function buildParallelGcscriptIntent({ state, items }: ParallelIntentArgs): Promise<IntentTemplate['code']> {
+  return (await buildRuntimeGcscript(
     createParallelGcscriptSource({
       items,
       returnUrlPattern: cleanReturnUrl(),
+      networkTag: state.options.network,
+      expectedAddress: state.wallet?.address,
+      serviceFees: serviceFeesForNetwork(state.options.network, state.customAssets),
+      privacyMode: state.wallet?.address ? 'connected' : 'incognito',
     }),
-  );
+    { files: virtualFiles() },
+  )) as IntentTemplate['code'];
 }

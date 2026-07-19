@@ -60,6 +60,7 @@ interface Mk2Utxo {
 interface Mk2Transaction {
   hash?: string | null;
   includedAt?: string | number | null;
+  fee?: string | null;
   validContract?: boolean | null;
   inputs?: Mk2Input[] | null;
   outputs?: Mk2Utxo[] | null;
@@ -71,7 +72,7 @@ interface Mk2Input extends Mk2Utxo {
 }
 
 function endpoint(context: ProviderContext): string {
-  const url = APP_CONFIG.networks[context.networkTag].graphqlMk2Url.trim();
+  const url = (context.options.providerUrl || APP_CONFIG.networks[context.networkTag].graphqlMk2Url).trim();
   if (!url) {
     throw new Error(`Missing Cardano GraphQL MKII URL for ${context.networkTag}. Check VITE_NEONSOUP_* env values.`);
   }
@@ -151,9 +152,9 @@ function mapOpenOffer(context: ProviderContext, utxo: Mk2Utxo): OpenOffer | null
   const txHash = utxo.txHash || '';
   const txIndex = utxo.index == null ? '' : String(utxo.index);
   const address = utxo.address || '';
-  const datum = parseSwapDatum(utxo.datum?.bytes || '');
+  const datum = parseSwapDatum(utxo.datum?.bytes || '', APP_CONFIG.networks[context.networkTag].validatorInfo.protocolVersion);
   const tokens = utxo.tokens || [];
-  const beaconPolicy = APP_CONFIG.networks[context.networkTag].beaconPolicy || APP_CONFIG.beaconPolicy;
+  const beaconPolicy = APP_CONFIG.networks[context.networkTag].validator.beaconsPolicy.scriptHashHex;
   if (!txHash || !txIndex || !address || !datum || !validBeaconTokens(tokens, beaconPolicy, datum)) return null;
   const offerAssetId = assetIdOf(datum.offerPolicyId, datum.offerAssetName);
   const askAssetId = assetIdOf(datum.askPolicyId, datum.askAssetName);
@@ -196,10 +197,70 @@ function mapTransaction(transaction: Mk2Transaction): ChainTransaction | null {
   return {
     hash: transaction.hash,
     includedAt: parseChainIncludedAt(transaction.includedAt),
+    ...(transaction.fee ? { fee: transaction.fee } : {}),
     ...(typeof transaction.validContract === 'boolean' ? { validContract: transaction.validContract } : {}),
     inputs: (transaction.inputs || []).map((input) => mapTransactionOutput(input, true)),
     outputs: (transaction.outputs || []).map((output) => mapTransactionOutput(output)),
   };
+}
+
+function utxoKey(txHash: string | null | undefined, index: string | number | null | undefined): string {
+  return txHash ? `${txHash}:${String(index ?? '')}` : '';
+}
+
+async function getSourceOutputsByRef(context: ProviderContext, txHashes: readonly string[]): Promise<Map<string, Mk2Utxo>> {
+  const unique = [...new Set(txHashes.filter(Boolean))];
+  const outputs = new Map<string, Mk2Utxo>();
+  for (let offset = 0; offset < unique.length; offset += TRANSACTION_BATCH_SIZE) {
+    const batch = unique.slice(offset, offset + TRANSACTION_BATCH_SIZE);
+    const result = await requestGraphql<
+      { transactions?: Array<{ hash?: string | null; outputs?: Mk2Utxo[] | null }> | null },
+      { limit: number; offset: number; txHashes: string[] }
+    >(context, GRAPHQL_MK2_OPERATIONS.transactionOutputsByHash, GRAPHQL_MK2_QUERIES.transactionOutputsByHash, {
+      limit: batch.length,
+      offset: 0,
+      txHashes: batch,
+    });
+    (result.transactions || []).forEach((transaction) => {
+      (transaction.outputs || []).forEach((output) => {
+        const key = utxoKey(output.txHash || transaction.hash, output.index);
+        if (key) outputs.set(key, { ...output, txHash: output.txHash || transaction.hash || '' });
+      });
+    });
+  }
+  return outputs;
+}
+
+async function hydrateInputDatums(context: ProviderContext, transactions: readonly Mk2Transaction[]): Promise<Mk2Transaction[]> {
+  const sourceHashes = new Set<string>();
+  transactions.forEach((transaction) => {
+    (transaction.inputs || []).forEach((input) => {
+      if (!input.datum?.bytes && input.sourceTxHash) sourceHashes.add(input.sourceTxHash);
+    });
+  });
+  if (!sourceHashes.size) return [...transactions];
+  let sources: Map<string, Mk2Utxo>;
+  try {
+    sources = await getSourceOutputsByRef(context, [...sourceHashes]);
+  } catch {
+    return [...transactions];
+  }
+  return transactions.map((transaction) => ({
+    ...transaction,
+    inputs: (transaction.inputs || []).map((input) => {
+      if (input.datum?.bytes) return input;
+      const source = sources.get(utxoKey(input.sourceTxHash, input.sourceTxIndex));
+      if (!source) return input;
+      return {
+        ...source,
+        ...input,
+        address: input.address || source.address || null,
+        value: input.value || source.value || null,
+        tokens: input.tokens?.length ? input.tokens : source.tokens || [],
+        datum: input.datum?.bytes ? input.datum : source.datum || null,
+      };
+    }),
+  }));
 }
 
 async function fetchOpenOfferPage(context: ProviderContext, page: PageRequest): Promise<PageResult<Mk2Utxo>> {
@@ -209,7 +270,7 @@ async function fetchOpenOfferPage(context: ProviderContext, page: PageRequest): 
     GRAPHQL_MK2_QUERIES.openOffers,
     {
       ...page,
-      beaconPolicyId: APP_CONFIG.networks[context.networkTag].beaconPolicy || APP_CONFIG.beaconPolicy,
+      beaconPolicyId: APP_CONFIG.networks[context.networkTag].validator.beaconsPolicy.scriptHashHex,
     },
   );
   const items = Array.isArray(result.utxos) ? result.utxos : [];
@@ -358,22 +419,56 @@ async function getConfirmedTransactionHashes(context: ProviderContext, txHashes:
 async function getTransactions(context: ProviderContext, txHashes: readonly string[]): Promise<ChainTransaction[]> {
   const unique = [...new Set(txHashes.filter(Boolean))];
   const transactions: ChainTransaction[] = [];
+  const queryVariants = [
+    [GRAPHQL_MK2_OPERATIONS.transactionsByHash, GRAPHQL_MK2_QUERIES.transactionsByHash],
+    [GRAPHQL_MK2_OPERATIONS.transactionsByHashNoFee, GRAPHQL_MK2_QUERIES.transactionsByHashNoFee],
+    [GRAPHQL_MK2_OPERATIONS.transactionsByHashMinimal, GRAPHQL_MK2_QUERIES.transactionsByHashMinimal],
+  ] as const;
   for (let offset = 0; offset < unique.length; offset += TRANSACTION_BATCH_SIZE) {
     const batch = unique.slice(offset, offset + TRANSACTION_BATCH_SIZE);
-    const result = await requestGraphql<
-      { transactions?: Mk2Transaction[] | null },
-      { limit: number; offset: number; txHashes: string[] }
-    >(context, GRAPHQL_MK2_OPERATIONS.transactionsByHash, GRAPHQL_MK2_QUERIES.transactionsByHash, {
-      limit: batch.length,
-      offset: 0,
-      txHashes: batch,
-    });
-    (result.transactions || []).forEach((transaction) => {
+    let result: { transactions?: Mk2Transaction[] | null } | null = null;
+    let lastError: unknown = null;
+    for (const [operationName, query] of queryVariants) {
+      try {
+        result = await requestGraphql<
+          { transactions?: Mk2Transaction[] | null },
+          { limit: number; offset: number; txHashes: string[] }
+        >(context, operationName, query, {
+          limit: batch.length,
+          offset: 0,
+          txHashes: batch,
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (!result) throw lastError instanceof Error ? lastError : new Error('Transaction lookup failed.');
+    const hydratedTransactions = await hydrateInputDatums(context, result.transactions || []);
+    hydratedTransactions.forEach((transaction) => {
       const mapped = mapTransaction(transaction);
       if (mapped) transactions.push(mapped);
     });
   }
   return transactions;
+}
+
+async function getAddressTransactions(
+  context: ProviderContext,
+  address: string,
+  limit = 50,
+): Promise<ChainTransaction[]> {
+  const safeLimit = Math.max(1, Math.min(250, Math.floor(limit) || 50));
+  const result = await requestGraphql<
+    { transactions?: Array<{ hash?: string | null }> | null },
+    { limit: number; offset: number; address: string }
+  >(context, GRAPHQL_MK2_OPERATIONS.addressTransactions, GRAPHQL_MK2_QUERIES.addressTransactions, {
+    limit: safeLimit,
+    offset: 0,
+    address,
+  });
+  const hashes = (result.transactions || []).map((transaction) => transaction.hash || '').filter(Boolean);
+  return getTransactions(context, hashes);
 }
 
 export const graphqlMk2Provider: NetworkProvider = {
@@ -382,5 +477,6 @@ export const graphqlMk2Provider: NetworkProvider = {
   getOpenOffers,
   getPortfolio,
   getTransactions,
+  getAddressTransactions,
   getConfirmedTransactionHashes,
 };

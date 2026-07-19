@@ -4,6 +4,10 @@ export const GRAPHQL_MK2_OPERATIONS = {
   assetsById: 'NeonSoup_GetAssetsById',
   confirmedTransactions: 'NeonSoup_GetConfirmedTransactions',
   transactionsByHash: 'NeonSoup_GetTransactionsByHash',
+  transactionsByHashNoFee: 'NeonSoup_GetTransactionsByHashNoFee',
+  transactionsByHashMinimal: 'NeonSoup_GetTransactionsByHashMinimal',
+  transactionOutputsByHash: 'NeonSoup_GetTransactionOutputsByHash',
+  addressTransactions: 'NeonSoup_GetAddressTransactions',
 } as const;
 
 export type GraphqlMk2OperationName = (typeof GRAPHQL_MK2_OPERATIONS)[keyof typeof GRAPHQL_MK2_OPERATIONS];
@@ -38,7 +42,6 @@ export const GRAPHQL_MK2_QUERIES = {
         name
         ticker
         description
-        logo
       }
     }
   }
@@ -68,7 +71,6 @@ export const GRAPHQL_MK2_QUERIES = {
         name
         ticker
         description
-        logo
       }
     }
   }
@@ -111,6 +113,7 @@ export const GRAPHQL_MK2_QUERIES = {
   ) {
     hash
     includedAt
+    fee
     validContract
     inputs {
       address
@@ -137,6 +140,115 @@ export const GRAPHQL_MK2_QUERIES = {
         quantity
       }
     }
+  }
+}`,
+  transactionsByHashNoFee: `query NeonSoup_GetTransactionsByHashNoFee($limit: Int = 25, $offset: Int = 0, $txHashes: [Hash32Type!]) {
+  transactions(
+    limit: $limit
+    offset: $offset
+    range: {min: 1, max: 50}
+    where: {hash: {_in: $txHashes}}
+  ) {
+    hash
+    includedAt
+    validContract
+    inputs {
+      address
+      value
+      sourceTxHash
+      sourceTxIndex
+      tokens {
+        policyId
+        assetName
+        quantity
+      }
+    }
+    outputs {
+      address
+      value
+      txHash
+      index
+      datum {
+        bytes
+      }
+      tokens {
+        policyId
+        assetName
+        quantity
+      }
+    }
+  }
+}`,
+  transactionOutputsByHash: `query NeonSoup_GetTransactionOutputsByHash($limit: Int = 25, $offset: Int = 0, $txHashes: [Hash32Type!]) {
+  transactions(
+    limit: $limit
+    offset: $offset
+    range: {min: 1, max: 50}
+    where: {hash: {_in: $txHashes}}
+  ) {
+    hash
+    outputs {
+      address
+      value
+      txHash
+      index
+      datum {
+        bytes
+      }
+      tokens {
+        policyId
+        assetName
+        quantity
+      }
+    }
+  }
+}`,
+  transactionsByHashMinimal: `query NeonSoup_GetTransactionsByHashMinimal($limit: Int = 25, $offset: Int = 0, $txHashes: [Hash32Type!]) {
+  transactions(
+    limit: $limit
+    offset: $offset
+    range: {min: 1, max: 50}
+    where: {hash: {_in: $txHashes}}
+  ) {
+    hash
+    includedAt
+    validContract
+    inputs {
+      address
+      value
+      sourceTxHash
+      sourceTxIndex
+      tokens {
+        policyId
+        assetName
+        quantity
+      }
+    }
+    outputs {
+      address
+      value
+      txHash
+      index
+      datum {
+        bytes
+      }
+      tokens {
+        policyId
+        assetName
+        quantity
+      }
+    }
+  }
+}`,
+  addressTransactions: `query NeonSoup_GetAddressTransactions($limit: Int = 50, $offset: Int = 0, $address: String!) {
+  transactions(
+    limit: $limit
+    offset: $offset
+    range: {min: 1, max: 250}
+    order_by: [INCLUDED_AT_DESC]
+    where: {_or: [{inputs: {_some: {address: {_eq: $address}}}}, {outputs: {_some: {address: {_eq: $address}}}}]}
+  ) {
+    hash
   }
 }`,
 } as const;

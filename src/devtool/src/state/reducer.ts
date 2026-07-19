@@ -4,30 +4,18 @@ import { fromBase } from '../domain/quantities';
 import { APP_CONFIG } from '../config/appConfig';
 import { mergeProtocolTransactions } from '../domain/transactions';
 import { reconcileCartItemsByTransactionStatus } from './cartReconciliation';
+import { cartItemsWithoutSourceCollisions } from '../../../core/intents/cart';
 import type { AppAction, AppOptions, AppState, AssetMetadata, CartState, NetworkTag } from './types';
 
 export const defaultOptions: AppOptions = {
-  network: 'preprod',
-  provider: APP_CONFIG.defaultProvider,
-  blockfrostUrl: '',
-  blockfrostKey: '',
-  gcWalletUrlPattern: APP_CONFIG.gcWalletUrlPattern,
-  swapSlippageTolerancePercent: 0.5,
-  swapPayUpPercent: 1,
-  popupMode: true,
-  hideUnknownOffers: true,
-  hideUnknownPortfolio: true,
-  ownerOnly: false,
-  theme: 'dark',
+  ...APP_CONFIG.defaults.options,
+  availableNetworks: [...APP_CONFIG.defaults.options.availableNetworks],
 };
 
 function freshCart(): CartState {
   return {
     items: [],
-    mode: 'bundle',
-    maxIntentsPerTransaction: 20,
-    modalOpen: false,
-    showConfirmedOnly: false,
+    ...APP_CONFIG.defaults.cart,
   };
 }
 
@@ -46,6 +34,87 @@ function defaultAssetKeys(network: NetworkTag, customAssets: InitialStateSeed['c
   return {
     offer: keys[0] || 'ada.ada',
     ask: keys[1] || keys[0] || 'ada.ada',
+  };
+}
+
+function normalizeOptions(input: Partial<AppOptions>): AppOptions {
+  const options = { ...defaultOptions, ...input };
+  const availableNetworks = [...defaultOptions.availableNetworks];
+  return {
+    ...options,
+    availableNetworks,
+    network: availableNetworks.includes(options.network) ? options.network : defaultOptions.network,
+  };
+}
+
+function resetNetworkScopedOptions(input: AppOptions): AppOptions {
+  return normalizeOptions({
+    ...input,
+    providerUrl: defaultOptions.providerUrl,
+    blockfrostUrl: defaultOptions.blockfrostUrl,
+    blockfrostKey: defaultOptions.blockfrostKey,
+    cardanoscanTxUrlPattern: defaultOptions.cardanoscanTxUrlPattern,
+  });
+}
+
+function amountOrDefault(value: string | undefined): string {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (!trimmed) return APP_CONFIG.defaults.forms.defaultAmount;
+  const numeric = Number(trimmed);
+  return Number.isFinite(numeric) && numeric <= 0 ? APP_CONFIG.defaults.forms.defaultAmount : trimmed;
+}
+
+function normalizeAmountForms(forms: Partial<AppState['forms']>): Partial<AppState['forms']> {
+  return {
+    ...forms,
+    ...(forms.openOfferAmount !== undefined ? { openOfferAmount: amountOrDefault(forms.openOfferAmount) } : {}),
+    ...(forms.openAskAmount !== undefined ? { openAskAmount: amountOrDefault(forms.openAskAmount) } : {}),
+    ...(forms.swapOfferAmount !== undefined ? { swapOfferAmount: amountOrDefault(forms.swapOfferAmount) } : {}),
+  };
+}
+
+function freshForms(network: NetworkTag, customAssets: InitialStateSeed['customAssets'] = {}): AppState['forms'] {
+  const assetKeys = defaultAssetKeys(network, customAssets);
+  return {
+    openOfferAssetKey: assetKeys.offer,
+    openAskAssetKey: assetKeys.ask,
+    openOfferAmount: APP_CONFIG.defaults.forms.defaultAmount,
+    openAskAmount: APP_CONFIG.defaults.forms.defaultAmount,
+    bulkOpenCount: APP_CONFIG.defaults.forms.bulkOpenCount,
+    bulkOpenVariancePercent: APP_CONFIG.defaults.forms.bulkOpenVariancePercent,
+    bulkOpenOfferVariancePercent: APP_CONFIG.defaults.forms.bulkOpenOfferVariancePercent,
+    fillOfferAmount: '',
+    fillAskAmount: '',
+    swapOfferAmount: APP_CONFIG.defaults.forms.defaultAmount,
+    swapPayUp: APP_CONFIG.defaults.forms.swapPayUp,
+  };
+}
+
+function resetNetworkScopedState(state: AppState, options: AppOptions): AppState {
+  return {
+    ...state,
+    options,
+    wallet: null,
+    cart: freshCart(),
+    lastWalletReturn: null,
+    openOffers: [],
+    openOffersSnapshot: null,
+    portfolio: [],
+    transactions: [],
+    selectedOrderId: '',
+    selectedPair: null,
+    assetInfo: configuredAssets(options.network, state.customAssets),
+    forms: freshForms(options.network, state.customAssets),
+    notices: {
+      ...state.notices,
+      offers: { message: 'Loading open offers...', tone: 'warning' },
+      portfolio: { message: 'Connect wallet to load portfolio.', tone: 'warning' },
+    },
+    loading: {
+      ...state.loading,
+      offers: false,
+      portfolio: false,
+    },
   };
 }
 
@@ -70,10 +139,9 @@ interface InitialStateSeed {
 }
 
 export function createInitialState(seed?: InitialStateSeed): AppState {
-  const options = { ...defaultOptions, ...(seed?.options || {}) };
+  const options = normalizeOptions(seed?.options || {});
   const customAssets = seed?.customAssets || {};
   const assetInfo = configuredAssets(options.network, customAssets);
-  const assetKeys = defaultAssetKeys(options.network, customAssets);
   return {
     appVersion: APP_CONFIG.version,
     migrationNeeded: seed?.migrationNeeded || false,
@@ -85,18 +153,8 @@ export function createInitialState(seed?: InitialStateSeed): AppState {
     selectedPair: seed?.selectedPair || null,
     options,
     forms: {
-      openOfferAssetKey: assetKeys.offer,
-      openAskAssetKey: assetKeys.ask,
-      openOfferAmount: '',
-      openAskAmount: '',
-      bulkOpenCount: '3',
-      bulkOpenVariancePercent: '0',
-      bulkOpenOfferVariancePercent: '0',
-      fillOfferAmount: '',
-      fillAskAmount: '',
-      swapOfferAmount: '',
-      swapPayUp: false,
-      ...(seed?.forms || {}),
+      ...freshForms(options.network, customAssets),
+      ...normalizeAmountForms(seed?.forms || {}),
     },
     wallet: seed?.wallet || null,
     cart: seed?.cart || freshCart(),
@@ -134,41 +192,37 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         action: action.tab === 'bulk-open' || action.tab === 'swap' ? state.action : action.tab,
       };
     case 'set-options': {
-      const options = { ...state.options, ...action.options };
       const networkChanged = action.options.network && action.options.network !== state.options.network;
-      const assetKeys = defaultAssetKeys(options.network, state.customAssets);
+      const options = networkChanged
+        ? resetNetworkScopedOptions(normalizeOptions({ ...state.options, ...action.options }))
+        : normalizeOptions({ ...state.options, ...action.options });
+      if (networkChanged) return resetNetworkScopedState(state, options);
       return {
         ...state,
         options,
-        selectedOrderId: networkChanged ? '' : state.selectedOrderId,
-        selectedPair: networkChanged ? null : state.selectedPair,
-        assetInfo: networkChanged ? configuredAssets(options.network, state.customAssets) : state.assetInfo,
-        forms: networkChanged
-          ? {
-              ...state.forms,
-              openOfferAssetKey: assetKeys.offer,
-              openAskAssetKey: assetKeys.ask,
-            }
-          : state.forms,
       };
     }
     case 'set-forms':
-      return { ...state, forms: { ...state.forms, ...action.forms } };
+      return { ...state, forms: { ...state.forms, ...normalizeAmountForms(action.forms) } };
     case 'set-wallet':
       return { ...state, wallet: action.wallet, portfolio: action.wallet ? state.portfolio : [] };
     case 'set-wallet-return':
       return { ...state, lastWalletReturn: action.payload };
     case 'add-cart-item': {
+      const items = cartItemsWithoutSourceCollisions(state.cart, [action.item]);
+      if (!items.length) return state;
       const cart = {
         ...state.cart,
-        items: [...state.cart.items, action.item],
+        items: [...state.cart.items, ...items],
       };
       return withCart(state, cart);
     }
     case 'add-cart-items': {
+      const items = cartItemsWithoutSourceCollisions(state.cart, action.items);
+      if (!items.length) return state;
       const cart = {
         ...state.cart,
-        items: [...state.cart.items, ...action.items],
+        items: [...state.cart.items, ...items],
       };
       return withCart(state, cart);
     }

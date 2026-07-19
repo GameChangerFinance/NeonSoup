@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { extname, resolve } from 'node:path';
 
 function googleAnalyticsPlugin(measurementId: string) {
   return {
@@ -61,6 +61,43 @@ function devIntentMiddleware() {
   };
 }
 
+const ASSET_CONTENT_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+};
+
+function devSharedAssetsMiddleware() {
+  return {
+    name: 'neonsoup-dev-shared-assets',
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const url = request.url || '';
+        if (!url.startsWith('/assets/')) {
+          next();
+          return;
+        }
+        const fileName = decodeURIComponent(url.slice('/assets/'.length).split('?')[0] || '');
+        if (!fileName || fileName.includes('..') || fileName.startsWith('/')) {
+          response.statusCode = 404;
+          response.end('Not found');
+          return;
+        }
+        try {
+          const file = await readFile(resolve(process.cwd(), 'src/assets', fileName));
+          response.setHeader('content-type', ASSET_CONTENT_TYPES[extname(fileName).toLowerCase()] || 'application/octet-stream');
+          response.end(file);
+        } catch {
+          response.statusCode = 404;
+          response.end('Asset not found');
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const envDir = resolve(process.cwd());
   const env = loadEnv(mode, envDir, '');
@@ -69,11 +106,13 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: 'src/devtool',
+    base: mode === 'production' ? '/devtool/' : '/',
     envDir,
-    plugins: [react(), googleAnalyticsPlugin(googleAnalyticsId), devIntentMiddleware()],
+    plugins: [react(), googleAnalyticsPlugin(googleAnalyticsId), devIntentMiddleware(), devSharedAssetsMiddleware()],
     build: {
-      outDir: '../../dist',
-      emptyOutDir: false,
+      target: 'esnext',
+      outDir: '../../dist/devtool',
+      emptyOutDir: true,
     },
     server: {
       port: 8081,

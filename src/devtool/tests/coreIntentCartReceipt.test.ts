@@ -2,6 +2,8 @@ import {
   buildCloseIntentArgs,
   buildFillIntentArgsForQuantity,
   buildOpenIntentArgs,
+  bookedSourceRefs,
+  cartItemsWithoutSourceCollisions,
   createCartItemSnapshot,
   createBundledGcscriptSource,
   createParallelGcscriptSource,
@@ -118,9 +120,10 @@ assert(cartItem.sourceOfferId === 'source-offer', 'Cart item snapshots preserve 
 assert(cartItem.pair?.offer.policyId === offerAsset.policyId, 'Cart item snapshots derive pair from args');
 
 const pendingItem: CartItem = { ...cartItem, id: 'pending', status: 'pending', txHash: 'submitted' };
+const confirmedItem: CartItem = { ...cartItem, id: 'confirmed', status: 'confirmed', selected: false, txHash: 'confirmed' };
 const draftDuplicate: CartItem = { ...cartItem, id: 'draft-duplicate', status: 'draft' };
 const cart = {
-  items: [cartItem, pendingItem],
+  items: [cartItem, pendingItem, confirmedItem],
   mode: 'bundle' as const,
   maxIntentsPerTransaction: 20,
   modalOpen: false,
@@ -129,9 +132,14 @@ const cart = {
 
 assert(selectedCartItems(cart).length === 2, 'selected Cart helper keeps current selection semantics');
 assert(visibleCartItems(cart).length === 1, 'visible Cart helper shows draft items by default');
+assert(bookedSourceRefs(cart).has(`${fillArgs['utxo-tx-hash']}#${fillArgs['utxo-tx-index']}`), 'Cart booked-source helper returns consumed UTxOs from all Cart item states');
 assert(
   !validateCartItemsCanBeAdded(cart, [draftDuplicate]).ok,
-  'Cart validation rejects duplicate draft fill source UTxOs',
+  'Cart validation rejects duplicate fill source UTxOs already booked by the Cart',
+);
+assert(
+  cartItemsWithoutSourceCollisions(cart, [draftDuplicate]).length === 0,
+  'Cart source-collision filter drops duplicate fill source UTxOs before reducer mutation',
 );
 assert(
   visibleCartItems({ ...cart, showConfirmedOnly: true }).every((item) => item.status !== 'draft'),
@@ -225,6 +233,7 @@ const bundled = createBundledGcscriptSource({
   items: [legacyFillItem, closeItem],
   maxIntentsPerTransaction: 1,
   returnUrlPattern: 'https://example.test/neonsoup',
+  networkTag: 'preprod',
   executionId: 'execution-fixed',
   groupRootId: 'bundle-fixed',
 });
@@ -243,9 +252,50 @@ assert((bundledRun.submit as Record<string, unknown>).type === 'submitTxs', 'bun
 assert((bundledRun.submit as Record<string, unknown>).extras === true, 'bundle submit keeps extras enabled');
 assert((bundledRun.submit as Record<string, unknown>).noFail === true, 'bundle submit keeps noFail enabled');
 
+const openItemA: CartItem = createCartItemSnapshot({
+  action: 'open',
+  args: openArgs,
+  intentId: 'open-a',
+  createdAt: 1000,
+});
+const openItemB: CartItem = createCartItemSnapshot({
+  action: 'open',
+  args: {
+    ...openArgs,
+    'intent-id': 'open-b',
+    'offer-quantity': '8',
+  },
+  intentId: 'open-b',
+  createdAt: 1001,
+});
+const bundledOpen = createBundledGcscriptSource({
+  items: [openItemA, openItemB],
+  maxIntentsPerTransaction: 20,
+  returnUrlPattern: 'https://example.test/neonsoup',
+  networkTag: 'preprod',
+  executionId: 'execution-open-fixed',
+  groupRootId: 'open-bundle-fixed',
+});
+const bundledOpenRun = bundledOpen.run as Record<string, Record<string, unknown>>;
+const bundledOpenTx0 = (bundledOpenRun.tx0 as Record<string, unknown>).run as Record<string, unknown>;
+const bundledOpenMints = bundledOpenTx0.mints as Array<Record<string, unknown>>;
+const bundledOpenWitnesses = bundledOpenTx0.witnesses as Record<string, Record<string, unknown>>;
+const bundledOpenPlutus = bundledOpenWitnesses.plutus as Record<string, unknown>;
+const bundledOpenConsumers = bundledOpenPlutus.consumers as Array<Record<string, unknown>>;
+const bundledOpenMint = bundledOpenMints[0] as Record<string, unknown>;
+
+assert(bundledOpenMints.length === 1, 'bundle mode groups same-policy beacon mints into one mint entry');
+assert((bundledOpenMint.assets as string[]).length === 6, 'grouped open beacon mint preserves all per-offer beacon assets');
+assert(bundledOpenConsumers.length === 1, 'bundle mode uses one mint consumer for the grouped beacon mint');
+assert(
+  (bundledOpenConsumers[0]?.redeemer as Record<string, unknown>).itemIdPattern === bundledOpenMint.idPattern,
+  'grouped beacon mint consumer points at the grouped mint idPattern',
+);
+
 const parallel = createParallelGcscriptSource({
   items: [legacyFillItem, closeItem],
   returnUrlPattern: 'https://example.test/neonsoup',
+  networkTag: 'preprod',
   executionId: 'parallel-fixed',
 });
 const parallelRun = parallel.run as Record<string, Record<string, unknown>>;

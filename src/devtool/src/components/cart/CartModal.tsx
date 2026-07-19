@@ -5,11 +5,12 @@ interface CartModalProps {
   state: AppState;
   dispatch: React.Dispatch<AppAction>;
   onRunSelected: () => void | Promise<void>;
+  onCopyRunUrl?: () => string | Promise<string>;
   runDisabled?: boolean;
   runDisabledReason?: string;
 }
 
-export function CartModal({ state, dispatch, onRunSelected, runDisabled = false, runDisabledReason = '' }: CartModalProps) {
+export function CartModal({ state, dispatch, onRunSelected, onCopyRunUrl, runDisabled = false, runDisabledReason = '' }: CartModalProps) {
   if (!state.cart.modalOpen) return null;
 
   return (
@@ -32,6 +33,7 @@ export function CartModal({ state, dispatch, onRunSelected, runDisabled = false,
               state={state}
               dispatch={dispatch}
               onRunSelected={onRunSelected}
+              {...(onCopyRunUrl ? { onCopyRunUrl } : {})}
               runDisabled={runDisabled}
               runDisabledReason={runDisabledReason}
               embedded

@@ -1,0 +1,349 @@
+{
+  "name": "NeonSoup DEX Design System",
+  "tagline": "Rebel kawaii cyberpunk execution for Cardano DeFi.",
+  "description": "NeonSoup is a peer-to-peer Cardano DeFi execution layer. The design system blends cypherpunk self-sovereignty, soup-kitchen warmth, holomorphic HUD panels, and CyberNeko state helpers into a Bootstrap-friendly web UI language.",
+  "sourceUrl": "https://github.com/GameChangerFinance/NeonSoup",
+  "logo": {
+    "primary": "assets/logo/logo.png",
+    "icon": "assets/logo/icon.png",
+    "alternates": [],
+    "notes": "The NeonSoup pot icon is the primary brand image. Use it as route/product emphasis or a brand signal, not as the current no-silos quote-card breakout."
+  },
+  "colors": [
+    {
+      "name": "background",
+      "cssVariable": "--ns-bg",
+      "value": "oklch(10% 0.045 282)",
+      "hex": "#080817",
+      "usage": "Dark cyberpunk page background and scene overlay base."
+    },
+    {
+      "name": "surface",
+      "cssVariable": "--ns-surface",
+      "value": "oklch(16% 0.055 282 / 0.78)",
+      "hex": "#17132d",
+      "usage": "Translucent panel and card glass."
+    },
+    {
+      "name": "surface strong",
+      "cssVariable": "--ns-surface-strong",
+      "value": "oklch(21% 0.07 286 / 0.9)",
+      "hex": "#211946",
+      "usage": "High-emphasis modules and quote cards."
+    },
+    {
+      "name": "foreground",
+      "cssVariable": "--ns-fg",
+      "value": "oklch(96% 0.018 215)",
+      "hex": "#eefbff",
+      "usage": "Primary text on dark surfaces."
+    },
+    {
+      "name": "muted",
+      "cssVariable": "--ns-muted",
+      "value": "oklch(74% 0.055 238)",
+      "hex": "#9ec6e8",
+      "usage": "Secondary body copy and metadata."
+    },
+    {
+      "name": "cyan rail",
+      "cssVariable": "--ns-accent",
+      "value": "oklch(82% 0.18 195)",
+      "hex": "#32f7ff",
+      "usage": "Structural rails, focus rings, secondary actions, and electric highlights."
+    },
+    {
+      "name": "magenta action",
+      "cssVariable": "--ns-accent-2",
+      "value": "oklch(73% 0.22 330)",
+      "hex": "#ff4fd8",
+      "usage": "Primary CTA color and restrained rebel glow."
+    },
+    {
+      "name": "violet depth",
+      "cssVariable": "--ns-accent-3",
+      "value": "oklch(61% 0.21 285)",
+      "hex": "#8b5cf6",
+      "usage": "Depth glows, HUD shadows, and dark-theme gradient support."
+    },
+    {
+      "name": "border",
+      "cssVariable": "--ns-border",
+      "value": "oklch(75% 0.14 210 / 0.35)",
+      "hex": "#4ccce9",
+      "usage": "Hairline card rails and control outlines."
+    },
+    {
+      "name": "success",
+      "cssVariable": "--ns-success",
+      "value": "oklch(78% 0.16 155)",
+      "hex": "#35e6a4",
+      "usage": "Valid route, confirmed wallet, and ready liquidity states."
+    },
+    {
+      "name": "warning",
+      "cssVariable": "--ns-warning",
+      "value": "oklch(82% 0.17 80)",
+      "hex": "#ffd166",
+      "usage": "Simulation warnings, testnet disclaimers, and attention states."
+    },
+    {
+      "name": "danger",
+      "cssVariable": "--ns-danger",
+      "value": "oklch(70% 0.2 25)",
+      "hex": "#ff5f6d",
+      "usage": "Blocked routes, rejected signatures, and high-risk states."
+    }
+  ],
+  "lightColors": [
+    {
+      "name": "light background",
+      "cssVariable": "--ns-bg",
+      "value": "oklch(98% 0.028 170)",
+      "hex": "#effff8",
+      "usage": "Solarpunk light theme page base."
+    },
+    {
+      "name": "light cyan rail",
+      "cssVariable": "--ns-accent",
+      "value": "oklch(72% 0.22 178)",
+      "hex": "#00e1cf",
+      "usage": "Light-theme rails, animation glows, focus rings, and secondary actions."
+    },
+    {
+      "name": "light output green",
+      "cssVariable": "--ns-success",
+      "value": "oklch(67% 0.23 151)",
+      "hex": "#00c86f",
+      "usage": "Estimated served output, successful routes, and confirmed states in light mode."
+    },
+    {
+      "name": "light info cyan",
+      "cssVariable": "--ns-info",
+      "value": "oklch(72% 0.21 190)",
+      "hex": "#00cdeb",
+      "usage": "Light-theme scanning, route discovery, and protocol note states."
+    }
+  ],
+  "themes": {
+    "dark": "Cyberpunk street-food kitchen: dark violet/blue base, cyan rails, magenta action glow, legible glass panels.",
+    "light": "Solarpunk kitchen lab: vivid cyan/teal surfaces, bright output-green success states, violet copy, magenta action accents, lower glow density."
+  },
+  "typography": {
+    "display": {
+      "family": "Archivo Black",
+      "fallbacks": [
+        "Arial Black",
+        "Impact",
+        "system-ui",
+        "sans-serif"
+      ],
+      "weights": [
+        400
+      ],
+      "usage": "Hero titles, manifesto headings, and loud rebel marks. Keep uppercase and tight."
+    },
+    "body": {
+      "family": "Rajdhani",
+      "fallbacks": [
+        "Sohne",
+        "Avenir Next",
+        "-apple-system",
+        "BlinkMacSystemFont",
+        "system-ui",
+        "sans-serif"
+      ],
+      "weights": [
+        500,
+        600,
+        700
+      ],
+      "usage": "Body copy, navigation, controls, and card text."
+    },
+    "mono": {
+      "family": "IBM Plex Mono",
+      "fallbacks": [
+        "JetBrains Mono",
+        "SFMono-Regular",
+        "ui-monospace",
+        "monospace"
+      ],
+      "weights": [
+        500,
+        600,
+        700
+      ],
+      "usage": "Labels, protocol metadata, ticks, IDs, and status readouts."
+    }
+  },
+  "voice": {
+    "adjectives": [
+      "rebel",
+      "kawaii",
+      "cyberpunk",
+      "self-sovereign",
+      "inspectable",
+      "street-ready",
+      "warm"
+    ],
+    "tone": "Direct, cypherpunk, and welcoming. The copy should feel like an open kitchen for self-custody, not a corporate exchange.",
+    "messagingPillars": [
+      "User-first execution on user devices.",
+      "No silos, no middlemen, no exclusive frontends.",
+      "Shared liquidity without centralized capture.",
+      "Inspectable, forkable, re-deployable interfaces.",
+      "Open intents that become wallet-sealed transactions at the last mile."
+    ],
+    "vocabulary": {
+      "use": [
+        "open intents",
+        "shared liquidity",
+        "route kitchen",
+        "wallet-sealed",
+        "self-sovereign",
+        "forkable",
+        "Cardano DeFi",
+        "testnet soup"
+      ],
+      "avoid": [
+        "exclusive frontend",
+        "centralized order book",
+        "batcher dependence",
+        "generic SaaS speed claims",
+        "ghost brand text",
+        "fake protocol metrics"
+      ]
+    }
+  },
+  "imagery": {
+    "style": "Holomorphic cyberpunk soup-kitchen world with kawaii product helpers, neon rails, violet-blue depth, cyan/magenta highlights, and restrained texture.",
+    "subjects": [
+      "NeonSoup pot icon",
+      "CyberNeko state helpers",
+      "dark cyberpunk soup-shop scenes",
+      "light solarpunk kitchen scenes",
+      "kitchen utility and action assets",
+      "wallet and route kitchen product modules",
+      "P2P soup separator pot-to-pot fluid flow"
+    ],
+    "treatment": "Use assets as intentional breakout layers or cropped hero/product moments. Never flood small text with full noisy images.",
+    "avoid": [
+      "standalone random mascot stickers",
+      "full atlas bleeds",
+      "unstyled native controls",
+      "rounded geometric hero type",
+      "holo-label pills",
+      "bottom-left clipped card decorations"
+    ],
+    "samples": [
+      {
+        "file": "assets/logo/icon.png",
+        "kind": "primary-icon"
+      },
+      {
+        "file": "assets/logo/logo.png",
+        "kind": "wordmark"
+      },
+      {
+        "file": "assets/images/dark-bg.png",
+        "kind": "dark-scene"
+      },
+      {
+        "file": "assets/images/light-bg.png",
+        "kind": "light-scene"
+      },
+      {
+        "file": "assets/cybernekos/*.png",
+        "kind": "state-mascots"
+      },
+      {
+        "file": "assets/kitchen/*.png",
+        "kind": "kitchen-utility-assets"
+      },
+      {
+        "file": "assets/images/empty_pot_bg.png",
+        "kind": "separator-pot-background"
+      },
+      {
+        "file": "assets/images/empty_pot_fg.png",
+        "kind": "separator-pot-foreground"
+      }
+    ]
+  },
+  "exports": {
+    "separatorCss": "p2p-soup-fluid-separator.css",
+    "separatorJs": "p2p-soup-fluid-separator.js",
+    "separatorHtml": "p2p-soup-fluid-separator.html"
+  },
+  "layout": {
+    "radius": "Cards use asymmetric 28px/16px/32px/14px posture; controls use 14px; pills use 999px.",
+    "borderWeight": "1px cyan or magenta hairline rails with inner glows and interlaced texture.",
+    "spacing": "8px baseline grid with extra top/right padding when mascot breakouts are present.",
+    "postureRules": [
+      "Let mascot, kitchen, and icon art break out from cards without clipping.",
+      "Raise the parent card z-index when a breakout crosses sibling cards.",
+      "Keep text wide in manifesto and quote cards; use kitchen art as the current no-silos quote-card breakout.",
+      "Use punk-mark labels instead of holo-label pills.",
+      "Custom-style every dropdown; hide the native select but keep it synchronized for forms.",
+      "CyberNekos and kitchen utilities share one breakout styling treatment on content cards.",
+      "Reserve internal padding so breakout art never covers headline or body copy."
+    ]
+  },
+  "components": [
+    {
+      "name": "holomorphic card",
+      "classes": [
+        "ns-card",
+        "ns-hud-card",
+        "ns-module-card"
+      ],
+      "notes": "Interlaced texture, neon rails, clipped corner glints, readable glass."
+    },
+    {
+      "name": "punk mark",
+      "classes": [
+        "ns-punk-mark"
+      ],
+      "notes": "Mono uppercase label with slashed cyan/magenta underline. Replaces the rejected holo-label pattern."
+    },
+    {
+      "name": "cyber select",
+      "classes": [
+        "ns-cyber-select",
+        "ns-cyber-select-trigger",
+        "ns-cyber-options",
+        "ns-cyber-option"
+      ],
+      "notes": "Styled dropdown shell for all select interactions."
+    },
+    {
+      "name": "mascot breakout",
+      "classes": [
+        "ns-mascot-card",
+        "ns-mascot-breakout",
+        "ns-kitchen-breakout",
+        "ns-breakout-art"
+      ],
+      "notes": "CyberNeko and kitchen art is absolute, pointer-events none, z-index above sibling cards; parent gets enough padding and the same styling treatment."
+    },
+    {
+      "name": "quote breakout",
+      "classes": [
+        "ns-icon-quote",
+        "ns-kitchen-breakout"
+      ],
+      "notes": "Full-width quote card with copy-first layout and kitchen artwork breaking out from the right edge."
+    },
+    {
+      "name": "p2p soup fluid separator",
+      "classes": [
+        "p2p_soup_fluid_separator",
+        "p2p_soup_fluid_separator-stage",
+        "p2p_soup_fluid_separator-track",
+        "p2p_soup_fluid_separator-rider",
+        "p2p_soup_fluid_separator-keyword"
+      ],
+      "notes": "Reusable scroll-linked pot-to-pot fluid catapult. Preserves interior-to-interior anchors, visible neon glows, bubbles, payload scaling, keyword-over-payload stacking, and mobile half-offscreen pots."
+    }
+  ]
+}

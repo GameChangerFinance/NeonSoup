@@ -1,0 +1,32 @@
+{
+  "exports": {
+    "ValidatorSetDeployment": {
+      "hasSubmitError": false,
+      "hasContentionError": false,
+      "status": "pending",
+      "version": "9ec41e7619f5ba9d3dd46dd194e2146098093721",
+      "kernelBeaconPolicy": {
+        "hash": "47cec2a1404ed91fc31124f29db15dc1aae77e0617868bcef351b8fd",
+        "deployment": {
+          "assetNameHex": "737761702d76312d6f6e652d7761795f4245505f3965633431653736",
+          "address": "addr_test1wq3vdxpczmh95mfwxk63a2t5kwnt4hlv0g6a5zvkqu38vvsfxfp07",
+          "utxo": {
+            "txHash": "4cede5c4ca5a22969aef708a61f12d786180e2679a438812c6bda99364934652",
+            "index": 5
+          }
+        }
+      },
+      "kernelSpendingValidator": {
+        "hash": "01fa36465dfe36e26c21fdbf720e4bdafcc0b86bb5367fca46012f56",
+        "deployment": {
+          "assetNameHex": "737761702d76312d6f6e652d7761795f5350565f3965633431653736",
+          "address": "addr_test1wq3vdxpczmh95mfwxk63a2t5kwnt4hlv0g6a5zvkqu38vvsfxfp07",
+          "utxo": {
+            "txHash": "4cede5c4ca5a22969aef708a61f12d786180e2679a438812c6bda99364934652",
+            "index": 6
+          }
+        }
+      }
+    }
+  }
+}

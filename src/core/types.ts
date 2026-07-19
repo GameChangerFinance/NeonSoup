@@ -5,6 +5,7 @@ export type CartExecutionMode = 'bundle' | 'parallel';
 export type CartItemStatus = 'draft' | 'pending' | 'confirmed' | 'failed';
 export type ProtocolAction = ActionMode | 'mixed' | 'unknown' | 'swap';
 export type OrderKind = 'one-way' | 'two-way' | 'future' | 'unknown';
+export type AssetTag = 'coin' | 'stablecoin' | 'mainstream' | 'community' | 'experimental';
 
 export interface AssetRef {
   policyId: string;
@@ -25,6 +26,7 @@ export interface AssetMetadata extends AssetRef {
   fingerprint?: string;
   registered?: boolean;
   known?: boolean;
+  tag?: AssetTag;
 }
 
 export interface ResolvedAsset extends AssetMetadata {
@@ -38,6 +40,20 @@ export interface AssetPair {
   offer: AssetRef;
   ask: AssetRef;
 }
+
+export interface ServiceFeeAsset extends AssetRef {
+  quantity: string;
+  displayQuantity?: string;
+  ticker?: string;
+}
+
+export interface ServiceFeeConfig {
+  address: string;
+  bundleSwap?: ServiceFeeAsset;
+  parallelSwap?: ServiceFeeAsset;
+}
+
+export type GcscriptPrivacyMode = 'connected' | 'incognito';
 
 export interface OpenOffer {
   id: string;
@@ -58,6 +74,9 @@ export interface OpenOffer {
   askBeacon: string;
   priceNumerator: string;
   priceDenominator: string;
+  previousInput?: { txHash: string; index: string } | null;
+  originalOfferQuantity?: string;
+  accumulatedAskQuantity?: string;
 }
 
 export interface OpenBookSnapshot {
@@ -89,6 +108,23 @@ export interface ProtocolTransaction {
   evidence?: 'chain' | 'wallet-receipt';
   participantStakeKeyHashes?: string[];
   outputOwnerStakeKeyHashes?: string[];
+  includedAtLabel?: string;
+  feeQuantity?: string;
+  details?: ProtocolTransactionDetail[];
+}
+
+export interface ProtocolTransactionDetail {
+  action: ActionMode | 'unknown';
+  inputRef?: string;
+  outputRef?: string;
+  offerPolicyId?: string;
+  offerAssetNameHex?: string;
+  askPolicyId?: string;
+  askAssetNameHex?: string;
+  offerQuantity?: string;
+  askQuantity?: string;
+  priceNumerator?: string;
+  priceDenominator?: string;
 }
 
 export type IntentArgs = Record<string, string>;
@@ -128,7 +164,7 @@ export interface CartItem {
 }
 
 export interface ExecutionOutputRef {
-  role: 'openedOffer' | 'remainingOffer' | 'filledOffer' | 'closedFunds';
+  role: 'openedOffer' | 'remainingOffer' | 'filledOffer' | 'closedFunds' | 'serviceFee';
   index: string | number;
 }
 
@@ -186,4 +222,7 @@ export interface WalletConnection {
   name: string;
   address: string;
   stakeKeyHash: string;
+  walletType?: string;
+  dltTag?: string;
+  networkTag?: NetworkTag;
 }

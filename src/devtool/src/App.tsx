@@ -16,6 +16,7 @@ import { OptionsPanel } from './components/options/OptionsPanel';
 import { CartModal } from './components/cart/CartModal';
 import { CartPanel } from './components/cart/CartPanel';
 import { SwapRouteBar } from './components/swap/SwapRouteBar';
+import { CopyIcon } from './components/common/CopyIcon';
 import { useAppDispatch, useAppState } from './state/appState';
 import { assetMap, balanceOf, resolveAsset, selectedOffer, visibleOffers, visiblePortfolio } from './state/selectors';
 import { assetTitle, configuredAssets } from './domain/assets';
@@ -39,9 +40,10 @@ import {
 } from './domain/swapQuote';
 import { safeError, short } from './domain/text';
 import { loadOpenOffers, loadPortfolio, loadTransactions } from './services/networkProvider';
-import { captureWalletReturn, consumeWalletReturn, openWalletCode } from './services/gcWallet';
+import { captureWalletReturn, consumeWalletReturn, openWalletCode, walletUrlForCode } from './services/gcWallet';
 import { fillAskAmount } from './services/intents';
 import {
+  bookedSourceRefs,
   createBulkOpenCartItems,
   createCartItemFromCurrentIntent,
   createSwapCartItems,
@@ -166,6 +168,20 @@ function bookPolicySummaryText(summary: SwapBookPolicySummary, receiveAsset: Res
 
 const WALLET_REQUIRED_MESSAGE =
   'Connect a wallet before operating. This is a temporary devtool restriction while wallet-agnostic intent execution is being fixed.';
+const WALLET_ACTION_COPY_EXTRA = 'Open this URL on the device where you want the wallet execute this action.';
+
+function WalletActionCopyButton({ value, disabled = false }: { value: () => string | Promise<string>; disabled?: boolean }) {
+  if (disabled) return null;
+  return (
+    <CopyIcon
+      value={value}
+      label="Copy wallet action URL"
+      className="wallet-action-copy"
+      disabled={disabled}
+      copyMessage={{ subject: 'wallet action URL', extra: WALLET_ACTION_COPY_EXTRA }}
+    />
+  );
+}
 
 export default function App() {
   const state = useAppState();
@@ -187,6 +203,7 @@ export default function App() {
   const pairOffers = offers.filter((item) =>
     pairMatches(item, pairOfferKey, pairAskKey, assets),
   );
+  const excludedUtxoRefs = useMemo(() => bookedSourceRefs(state.cart), [state.cart]);
   const swapQuote = useMemo(
     () =>
       quoteSwap({
@@ -195,14 +212,20 @@ export default function App() {
         receiveAsset: ask,
         offerAmount: state.forms.swapOfferAmount,
         payUp: state.forms.swapPayUp,
-        slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
-        payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+        excludedUtxoRefs,
+        slippageToleranceBps: percentToBps(
+          state.options.swapSlippageTolerancePercent,
+          APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
+        ),
+        warningSlippageMultiplier: APP_CONFIG.defaults.quote.warningSlippageMultiplier,
+        payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
       }),
     [
       ask,
       offer,
       state.forms.swapOfferAmount,
       state.forms.swapPayUp,
+      excludedUtxoRefs,
       state.openOffers,
       state.options.swapPayUpPercent,
       state.options.swapSlippageTolerancePercent,
@@ -261,8 +284,7 @@ export default function App() {
       },
     });
 
-    void refreshOffers(receipt ? [...new Set(receipt.items.map((item) => item.txHash))] : []);
-    if (state.wallet?.address || wallet?.address) void refreshPortfolio();
+    void refreshNetworkData(receipt ? [...new Set(receipt.items.map((item) => item.txHash))] : [], wallet?.address || state.wallet?.address || null);
   }
 
   useEffect(() => {
@@ -315,15 +337,30 @@ export default function App() {
   }, [dispatch]);
 
   useEffect(() => {
-    void refreshOffers();
-    if (state.wallet?.address) void refreshPortfolio();
-    else portfolioRefreshId.current += 1;
+    function onCopy(event: Event) {
+      if (!(event instanceof CustomEvent) || typeof event.detail?.message !== 'string') return;
+      dispatch({
+        type: 'set-notice',
+        key: 'app',
+        notice: {
+          tone: event.detail.tone === 'danger' ? 'danger' : 'info',
+          message: event.detail.message,
+        },
+      });
+    }
+
+    window.addEventListener('neonsoup-copy', onCopy);
+    return () => window.removeEventListener('neonsoup-copy', onCopy);
+  }, [dispatch]);
+
+  useEffect(() => {
+    void refreshNetworkData();
     // Network/provider changes should refresh data; avoid depending on all state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.options.network, state.options.provider]);
 
   useEffect(() => {
-    if (state.wallet?.address) void refreshPortfolio();
+    if (state.wallet?.address) void refreshNetworkData([], state.wallet.address);
     else portfolioRefreshId.current += 1;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.wallet?.address]);
@@ -353,8 +390,7 @@ export default function App() {
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      void refreshOffers();
-      if (state.wallet?.address) void refreshPortfolio();
+      void refreshNetworkData();
     }, APP_CONFIG.pollingIntervalMs);
     return () => window.clearInterval(id);
     // Polling uses current visible network/wallet state through dependency reset.
@@ -391,7 +427,7 @@ export default function App() {
         transactions: confirmedChainTransactions.map((transaction) =>
           protocolTransactionFromChain(
             transaction,
-            APP_CONFIG.networks[state.options.network].beaconPolicy || APP_CONFIG.beaconPolicy,
+            APP_CONFIG.networks[state.options.network].validator.beaconsPolicy.scriptHashHex,
           ),
         ),
       });
@@ -453,8 +489,8 @@ export default function App() {
     }
   }
 
-  async function refreshPortfolio() {
-    if (!state.wallet?.address) {
+  async function refreshPortfolio(walletAddress = state.wallet?.address) {
+    if (!walletAddress) {
       dispatch({
         type: 'set-notice',
         key: 'portfolio',
@@ -465,7 +501,7 @@ export default function App() {
     const refreshId = ++portfolioRefreshId.current;
     dispatch({ type: 'set-loading', key: 'portfolio', value: true });
     try {
-      const loaded = await loadPortfolio(state, state.wallet.address);
+      const loaded = await loadPortfolio(state, walletAddress);
       if (refreshId !== portfolioRefreshId.current) return;
       dispatch({ type: 'set-asset-info', assets: loaded.assets });
       dispatch({ type: 'set-portfolio', portfolio: loaded.data });
@@ -488,6 +524,12 @@ export default function App() {
         dispatch({ type: 'set-loading', key: 'portfolio', value: false });
       }
     }
+  }
+
+  async function refreshNetworkData(extraPendingHashes: string[] = [], walletAddress: string | null | undefined = state.wallet?.address): Promise<void> {
+    await refreshOffers(extraPendingHashes);
+    if (walletAddress) await refreshPortfolio(walletAddress);
+    else portfolioRefreshId.current += 1;
   }
 
   function selectFill(item: OpenOffer) {
@@ -568,10 +610,41 @@ export default function App() {
       receiveAsset: ask,
       offerAmount: state.forms.swapOfferAmount,
       payUp: state.forms.swapPayUp,
-      slippageToleranceBps: percentToBps(state.options.swapSlippageTolerancePercent, 0.5),
-      payUpBps: percentToBps(state.options.swapPayUpPercent, 1),
+      excludedUtxoRefs,
+      slippageToleranceBps: percentToBps(
+        state.options.swapSlippageTolerancePercent,
+        APP_CONFIG.defaults.quote.slippageTolerancePercentFallback,
+      ),
+      warningSlippageMultiplier: APP_CONFIG.defaults.quote.warningSlippageMultiplier,
+      payUpBps: percentToBps(state.options.swapPayUpPercent, APP_CONFIG.defaults.quote.payUpPercentFallback),
     });
     return createSwapCartItems(state, freshQuote);
+  }
+
+  async function walletUrlForItems(items: CartItem[]): Promise<string> {
+    if (!state.wallet) throw new Error(WALLET_REQUIRED_MESSAGE);
+    if (!items.length) throw new Error('Select at least one draft or failed intent to run.');
+    const code =
+      state.cart.mode === 'bundle'
+        ? await buildBundledGcscriptIntent({
+            state,
+            items,
+            maxIntentsPerTransaction: state.cart.maxIntentsPerTransaction,
+          })
+        : await buildParallelGcscriptIntent({ state, items });
+    return walletUrlForCode(state, code);
+  }
+
+  function walletUrlForCurrentAction(): Promise<string> {
+    return walletUrlForItems([createCartItemFromCurrentIntent(state)]);
+  }
+
+  async function walletUrlForCurrentSwap(): Promise<string> {
+    return walletUrlForItems(await createCurrentSwapCartItems());
+  }
+
+  function walletUrlForSelectedCart(): Promise<string> {
+    return walletUrlForItems(selectedCartItems(state.cart).filter((item) => item.status === 'draft' || item.status === 'failed'));
   }
 
   async function addSwapToCart() {
@@ -874,15 +947,18 @@ export default function App() {
                 </div>
               </div>
               <div className="col-12 d-flex flex-wrap justify-content-end gap-2">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => void runSwap()}
-                  disabled={walletLaunchDisabled}
-                  title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Swap in wallet'}
-                >
-                  Swap
-                </button>
+                <span className="wallet-action-wrap">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void runSwap()}
+                    disabled={walletLaunchDisabled}
+                    title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Swap in wallet'}
+                  >
+                    Swap
+                  </button>
+                  <WalletActionCopyButton value={walletUrlForCurrentSwap} disabled={walletLaunchDisabled} />
+                </span>
                 <CartAddButton onClick={() => void addSwapToCart()} />
               </div>
             </div>
@@ -916,15 +992,18 @@ export default function App() {
                 </div>
               ) : null}
               <div className="col-12 d-flex flex-wrap justify-content-end gap-2">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={runAction}
-                  disabled={walletLaunchDisabled}
-                  title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Open in wallet'}
-                >
-                  Open offer
-                </button>
+                <span className="wallet-action-wrap">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={runAction}
+                    disabled={walletLaunchDisabled}
+                    title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Open in wallet'}
+                  >
+                    Open offer
+                  </button>
+                  <WalletActionCopyButton value={walletUrlForCurrentAction} disabled={walletLaunchDisabled} />
+                </span>
                 <CartAddButton onClick={addCurrentIntentToCart} />
               </div>
             </div>
@@ -1031,15 +1110,18 @@ export default function App() {
                 </div>
               ) : null}
               <div className="col-12 d-flex flex-wrap justify-content-end gap-2">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={runAction}
-                  disabled={walletLaunchDisabled}
-                  title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Fill in wallet'}
-                >
-                  Fill offer
-                </button>
+                <span className="wallet-action-wrap">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={runAction}
+                    disabled={walletLaunchDisabled}
+                    title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Fill in wallet'}
+                  >
+                    Fill offer
+                  </button>
+                  <WalletActionCopyButton value={walletUrlForCurrentAction} disabled={walletLaunchDisabled} />
+                </span>
                 <CartAddButton onClick={addFillToCart} />
               </div>
             </div>
@@ -1053,15 +1135,18 @@ export default function App() {
                   : 'Select one of your offers to close.'}
               </FormAlert>
               <div className="d-flex flex-wrap justify-content-end gap-2">
-                <button
-                  type="button"
-                  className="btn btn-outline-danger"
-                  onClick={runAction}
-                  disabled={walletLaunchDisabled}
-                  title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Close in wallet'}
-                >
-                  Close offer
-                </button>
+                <span className="wallet-action-wrap">
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger"
+                    onClick={runAction}
+                    disabled={walletLaunchDisabled}
+                    title={walletLaunchDisabled ? WALLET_REQUIRED_MESSAGE : 'Launch Close in wallet'}
+                  >
+                    Close offer
+                  </button>
+                  <WalletActionCopyButton value={walletUrlForCurrentAction} disabled={walletLaunchDisabled} />
+                </span>
                 <CartAddButton onClick={addCurrentIntentToCart} />
               </div>
             </div>
@@ -1215,6 +1300,7 @@ export default function App() {
           state={state}
           dispatch={dispatch}
           onRunSelected={runCartSelected}
+          onCopyRunUrl={walletUrlForSelectedCart}
           runDisabled={walletLaunchDisabled}
           runDisabledReason={WALLET_REQUIRED_MESSAGE}
         />
@@ -1268,6 +1354,7 @@ export default function App() {
         state={state}
         dispatch={dispatch}
         onRunSelected={runCartSelected}
+        onCopyRunUrl={walletUrlForSelectedCart}
         runDisabled={walletLaunchDisabled}
         runDisabledReason={WALLET_REQUIRED_MESSAGE}
       />

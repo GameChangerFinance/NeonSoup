@@ -126,8 +126,11 @@
                                     ]},
                                     {"int": "{jsonToObj(get('args.utxo-tx-index'))}"}
                                 ]}
-                            ]},
-                            {"constructor": 1, "fields": []}
+                            ]}
+                            // Audited v1 SwapDatum ends at prev_input = Some(input_ref).
+                            // V2 switch-back note: after re-verifying the deployed v2
+                            // Aiken datum shape, restore the extra trailing option field:
+                            // ,{"constructor": 1, "fields": []}
                         ]
                     }
                 }

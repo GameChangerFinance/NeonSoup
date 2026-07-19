@@ -1,0 +1,5 @@
+{
+  "title": "Public Alpha",
+  "body": "NeonSoup is currently under development. Because its code is already released as open source and anyone can deploy it, this release is considered Public Alpha for early testing and feedback, including feedback from the Gimbalabs Piece of Pie Hackathon.\nThe software may be unstable, incomplete, or unavailable without notice. It is provided as-is. Use at your own risk. We are not responsible for any loss, damage, misuse, or unintended consequences resulting from its use.",
+  "landingDescription": "NeonSoup is under development, open source, and available as a Public Alpha for early testing and feedback. Public Mainnet exists, but NeonSoup is not production-ready; the software may be unstable, incomplete, or unavailable without notice and is provided as-is. Use at your own risk."
+}

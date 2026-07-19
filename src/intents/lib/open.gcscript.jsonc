@@ -73,8 +73,12 @@
                                 {"int": "{jsonToObj(get('args.price-numerator'))}"},
                                 {"int": "{jsonToObj(get('args.price-denominator'))}"}
                             ]},
-                            {"constructor": 1, "fields": []},
+                            // Audited v1 SwapDatum has one trailing field: prev_input = None.
                             {"constructor": 1, "fields": []}
+                            // V2 switch-back note: if migrating back to the prior NeonSoup v2 validator,
+                            // re-check the v2 datum type before restoring any extra trailing fields.
+                            // The old v2-era shape used an additional option-like field here.
+                            // ,{"constructor": 1, "fields": []}
                         ]
                     }
                 }
@@ -86,7 +90,11 @@
                 "fromJSON": {
                     "schema": 1,
                     "obj": {
-                        "constructor": 1,
+                        // Audited v1 BeaconRedeemer: 0 = CreateOrCloseSwaps (minting),
+                        // 1 = UpdateSwaps (staking). Open mints beacons, so use 0.
+                        // V2 switch-back note: re-check the v2 BeaconRedeemer constructor order
+                        // before changing this; constructor 1 fails v1 minting with the staking branch.
+                        "constructor": 0,
                         "fields": []
                     }
                 }

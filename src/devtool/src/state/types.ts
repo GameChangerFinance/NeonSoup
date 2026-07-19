@@ -26,6 +26,7 @@ export type {
   PortfolioAsset,
   ProtocolAction,
   ProtocolTransaction,
+  ProtocolTransactionDetail,
   ResolvedAsset,
   WalletConnection,
 } from '../../../core/types';
@@ -50,12 +51,17 @@ import type {
 
 export interface AppOptions {
   network: NetworkTag;
+  availableNetworks: NetworkTag[];
   provider: NetworkProviderKind;
+  providerUrl: string;
   blockfrostUrl: string;
   blockfrostKey: string;
   gcWalletUrlPattern: string;
   swapSlippageTolerancePercent: number;
   swapPayUpPercent: number;
+  toastAutoHideMs: number;
+  historyFetchLimit: number;
+  cardanoscanTxUrlPattern: string;
   popupMode: boolean;
   hideUnknownOffers: boolean;
   hideUnknownPortfolio: boolean;

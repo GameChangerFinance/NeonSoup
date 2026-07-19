@@ -26,7 +26,7 @@ export function AppShell({ children }: AppShellProps) {
 
   async function connect() {
     try {
-      await openWalletCode(state, connectIntent());
+      await openWalletCode(state, connectIntent(state));
     } catch (error) {
       dispatch({
         type: 'set-notice',

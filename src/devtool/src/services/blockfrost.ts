@@ -31,7 +31,12 @@ interface BlockfrostUtxo {
 interface BlockfrostTransaction {
   hash?: string;
   block_time?: number;
+  fees?: string;
   valid_contract?: boolean;
+}
+
+interface BlockfrostAddressTransaction {
+  tx_hash?: string;
 }
 
 interface BlockfrostTransactionIo {
@@ -51,7 +56,7 @@ interface BlockfrostTransactionUtxos {
 
 function endpoint(networkTag: NetworkTag, options: AppOptions): string {
   const network = APP_CONFIG.networks[networkTag];
-  const candidates = [options.blockfrostUrl, network.blockfrostUrl, network.hostedBlockfrostUrl];
+  const candidates = [options.providerUrl, options.blockfrostUrl, network.blockfrostUrl, network.hostedBlockfrostUrl];
   const url = candidates
     .map((value) => (value || '').trim())
     .find((value) => value && value !== '/');
@@ -104,7 +109,7 @@ export async function fetchAssetInfo(
 }
 
 export async function fetchOpenOffers(context: ProviderContext): Promise<OpenOffer[]> {
-  const beacon = APP_CONFIG.networks[context.networkTag].beaconPolicy || APP_CONFIG.beaconPolicy;
+  const beacon = APP_CONFIG.networks[context.networkTag].validator.beaconsPolicy.scriptHashHex;
   const beaconAssets = await pages<BlockfrostPolicyAsset>(`/assets/policy/${beacon}`, context);
   const live = beaconAssets.filter((asset) => asset.quantity !== '0');
   const addresses = new Set<string>();
@@ -124,7 +129,7 @@ export async function fetchOpenOffers(context: ProviderContext): Promise<OpenOff
         (item) => (item[blockfrostAssetIdField] || '').startsWith(beacon) && item.quantity === '1',
       ).length;
       if (beaconCount < 3) continue;
-      const datum = parseSwapDatum(utxo.inline_datum);
+      const datum = parseSwapDatum(utxo.inline_datum, APP_CONFIG.networks[context.networkTag].validatorInfo.protocolVersion);
       if (!datum) continue;
       const offerAssetId = assetIdOf(datum.offerPolicyId, datum.offerAssetName);
       const askAssetId = assetIdOf(datum.askPolicyId, datum.askAssetName);
@@ -218,6 +223,7 @@ async function fetchTransactions(context: ProviderContext, txHashes: readonly st
       return {
         hash: transaction.hash || io.hash || txHash,
         includedAt: (transaction.block_time || 0) * 1000,
+        ...(transaction.fees ? { fee: transaction.fees } : {}),
         ...(typeof transaction.valid_contract === 'boolean' ? { validContract: transaction.valid_contract } : {}),
         inputs: (io.inputs || []).map(mapTransactionIo),
         outputs: (io.outputs || []).map(mapTransactionIo),
@@ -226,6 +232,19 @@ async function fetchTransactions(context: ProviderContext, txHashes: readonly st
   );
   return transactions.filter((transaction): transaction is ChainTransaction => Boolean(transaction));
 }
+
+async function fetchAddressTransactions(
+  context: ProviderContext,
+  address: string,
+  limit = 50,
+): Promise<ChainTransaction[]> {
+  const safeLimit = Math.max(1, Math.min(250, Math.floor(limit) || 50));
+  const pageCount = Math.max(1, Math.ceil(safeLimit / 100));
+  const rows = await pages<BlockfrostAddressTransaction>(`/addresses/${address}/transactions?order=desc`, context, pageCount);
+  const hashes = rows.map((row) => row.tx_hash || '').filter(Boolean).slice(0, safeLimit);
+  return fetchTransactions(context, hashes);
+}
+
 
 async function fetchAssetsInfo(
   context: ProviderContext,
@@ -259,5 +278,6 @@ export const blockfrostProvider: NetworkProvider = {
     return { data, assets: Object.fromEntries(data.map((asset) => [asset.assetKey, asset])) };
   },
   getTransactions: fetchTransactions,
+  getAddressTransactions: fetchAddressTransactions,
   getConfirmedTransactionHashes: fetchConfirmedTransactionHashes,
 };

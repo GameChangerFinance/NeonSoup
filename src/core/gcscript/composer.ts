@@ -1,10 +1,26 @@
-import type { CartItem, ExecutionReceiptItem, GcscriptArgs, IntentTemplate } from '../types';
+import type {
+  CartItem,
+  ExecutionReceiptItem,
+  GcscriptArgs,
+  GcscriptPrivacyMode,
+  IntentTemplate,
+  ServiceFeeAsset,
+  ServiceFeeConfig,
+} from '../types';
 
 type GcNode = Record<string, unknown>;
 
 const NEONSOUP_EXECUTION_EXPORT = 'neonsoupExecution';
 const CARDANO_METADATA_MSG_LABEL = '674';
 const COLLATERAL_COIN_SELECTION = 'LASLAD';
+const NATIVE_SCRIPT_SIGNER_OPTIONS = {
+  autoProvision: {
+    workspaceNativeScript: true,
+  },
+  autoOptionalSigners: {
+    nativeScript: true,
+  },
+} as const;
 const SUBMIT_TXS_OPTIONS = {
   mode: 'noWait',
   noFail: true,
@@ -39,14 +55,22 @@ export interface BundledGcscriptSourceArgs {
   items: CartItem[];
   maxIntentsPerTransaction: number;
   returnUrlPattern: string;
+  networkTag: string;
+  expectedAddress?: string | undefined;
   executionId?: string;
   groupRootId?: string;
+  serviceFees?: ServiceFeeConfig;
+  privacyMode?: GcscriptPrivacyMode;
 }
 
 export interface ParallelGcscriptSourceArgs {
   items: CartItem[];
   returnUrlPattern: string;
+  networkTag: string;
+  expectedAddress?: string | undefined;
   executionId?: string;
+  serviceFees?: ServiceFeeConfig;
+  privacyMode?: GcscriptPrivacyMode;
 }
 
 function shortId(prefix: string): string {
@@ -84,15 +108,72 @@ function libImportFor(item: CartItem): { key: string; uri: string } {
   return { key: 'close', uri: 'app://lib/close.gcscript.jsonc' };
 }
 
-function argRefsFor(item: CartItem, itemIndex: number): GcNode {
+function walletCredentialNodes(): GcNode {
+  return {
+    myAddress: { type: 'getCurrentAddress' },
+    myAddressInfo: {
+      type: 'macro',
+      run: "{getAddressInfo(get('cache.myAddress'))}",
+    },
+    stakingKeyHash: {
+      type: 'macro',
+      run: "{get('cache.myAddressInfo.stakingKeyHash')}",
+    },
+    stakingScriptHash: {
+      type: 'macro',
+      run: "{get('cache.myAddressInfo.stakingScriptHash')}",
+    },
+  };
+}
+
+function walletIdentityRequirementNodes(
+  privacyMode: GcscriptPrivacyMode,
+  expectedAddress: string | undefined,
+): GcNode {
+  if (privacyMode === 'incognito') return {};
+  // TODO(wallet-devex): official require supports reward-address gates, but not
+  // a direct stake credential hash gate. Keep only the address match until
+  // wallet-side stake/reward credential enforcement has a stable schema primitive.
+  return {
+    ...(expectedAddress
+      ? {
+          walletAddressCheck: {
+            type: 'macro',
+            run: "{assert(eq(get('cache.myAddress'),get('args.expected-address')),'Wallet address does not match connected NeonSoup wallet')}",
+          },
+        }
+      : {}),
+  };
+}
+
+function networkRequirementNodes(): GcNode {
+  return {
+    networkInfo: { type: 'getNetworkInfo' },
+  };
+}
+
+function argRefsFor(item: CartItem, itemIndex: number, privacyMode: GcscriptPrivacyMode): GcNode {
   const args = Object.fromEntries(
     Object.keys(item.args).map((key) => [key, `{get('args.items.${itemIndex}.protocol-args.${key}')}`]),
   );
+  args.dltTag = "{get('cache.networkInfo.dltTag')}";
+  args.networkTag = "{get('cache.networkInfo.networkTag')}";
+  if (privacyMode === 'incognito' && item.name === 'open') {
+    args['owner-stake-keyhash'] = "{get('cache.stakingKeyHash')}";
+    args['owner-stake-script-hash'] = "{get('cache.stakingScriptHash')}";
+  }
   if (item.name === 'fill' || item.name === 'close') {
     args['offer-address'] = "{get('cache.myAddress')}";
     if (!('utxo-ask-quantity' in item.args)) args['utxo-ask-quantity'] = '0';
   }
   return args;
+}
+
+function txOptions(): GcNode {
+  return {
+    collateralCoinSelection: COLLATERAL_COIN_SELECTION,
+    ...NATIVE_SCRIPT_SIGNER_OPTIONS,
+  };
 }
 
 function txFeatureReturnUrl(returnUrlPattern: string): string {
@@ -103,6 +184,53 @@ function txFeatureReturnUrl(returnUrlPattern: string): string {
 
 function compactId(value: string): string {
   return value.length > 11 ? `${value.slice(0, 4)}...${value.slice(-4)}` : value;
+}
+
+function outputIdPart(value: string): string {
+  return (value || 'swap').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 24) || 'swap';
+}
+
+function serviceFeeForMode(mode: 'bundle' | 'parallel', serviceFees: ServiceFeeConfig | undefined): ServiceFeeAsset | undefined {
+  if (!serviceFees?.address) return undefined;
+  return mode === 'parallel' ? serviceFees.parallelSwap : serviceFees.bundleSwap;
+}
+
+function serviceFeeType(mode: 'bundle' | 'parallel'): string {
+  return mode === 'parallel' ? 'parallel-swap-service-fee' : 'bundle-swap-service-fee';
+}
+
+function serviceFeeDisplay(fee: ServiceFeeAsset): string {
+  const ticker = fee.ticker || (fee.policyId === 'ada' && fee.assetNameHex === 'ada' ? 'ADA' : `${fee.policyId}.${fee.assetNameHex}`);
+  return `${fee.displayQuantity || fee.quantity} ${ticker}`;
+}
+
+function swapActionIds(entries: readonly ComposeEntry[]): string[] {
+  const ids = new Set<string>();
+  entries.forEach(({ item }) => {
+    if (item.name !== 'fill') return;
+    ids.add(item.args['swap-action-id'] || item.args['intent-id'] || item.id);
+  });
+  return [...ids];
+}
+
+function serviceFeeOutputsFor(
+  mode: 'bundle' | 'parallel',
+  source: ReceiptGroupSource,
+  serviceFees: ServiceFeeConfig | undefined,
+): GcNode[] {
+  const fee = serviceFeeForMode(mode, serviceFees);
+  if (!fee || !serviceFees?.address) return [];
+  return swapActionIds(source.entries).map((swapActionId, index) => ({
+    idPattern: `P2PDeFiKernel-OWS-${serviceFeeType(mode)}-${source.group.id}-${outputIdPart(swapActionId)}-${index + 1}`,
+    address: serviceFees.address,
+    assets: [
+      {
+        policyId: fee.policyId,
+        assetNameHex: fee.assetNameHex,
+        quantity: fee.quantity,
+      },
+    ],
+  }));
 }
 
 function rootTitle(items: CartItem[]): string {
@@ -127,7 +255,13 @@ function groupSummary(group: ComposeGroup, totalItems: number): string {
   return `${verb} ${group.items.length}/${totalItems} offers`;
 }
 
-function metadataMsgFor(group: ComposeGroup, totalItems: number, allItems: CartItem[]): string[] {
+function metadataMsgFor(
+  mode: 'bundle' | 'parallel',
+  group: ComposeGroup,
+  totalItems: number,
+  allItems: CartItem[],
+  serviceFees: ServiceFeeConfig | undefined,
+): string[] {
   const items = group.items.slice(0, 8);
   const lines = items.flatMap((item, index) => {
     const ref = item.args['utxo-tx-hash']
@@ -138,8 +272,15 @@ function metadataMsgFor(group: ComposeGroup, totalItems: number, allItems: CartI
       `Item ${compactId(item.id)}\n`,
     ];
   });
+  const fee = serviceFeeForMode(mode, serviceFees);
+  const feeLines =
+    fee && serviceFees?.address
+      ? [...new Set(group.items.filter((item) => item.name === 'fill').map((item) => item.args['swap-action-id'] || item.id))].map(
+          () => `${serviceFeeType(mode)}: ${serviceFeeDisplay(fee)}\n`,
+        )
+      : [];
   if (group.items.length > items.length) lines.push(`+${group.items.length - items.length} more\n`);
-  return [rootTitle(allItems) + '\n', groupSummary(group, totalItems) + '\n', `Group ${compactId(group.id)}\n`, ...lines];
+  return [rootTitle(allItems) + '\n', groupSummary(group, totalItems) + '\n', `Group ${compactId(group.id)}\n`, ...feeLines, ...lines];
 }
 
 function groupEntries(group: ComposeGroup, groupIndex: number, globalOffset: number): ComposeEntry[] {
@@ -170,23 +311,93 @@ function outputArgs(item: CartItem): Array<{ role: ExecutionReceiptItem['outputs
   return [{ role: 'closedFunds', idPattern: `${tag}-unfilledOffer` }];
 }
 
-function receiptArgs(mode: 'bundle' | 'parallel', executionId: string, sources: ReceiptGroupSource[]): GcscriptArgs {
+function hasBeaconMint(entry: ComposeEntry): boolean {
+  return entry.item.name === 'open' || entry.item.name === 'close';
+}
+
+function groupedBeaconMintIdPattern(group: ComposeGroup): string {
+  return `P2PDeFiKernel-OWS-${group.id}-beacons`;
+}
+
+function groupedBeaconMints(group: ComposeGroup, entries: ComposeEntry[]): GcNode[] {
+  const mintEntries = entries.filter(hasBeaconMint);
+  const first = mintEntries[0];
+  if (!first) return [];
+
+  return [
+    {
+      idPattern: groupedBeaconMintIdPattern(group),
+      policyId: `{get('cache.${first.cachePath}.tx.mints.beacons.policyId')}`,
+      assets: mintEntries.flatMap(({ cachePath }) => [
+        `{get('cache.${cachePath}.tx.mints.beacons.assets.0')}`,
+        `{get('cache.${cachePath}.tx.mints.beacons.assets.1')}`,
+        `{get('cache.${cachePath}.tx.mints.beacons.assets.2')}`,
+      ]),
+    },
+  ];
+}
+
+function groupedPlutusScripts(entries: ComposeEntry[]): string[] {
+  const beaconScript = entries.find(hasBeaconMint);
+  const spendingScript = entries.find(({ item }) => item.name === 'fill' || item.name === 'close');
+  return [
+    ...(beaconScript ? [`{get('cache.${beaconScript.cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`] : []),
+    ...(spendingScript ? [`{get('cache.${spendingScript.cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`] : []),
+  ];
+}
+
+function groupedPlutusConsumers(group: ComposeGroup, entries: ComposeEntry[]): Array<GcNode | string> {
+  const beaconConsumer = entries.find(hasBeaconMint);
+  const consumers: Array<GcNode | string> = [];
+
+  if (beaconConsumer) {
+    consumers.push({
+      scriptHashHex: `{get('cache.${beaconConsumer.cachePath}.tx.witnesses.plutus.consumers.beaconsMint.scriptHashHex')}`,
+      redeemer: {
+        dataHex: `{get('cache.${beaconConsumer.cachePath}.tx.witnesses.plutus.consumers.beaconsMint.redeemer.dataHex')}`,
+        type: 'mint',
+        itemIdPattern: groupedBeaconMintIdPattern(group),
+      },
+    });
+  }
+
+  consumers.push(
+    ...entries
+      .filter(({ item }) => item.name === 'fill' || item.name === 'close')
+      .map(({ cachePath }) => `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`),
+  );
+
+  return consumers;
+}
+
+function receiptArgs(
+  mode: 'bundle' | 'parallel',
+  executionId: string,
+  sources: ReceiptGroupSource[],
+  expectedAddress: string | undefined,
+  serviceFees?: ServiceFeeConfig,
+): GcscriptArgs {
   const items = sources.flatMap(({ group }) => group.items);
   return {
     mode,
+    ...(expectedAddress ? { 'expected-address': expectedAddress } : {}),
     'execution-id': executionId,
     'item-count': items.length,
     'group-count': sources.length,
-    groups: sources.map(({ group }, groupIndex) => ({
-      'group-id': group.id,
-      'group-index': groupIndex,
-      'group-count': sources.length,
-      'build-title': transactionTitle(group, items.length),
-      'build-id': `${group.id}-${groupIndex + 1}of${sources.length}`,
-      tags: ['p2p-defi-kernel', 'neonsoup', ...new Set(group.items.map((item) => item.name))],
-      'index-of': groupIndex + 1,
-      'metadata-msg': metadataMsgFor(group, items.length, items),
-    })),
+    groups: sources.map((source, groupIndex) => {
+      const { group } = source;
+      return {
+        'group-id': group.id,
+        'group-index': groupIndex,
+        'group-count': sources.length,
+        'build-title': transactionTitle(group, items.length),
+        'build-id': `${group.id}-${groupIndex + 1}of${sources.length}`,
+        tags: ['p2p-defi-kernel', 'neonsoup', ...new Set(group.items.map((item) => item.name))],
+        'index-of': groupIndex + 1,
+        'metadata-msg': metadataMsgFor(mode, group, items.length, items, serviceFees),
+        'service-fees': serviceFeeOutputsFor(mode, source, serviceFees),
+      };
+    }),
     items: sources.flatMap(({ entries }) =>
       entries.map((entry) => ({
         'item-id': entry.item.id,
@@ -215,8 +426,12 @@ export function createBundledGcscriptSource({
   items,
   maxIntentsPerTransaction,
   returnUrlPattern,
+  networkTag,
+  expectedAddress,
   executionId = shortId('execution'),
   groupRootId = shortId(groupPrefix(items)),
+  serviceFees,
+  privacyMode = 'connected',
 }: BundledGcscriptSourceArgs): IntentTemplate['code'] {
   const groups = chunkItems(items, maxIntentsPerTransaction, groupRootId);
   let globalOffset = 0;
@@ -234,15 +449,18 @@ export function createBundledGcscriptSource({
   return {
     type: 'script',
     title: rootTitle(items),
-    args: receiptArgs('bundle', executionId, sources),
+    require: { networkTag },
+    args: receiptArgs('bundle', executionId, sources, expectedAddress, serviceFees),
     exportAs: NEONSOUP_EXECUTION_EXPORT,
     return: { mode: 'last' },
     returnURLPattern: returnUrlPattern,
     run: {
-      myAddress: { type: 'getCurrentAddress' },
+      ...networkRequirementNodes(),
+      ...walletCredentialNodes(),
+      ...walletIdentityRequirementNodes(privacyMode, expectedAddress),
       intents: {
         type: '$importAsScript',
-        argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex)])),
+        argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex, privacyMode)])),
         from: Object.fromEntries(entries.map((entry) => [entry.stepKey, libImportFor(entry.item).uri])),
       },
       ...Object.fromEntries(
@@ -250,13 +468,12 @@ export function createBundledGcscriptSource({
           const txStep = `tx${index}`;
           const buildStep = source.buildCachePath;
           const argsPath = `args.groups.${index}`;
-          const mints = source.entries
-            .filter(({ item }) => item.name === 'open' || item.name === 'close')
-            .map(({ cachePath }) => `{get('cache.${cachePath}.tx.mints.beacons')}`);
+          const mints = groupedBeaconMints(source.group, source.entries);
           const inputs = source.entries
             .filter(({ item }) => item.name === 'fill' || item.name === 'close')
             .map(({ cachePath }) => `{get('cache.${cachePath}.tx.inputs.offerWithBeacons')}`);
-          const outputs = source.entries.flatMap(({ item, cachePath }) => {
+          const outputs = [
+            ...source.entries.flatMap(({ item, cachePath }) => {
             if (item.name === 'open') return [`{get('cache.${cachePath}.tx.outputs.offerWithBeacons')}`];
             if (item.name === 'fill') {
               return [
@@ -265,39 +482,19 @@ export function createBundledGcscriptSource({
               ];
             }
             return [`{get('cache.${cachePath}.tx.outputs.unfilledOffer')}`];
-          });
-          const scripts = source.entries.flatMap(({ item, cachePath }) => {
-            if (item.name === 'open') {
-              return [`{get('cache.${cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`];
-            }
-            if (item.name === 'fill') {
-              return [`{get('cache.${cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`];
-            }
-            return [
-              `{get('cache.${cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`,
-              `{get('cache.${cachePath}.tx.witnesses.plutus.scripts.spendingValidator')}`,
-            ];
-          });
-          const consumers = source.entries.flatMap(({ item, cachePath }) => {
-            if (item.name === 'open') {
-              return [`{get('cache.${cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`];
-            }
-            if (item.name === 'fill') {
-              return [`{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`];
-            }
-            return [
-              `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.beaconsMint')}`,
-              `{get('cache.${cachePath}.tx.witnesses.plutus.consumers.offerWithBeaconsSpend')}`,
-            ];
-          });
+            }),
+            ...serviceFeeOutputsFor('bundle', source, serviceFees).map(
+              (_, feeIndex) => `{get('${argsPath}.service-fees.${feeIndex}')}`,
+            ),
+          ];
+          const scripts = groupedPlutusScripts(source.entries);
+          const consumers = groupedPlutusConsumers(source.group, source.entries);
           const requiredSigners = source.entries
             .filter(({ item }) => item.name === 'close')
             .map(({ cachePath }) => `{get('cache.${cachePath}.tx.requiredSigners.0')}`);
           const txRun: GcNode = {
             outputs,
-            options: {
-              collateralCoinSelection: COLLATERAL_COIN_SELECTION,
-            },
+            options: txOptions(),
             auxiliaryData: {
               [CARDANO_METADATA_MSG_LABEL]: {
                 msg: `{get('${argsPath}.metadata-msg')}`,
@@ -354,49 +551,58 @@ export function createBundledGcscriptSource({
       },
       finally: {
         type: 'macro',
-        run: {
-          executionId: "{get('args.execution-id')}",
-          itemCount: "{get('args.item-count')}",
-          groupCount: "{get('args.group-count')}",
-          txs: sources.map((source, txIndex) => ({
-            groupId: `{get('args.groups.${txIndex}.group-id')}`,
-            groupIndex: `{get('args.groups.${txIndex}.group-index')}`,
-            txHash: `{get('cache.${source.buildCachePath}.txHash')}`,
-            status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
-            hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
-            hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
-          })),
-          items: sources
-            .flatMap((source) =>
-              source.entries.map((entry) => ({
-                ...entry,
-                buildCachePath: source.buildCachePath,
-              })),
-            )
-            .map((entry) => ({
-              itemId: `{get('args.items.${entry.itemIndex}.item-id')}`,
-              intentId: `{get('args.items.${entry.itemIndex}.intent-id')}`,
-              type: `{get('args.items.${entry.itemIndex}.type')}`,
-              itemIndex: `{get('args.items.${entry.itemIndex}.item-index')}`,
-              groupId: `{get('args.groups.${entry.groupIndex}.group-id')}`,
-              groupIndex: `{get('args.items.${entry.itemIndex}.group-index')}`,
-              groupItemIndex: `{get('args.items.${entry.itemIndex}.group-item-index')}`,
-              txHash: `{get('cache.${entry.buildCachePath}.txHash')}`,
-              ...(entry.item.sourceOfferId ? { sourceOfferId: `{get('args.items.${entry.itemIndex}.source-offer-id')}` } : {}),
-              ...(entry.item.args['utxo-tx-hash']
-                ? {
-                    sourceUtxo: {
-                      txHash: `{get('args.items.${entry.itemIndex}.source-utxo.tx-hash')}`,
-                      index: `{get('args.items.${entry.itemIndex}.source-utxo.index')}`,
-                    },
-                  }
-                : {}),
-              outputs: outputArgs(entry.item).map((_, outputIndex) => ({
-                role: `{get('args.items.${entry.itemIndex}.outputs.${outputIndex}.role')}`,
-                index: `{get(join('.','cache','${entry.buildCachePath}','indexMap','output',get('args.items.${entry.itemIndex}.outputs.${outputIndex}.idPattern')))}`,
-              })),
-            })),
-        },
+        run:
+          privacyMode === 'incognito'
+            ? {
+                txs: sources.map((_source, txIndex) => ({
+                  status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
+                  hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
+                  hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
+                })),
+              }
+            : {
+                executionId: "{get('args.execution-id')}",
+                itemCount: "{get('args.item-count')}",
+                groupCount: "{get('args.group-count')}",
+                txs: sources.map((source, txIndex) => ({
+                  groupId: `{get('args.groups.${txIndex}.group-id')}`,
+                  groupIndex: `{get('args.groups.${txIndex}.group-index')}`,
+                  txHash: `{get('cache.${source.buildCachePath}.txHash')}`,
+                  status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
+                  hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
+                  hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
+                })),
+                items: sources
+                  .flatMap((source) =>
+                    source.entries.map((entry) => ({
+                      ...entry,
+                      buildCachePath: source.buildCachePath,
+                    })),
+                  )
+                  .map((entry) => ({
+                    itemId: `{get('args.items.${entry.itemIndex}.item-id')}`,
+                    intentId: `{get('args.items.${entry.itemIndex}.intent-id')}`,
+                    type: `{get('args.items.${entry.itemIndex}.type')}`,
+                    itemIndex: `{get('args.items.${entry.itemIndex}.item-index')}`,
+                    groupId: `{get('args.groups.${entry.groupIndex}.group-id')}`,
+                    groupIndex: `{get('args.items.${entry.itemIndex}.group-index')}`,
+                    groupItemIndex: `{get('args.items.${entry.itemIndex}.group-item-index')}`,
+                    txHash: `{get('cache.${entry.buildCachePath}.txHash')}`,
+                    ...(entry.item.sourceOfferId ? { sourceOfferId: `{get('args.items.${entry.itemIndex}.source-offer-id')}` } : {}),
+                    ...(entry.item.args['utxo-tx-hash']
+                      ? {
+                          sourceUtxo: {
+                            txHash: `{get('args.items.${entry.itemIndex}.source-utxo.tx-hash')}`,
+                            index: `{get('args.items.${entry.itemIndex}.source-utxo.index')}`,
+                          },
+                        }
+                      : {}),
+                    outputs: outputArgs(entry.item).map((_, outputIndex) => ({
+                      role: `{get('args.items.${entry.itemIndex}.outputs.${outputIndex}.role')}`,
+                      index: `{get(join('.','cache','${entry.buildCachePath}','indexMap','output',get('args.items.${entry.itemIndex}.outputs.${outputIndex}.idPattern')))}`,
+                    })),
+                  })),
+              },
       },
     },
   };
@@ -405,7 +611,11 @@ export function createBundledGcscriptSource({
 export function createParallelGcscriptSource({
   items,
   returnUrlPattern,
+  networkTag,
+  expectedAddress,
   executionId = shortId('execution'),
+  serviceFees,
+  privacyMode = 'connected',
 }: ParallelGcscriptSourceArgs): IntentTemplate['code'] {
   const groups = items.map((item, index) => ({ id: `${executionId}-${index + 1}`, items: [item] }));
   const entries = groups.map((group, index) => ({
@@ -425,15 +635,18 @@ export function createParallelGcscriptSource({
   return {
     type: 'script',
     title: rootTitle(items),
-    args: receiptArgs('parallel', executionId, sources),
+    require: { networkTag },
+    args: receiptArgs('parallel', executionId, sources, expectedAddress, serviceFees),
     exportAs: NEONSOUP_EXECUTION_EXPORT,
     return: { mode: 'last' },
     returnURLPattern: returnUrlPattern,
     run: {
-      myAddress: { type: 'getCurrentAddress' },
+      ...networkRequirementNodes(),
+      ...walletCredentialNodes(),
+      ...walletIdentityRequirementNodes(privacyMode, expectedAddress),
       intents: {
         type: '$importAsScript',
-        argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex)])),
+        argsByKey: Object.fromEntries(entries.map((entry) => [entry.stepKey, argRefsFor(entry.item, entry.itemIndex, privacyMode)])),
         from: Object.fromEntries(entries.map((entry) => [entry.stepKey, libImportFor(entry.item).uri])),
       },
       ...Object.fromEntries(
@@ -449,15 +662,19 @@ export function createParallelGcscriptSource({
             entry.item.name === 'fill' || entry.item.name === 'close'
               ? [`{get('cache.${entry.cachePath}.tx.inputs.offerWithBeacons')}`]
               : [];
-          const outputs =
-            entry.item.name === 'open'
+          const outputs = [
+            ...(entry.item.name === 'open'
               ? [`{get('cache.${entry.cachePath}.tx.outputs.offerWithBeacons')}`]
               : entry.item.name === 'fill'
                 ? [
                     `{get('cache.${entry.cachePath}.tx.outputs.filledOffer')}`,
                     `{get('cache.${entry.cachePath}.tx.outputs.remainingOfferWithBeacons')}`,
                   ]
-                : [`{get('cache.${entry.cachePath}.tx.outputs.unfilledOffer')}`];
+                : [`{get('cache.${entry.cachePath}.tx.outputs.unfilledOffer')}`]),
+            ...serviceFeeOutputsFor('parallel', sources[entry.groupIndex] as ReceiptGroupSource, serviceFees).map(
+              (_, feeIndex) => `{get('${argsPath}.service-fees.${feeIndex}')}`,
+            ),
+          ];
           const scripts =
             entry.item.name === 'open'
               ? [`{get('cache.${entry.cachePath}.tx.witnesses.plutus.scripts.beaconsPolicy')}`]
@@ -478,9 +695,7 @@ export function createParallelGcscriptSource({
                   ];
           const txRun: GcNode = {
             outputs,
-            options: {
-              collateralCoinSelection: COLLATERAL_COIN_SELECTION,
-            },
+            options: txOptions(),
             auxiliaryData: {
               [CARDANO_METADATA_MSG_LABEL]: {
                 msg: `{get('${argsPath}.metadata-msg')}`,
@@ -539,49 +754,58 @@ export function createParallelGcscriptSource({
       },
       finally: {
         type: 'macro',
-        run: {
-          executionId: "{get('args.execution-id')}",
-          itemCount: "{get('args.item-count')}",
-          groupCount: "{get('args.group-count')}",
-          txs: sources.map((source, txIndex) => ({
-            groupId: `{get('args.groups.${txIndex}.group-id')}`,
-            groupIndex: `{get('args.groups.${txIndex}.group-index')}`,
-            txHash: `{get('cache.${source.buildCachePath}.txHash')}`,
-            status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
-            hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
-            hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
-          })),
-          items: sources
-            .flatMap((source) =>
-              source.entries.map((entry) => ({
-                ...entry,
-                buildCachePath: source.buildCachePath,
-              })),
-            )
-            .map((entry) => ({
-              itemId: `{get('args.items.${entry.itemIndex}.item-id')}`,
-              intentId: `{get('args.items.${entry.itemIndex}.intent-id')}`,
-              type: `{get('args.items.${entry.itemIndex}.type')}`,
-              itemIndex: `{get('args.items.${entry.itemIndex}.item-index')}`,
-              groupId: `{get('args.groups.${entry.groupIndex}.group-id')}`,
-              groupIndex: `{get('args.items.${entry.itemIndex}.group-index')}`,
-              groupItemIndex: `{get('args.items.${entry.itemIndex}.group-item-index')}`,
-              txHash: `{get('cache.${entry.buildCachePath}.txHash')}`,
-              ...(entry.item.sourceOfferId ? { sourceOfferId: `{get('args.items.${entry.itemIndex}.source-offer-id')}` } : {}),
-              ...(entry.item.args['utxo-tx-hash']
-                ? {
-                    sourceUtxo: {
-                      txHash: `{get('args.items.${entry.itemIndex}.source-utxo.tx-hash')}`,
-                      index: `{get('args.items.${entry.itemIndex}.source-utxo.index')}`,
-                    },
-                  }
-                : {}),
-              outputs: outputArgs(entry.item).map((_, outputIndex) => ({
-                role: `{get('args.items.${entry.itemIndex}.outputs.${outputIndex}.role')}`,
-                index: `{get(join('.','cache','${entry.buildCachePath}','indexMap','output',get('args.items.${entry.itemIndex}.outputs.${outputIndex}.idPattern')))}`,
-              })),
-            })),
-        },
+        run:
+          privacyMode === 'incognito'
+            ? {
+                txs: sources.map((_source, txIndex) => ({
+                  status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
+                  hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
+                  hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
+                })),
+              }
+            : {
+                executionId: "{get('args.execution-id')}",
+                itemCount: "{get('args.item-count')}",
+                groupCount: "{get('args.group-count')}",
+                txs: sources.map((source, txIndex) => ({
+                  groupId: `{get('args.groups.${txIndex}.group-id')}`,
+                  groupIndex: `{get('args.groups.${txIndex}.group-index')}`,
+                  txHash: `{get('cache.${source.buildCachePath}.txHash')}`,
+                  status: `{get('cache.submit.txsExtended.${txIndex}.status')}`,
+                  hasSubmitError: `{eq(get('cache.submit.txsExtended.${txIndex}.status'),'error')}`,
+                  hasContentionError: `{eq(get('cache.submit.txsExtended.${txIndex}.error'),get('cache.knownErrors.contention'))}`,
+                })),
+                items: sources
+                  .flatMap((source) =>
+                    source.entries.map((entry) => ({
+                      ...entry,
+                      buildCachePath: source.buildCachePath,
+                    })),
+                  )
+                  .map((entry) => ({
+                    itemId: `{get('args.items.${entry.itemIndex}.item-id')}`,
+                    intentId: `{get('args.items.${entry.itemIndex}.intent-id')}`,
+                    type: `{get('args.items.${entry.itemIndex}.type')}`,
+                    itemIndex: `{get('args.items.${entry.itemIndex}.item-index')}`,
+                    groupId: `{get('args.groups.${entry.groupIndex}.group-id')}`,
+                    groupIndex: `{get('args.items.${entry.itemIndex}.group-index')}`,
+                    groupItemIndex: `{get('args.items.${entry.itemIndex}.group-item-index')}`,
+                    txHash: `{get('cache.${entry.buildCachePath}.txHash')}`,
+                    ...(entry.item.sourceOfferId ? { sourceOfferId: `{get('args.items.${entry.itemIndex}.source-offer-id')}` } : {}),
+                    ...(entry.item.args['utxo-tx-hash']
+                      ? {
+                          sourceUtxo: {
+                            txHash: `{get('args.items.${entry.itemIndex}.source-utxo.tx-hash')}`,
+                            index: `{get('args.items.${entry.itemIndex}.source-utxo.index')}`,
+                          },
+                        }
+                      : {}),
+                    outputs: outputArgs(entry.item).map((_, outputIndex) => ({
+                      role: `{get('args.items.${entry.itemIndex}.outputs.${outputIndex}.role')}`,
+                      index: `{get(join('.','cache','${entry.buildCachePath}','indexMap','output',get('args.items.${entry.itemIndex}.outputs.${outputIndex}.idPattern')))}`,
+                    })),
+                  })),
+              },
       },
     },
   };

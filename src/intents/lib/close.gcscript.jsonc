@@ -79,7 +79,11 @@
                 "fromJSON": {
                     "schema": 1,
                     "obj": {
-                        "constructor": 1,
+                        // Audited v1 BeaconRedeemer: 0 = CreateOrCloseSwaps (minting/burning),
+                        // 1 = UpdateSwaps (staking). Close burns beacons, so use 0.
+                        // V2 switch-back note: re-check the v2 BeaconRedeemer constructor order
+                        // before changing this; constructor 1 fails v1 minting with the staking branch.
+                        "constructor": 0,
                         "fields": []
                     }
                 }

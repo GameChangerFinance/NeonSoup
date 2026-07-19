@@ -25,11 +25,11 @@ export function WalletWidget({ wallet, onConnect, onDisconnect }: WalletWidgetPr
             <div className="fw-semibold">{wallet.name || 'Connected wallet'}</div>
             <div className="small text-body-secondary hash-text">
               {short(wallet.address, 18, 12)}
-              <CopyIcon value={wallet.address} label="Copy wallet address" />
+              <CopyIcon value={wallet.address} label="Copy wallet address" copyMessage={{ subject: 'wallet address' }} />
             </div>
             <div className="small text-body-secondary hash-text">
               {short(wallet.stakeKeyHash, 12, 8)}
-              <CopyIcon value={wallet.stakeKeyHash} label="Copy stake key hash" />
+              <CopyIcon value={wallet.stakeKeyHash} label="Copy stake key hash" copyMessage={{ subject: 'stake key hash' }} />
             </div>
           </div>
           <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onDisconnect}>

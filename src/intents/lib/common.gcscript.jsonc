@@ -18,30 +18,115 @@
     "args": "{get('args')}",
     "isolateCache": true,
     "run": {
-        "beaconsPolicy": {
+        "deploymentConstants": {
             "type": "data",
             "value": {
-                "scriptHashHex": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
-                "scriptSize": 4595,
-                "lang": "plutus_v2",                
-                "input": {
-                    "index": 0,
-                    "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
-                }                               
+                // V1 - Audited
+                // Commit: 9ec41e7619f5ba9d3dd46dd194e2146098093721
+                "cardano-preprod": {
+                    "beaconsPolicy": {
+                        "scriptHashHex": "47cec2a1404ed91fc31124f29db15dc1aae77e0617868bcef351b8fd",
+                        "scriptSize": 4414, // Live MKII reference script serialisedSize: 4411.
+                        "lang": "plutus_v2",
+                        "input": {
+                            "txHash": "4cede5c4ca5a22969aef708a61f12d786180e2679a438812c6bda99364934652",
+                            "index": 5
+                        }
+                    },
+                    "spendingValidator": {
+                        "scriptHashHex": "01fa36465dfe36e26c21fdbf720e4bdafcc0b86bb5367fca46012f56",
+                        "scriptSize": 4823, // Live MKII reference script serialisedSize: 4820.
+                        "lang": "plutus_v2",
+                        "input": {
+                            "txHash": "4cede5c4ca5a22969aef708a61f12d786180e2679a438812c6bda99364934652",
+                            "index": 6
+                        }
+                    }
+                },
+                "cardano-mainnet": {
+                    "beaconsPolicy": {
+                        "scriptHashHex": "47cec2a1404ed91fc31124f29db15dc1aae77e0617868bcef351b8fd",
+                        "scriptSize": 4414,
+                        "lang": "plutus_v2",
+                        "input": {
+                            "index": 0,
+                            "txHash": "1d2f40cede4c9aace33f4fcdf7c69005befc5896f14dffc51e6f16c466ee11b0"
+                        }
+                    },
+                    "spendingValidator": {
+                        "scriptHashHex": "01fa36465dfe36e26c21fdbf720e4bdafcc0b86bb5367fca46012f56",
+                        "scriptSize": 4823,
+                        "lang": "plutus_v2",
+                        "input": {
+                            "txHash": "1d2f40cede4c9aace33f4fcdf7c69005befc5896f14dffc51e6f16c466ee11b0",
+                            "index": 1
+                        }
+                    }
+                }                
+                // V2 - PlutusV2 - Not Audited
+                // Commit: ecbf5daf8f28ac6e56adc8cc28d2a0931e01194a
+                // "cardano-preprod": {
+                //     "beaconsPolicy": {
+                //         "scriptHashHex": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
+                //         "scriptSize": 4595,
+                //         "lang": "plutus_v2",
+                //         "input": {
+                //             "index": 0,
+                //             "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
+                //         }
+                //     },
+                //     "spendingValidator": {
+                //         "scriptHashHex": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
+                //         "scriptSize": 4505,
+                //         "lang": "plutus_v2",
+                //         "input": {
+                //             "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
+                //             "index": 1
+                //         }
+                //     }
+                // },
+                // "cardano-mainnet": {
+                //     "beaconsPolicy": {
+                //         "scriptHashHex": "c4d7d117d9ebcde6db28db40837ff2b1401e9eaaa6eecea9e070e209",
+                //         "scriptSize": 4595,
+                //         "lang": "plutus_v2",
+                //         "input": {
+                //             "index": 0,
+                //             "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0"
+                //         }
+                //     },
+                //     "spendingValidator": {
+                //         "scriptHashHex": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
+                //         "scriptSize": 4505,
+                //         "lang": "plutus_v2",
+                //         "input": {
+                //             "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
+                //             "index": 1
+                //         }
+                //     }
+                // }
             }
         },
+        "networkKey": {
+            "type": "macro",
+            "run": "{join('-',get('args.dltTag'),get('args.networkTag'))}"
+        },
+        "selectedDeployment": {
+            "type": "macro",
+            "run": "{get(join('.','cache','deploymentConstants',get('cache.networkKey')))}"
+        },
+        "deploymentCheck": {
+            "type": "macro",
+            "run": "{assert(not(isEmptyString(get('cache.selectedDeployment.beaconsPolicy.scriptHashHex'))),'Unsupported NeonSoup network deployment')}"
+        },
+        "beaconsPolicy": {
+            "type": "macro",
+            "run": "{get('cache.selectedDeployment.beaconsPolicy')}"
+        },
         "spendingValidator": {
-            "type": "data",
-            "value": {
-                "scriptHashHex": "1d6cff26bcab91d2061aad0bd259cbb7d76d25ced2eeaed5926a42ad",
-                "scriptSize": 4505,
-                "lang": "plutus_v2",                
-                "input": {
-                    "txHash": "7b613fc2481a93b950f3bf48f8fbc5c49d6decce126a3572fab428feb73ed5b0",
-                    "index": 1
-                }               
-            }
-        },       
+            "type": "macro",
+            "run": "{get('cache.selectedDeployment.spendingValidator')}"
+        },
         "transform": {
             "type": "macro",
             "run": {
@@ -147,7 +232,8 @@
             "name": "DAppAddress",
             "addr": {
                 "spendScriptHashHex": "{get('cache.spendingValidator.scriptHashHex')}",
-                "stakePubKeyHashHex": "{get('args.owner-stake-keyhash')}"
+                "stakePubKeyHashHex": "{get('args.owner-stake-keyhash')}",
+                "stakeScriptHashHex": "{get('args.owner-stake-script-hash')}" // TODO: verify this is valid with P2P DeFi Kernel / ask for support
             }
         },
         "swapRedeemer": {

@@ -1,3 +1,7 @@
+//https://github.com/fallen-icarus/cardano-swaps/blob/e2e8f04/VERSIONS.md
+//https://github.com/fallen-icarus/cardano-swaps/blob/520ea1d27d5fdee36f7f461e725aaf2be05e79f4/aiken/plutus.json
+//https://github.com/fallen-icarus/cardano-swaps/blob/520ea1d27d5fdee36f7f461e725aaf2be05e79f4/VERSIONS.md
+
 {
     "type": "script",
     "title": "Deploy your own P2P DeFi Kernel OWS validators",
