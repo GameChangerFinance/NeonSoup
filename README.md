@@ -1,6 +1,6 @@
 # 🧬 NeonSoup
 
-[![NeonSoup](banner.jpg)](https://gamechanger.finance)
+[![NeonSoup](banner.jpg)](https://neonsoup.trade)
 
 *Imagine Cardano DeFi without isolated competing kitchens.
 No more liquidity trapped in separate pots and no more waiters, gatekeepers, backroom batchers between you and the soup you love.*
@@ -13,10 +13,9 @@ Inspect the recipe. Fork it. Compose your own flavors. Deploy kitchens on your o
 ---
 ## 🍿 Try it live
 
-- **[🥣 Neon Soup Dapp](https://neonsoup-dapp.netlify.app/):** NeonSoup user-facing dapp 
-- **[🛠️ Development dapp](https://neonsoup-dev.netlify.app/):** Internal tool used for development 
+- **[🥣 Neon Soup Dapp](https://neonsoup.trade):** NeonSoup DEX dapp
 
-**Not production ready yet! Use only on testnet.**
+**Public Alpha Release: Now also on Cardano Mainnet for pioneers and early testers.**
 
 ## 🥣 Frontend And DevTool
 
@@ -24,15 +23,19 @@ The repo now contains two Vite + React + TypeScript shells:
 
 - **User Frontend** in [`src/frontend/`](src/frontend/): the production-target
   DEX shell with a simplified AMM-like UX over the P2P DeFi Kernel order book.
-  It builds to `dist/frontend/`.
+  It builds to `dist/app/`.
 - **DevTool** in [`src/devtool/`](src/devtool/): the advanced development shell
   for inspecting protocol state, wallet intents, provider data, and execution
-  behavior. It builds to `dist/index.html`.
+  behavior. It builds to `dist/devtool/`.
+
+The official landing page source lives in [`src/landing/`](src/landing/) and
+builds to `dist/index.html`. Shared visual assets live in [`src/assets/`](src/assets/)
+and build to `dist/assets/`.
 
 Both shells consume shared app state, domain helpers, providers, wallet
 adapters, and Cart composition code from [`src/common/`](src/common/), plus
 UI-agnostic protocol helpers from [`src/core/`](src/core/). Frontend and DevTool
-must not import from each other.
+does not import from each other.
 
 Common commands:
 
@@ -51,6 +54,13 @@ provider URLs/API tokens out of commits. The shared app version uses SemVer
 build metadata: `package.json` version + `VITE_NEONSOUP_BUILD_TAG`, for example
 `0.0.1+local`. Changing the build tag intentionally prompts users to
 update/reset incompatible browser state.
+
+
+### Installing Note:
+
+The used version of the NPM module `@gamechanger-finance/gc` is the next release candidate, currently requires manual installation until it's official NPM release (soon).
+
+For now, to install it locally, you must clone this branch `https://github.com/GameChangerFinance/gamechanger/tree/feat/build` which brings the new builder features used to improve DevX. Install this single core Cardano dependency from here.
 
 ## 🚀 Overview
 
@@ -115,6 +125,8 @@ update/reset incompatible browser state.
   * Local routing against the shared P2P order book
   * Cart-mode execution and wallet return handling
   * UDC online/air-gapped connection
+  * Incognito Mode, to offer liquidity and swap with more privacy
+  * One-click onboarding, offer liquidity and swap without connecting first
 
 * **NeonSoup DevTool**
 
@@ -158,6 +170,8 @@ All logic runs locally in the user device.
 
 Immutable. Permissionless. Composable.
 
+Used in early demos. Coming soon to NeonSoup DEX.
+
 ---
 
 ## 🧩 Composability in Mind
@@ -175,7 +189,7 @@ For the same liquidity, NeonSoup exposes
 
 * Minimizes centralized points of failure
 * Open, permissionless, and verifiable
-* Censorship-resistant by design
+* More censorship-resistant by design
 * Data integrity via GCFS (on-chain storage)
 * User sovereignty over keys and data
 * Composable primitives for "infinite" DeFi
@@ -195,7 +209,7 @@ For the same liquidity, NeonSoup exposes
 
 ## 🌐 Links
 
-* See [`docs/SWAP.md`](docs/SWAP.md) for swap-routing, booked-UTxO, and value-accounting rules.
+* See [`docs/SWAP.md`](docs/SWAP.md) for some internal swap-routing, booked-UTxO, and value-accounting rules/notes.
 * P2P DeFi Kernel hashes: https://github.com/fallen-icarus/cardano-swaps/blob/main/VERSIONS.md
 * Github: https://github.com/GameChangerFinance/NeonSoup
 * Website: https://gamechanger.finance

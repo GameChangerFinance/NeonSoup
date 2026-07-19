@@ -2,9 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
-import textLogoUrl from './assets/textLogo.png';
-import logoUrl from '/assets/logo/icon.png';
 import { APP_CONFIG } from '../../common/config/appConfig';
+import publicAlphaCopy from '../../common/config/publicAlpha.json';
 import { useAppDispatch, useAppState } from '../../common/state/appState';
 import { assetMap, balanceOf, resolveAsset, visiblePortfolio } from '../../common/state/selectors';
 import { assetKeyOf, assetTitle, configuredAssets } from '../../common/domain/assets';
@@ -47,6 +46,7 @@ import {
   visibleCartItems,
 } from '../../common/services/cartIntents';
 import { clearNetworkScopedStoredData, readWalletReturn } from '../../common/services/storage';
+import { FRONTEND_LOGO_ASSETS, UI_ASSETS, type UiAsset } from './config/assets';
 import type {
   AppState,
   CartItem,
@@ -125,44 +125,6 @@ const INCOGNITO_NOTICE =
 const INCOGNITO_CART_NOTICE =
   'In Incognito Mode, NeonSoup does not keep executed Cart items after opening the wallet, so your activity is not tracked in local app history.';
 
-const UI_ASSETS = {
-  route: '/assets/cybernekos/lens-inspection_U.png',
-  tooltip: '/assets/cybernekos/peeking-counter_A.png',
-  tablet: '/assets/cybernekos/order-tablet_O.png',
-  network: '/assets/cybernekos/conveyor-belt_T.png',
-  scale: '/assets/cybernekos/soup-scale_J.png',
-  ladle: '/assets/cybernekos/ladle-stir_X.png',
-  wallet: '/assets/cybernekos/yawning-paw_AF.png',
-  walletConnected: '/assets/cybernekos/dj-cook_K.png',
-  walletConnect: '/assets/cybernekos/yawning-paw_AF.png',
-  walletDisconnect: '/assets/cybernekos/skateboard-bowl_AE.png',
-  incognito: '/assets/cybernekos/incognito_half_A.png',
-  receipt: '/assets/cybernekos/receipt-sorting_S.png',
-  parallel: '/assets/cybernekos/receipt-sorting_S.png',
-  cloche: '/assets/cybernekos/serving-cloche_AQ.png',
-  success: '/assets/cybernekos/confetti-happy_AC.png',
-  warning: '/assets/cybernekos/worried-sweat_E.png',
-  danger: '/assets/cybernekos/crying-error_F.png',
-  info: '/assets/cybernekos/order-tablet_O.png',
-  infoToast: '/assets/cybernekos/table-setting_AR.png',
-  empty: '/assets/cybernekos/sitting-calm_D.png',
-  cart: '/assets/cybernekos/menu-scroll_N.png',
-  cartMode: '/assets/cybernekos/menu-scroll_N.png',
-  open: '/assets/cybernekos/serving-soup_AD.png',
-  menu: '/assets/cybernekos/menu-pointer_R.png',
-  data: '/assets/cybernekos/data-wall_AY.png',
-  history: '/assets/cybernekos/receipt-sorting_S.png',
-  options: '/assets/cybernekos/pantry-terminal_AM.png',
-  bundleActions: '/assets/cybernekos/soup-pot-stack_BB.png',
-  payUp: '/assets/cybernekos/temperature-gun_W.png',
-  serviceFee: '/assets/cybernekos/bowl-seasoning_I.png',
-  bundle: '/assets/kitchen/bento_cube_A.png',
-  measure: '/assets/kitchen/measuring_spoon_A.png',
-  strainer: '/assets/kitchen/strainer_ladle_A.png',
-  coin: '/assets/kitchen/coin_bowl_A.png',
-} as const;
-
-type UiAsset = keyof typeof UI_ASSETS;
 const MARKET_QUOTE_ASSET_TAGS = new Set<ResolvedAsset['tag']>(['coin', 'stablecoin', 'mainstream']);
 
 function VisualAsset({ asset, className = '' }: { asset: UiAsset; className?: string }) {
@@ -214,11 +176,9 @@ interface PageAlertItem {
   message: string;
 }
 
-const GOGGLES_CLEANING_ASSET = '/assets/cybernekos/goggles-cleaning_Y.png';
+const GOGGLES_CLEANING_ASSET = UI_ASSETS.gogglesCleaning;
 const MAINNET_ALPHA_ACK_KEY = `neonsoup-mainnet-public-alpha-ack-${APP_CONFIG.version}`;
-const PUBLIC_ALPHA_COPY =
- `NeonSoup is currently under development, but because it's code is already released as open source and anyone can deploy it we consider this release as Public Alpha for early testing and feedback, including feedback from the Gimbalabs Piece of Pie Hackathon.
-The software may be unstable, incomplete, or unavailable without notice. It is provided “as is”, use it at your own risk. We are not responsible for any loss, damage, misuse, or unintended consequences resulting from its use.`;
+const PUBLIC_ALPHA_COPY = publicAlphaCopy.body;
 
 const ALERT_PRIORITY: Record<NoticeTone, number> = {
   danger: 0,
@@ -1058,7 +1018,7 @@ function Sidebar({ hideBrand = false }: { hideBrand?: boolean; incognito?: boole
     <aside className="sidebar">
       {hideBrand ? null : (
         <div className="brand">
-          <img src={textLogoUrl} alt="NeonSoup" />
+          <img src={FRONTEND_LOGO_ASSETS.wordmark} alt="NeonSoup" />
         </div>
       )}
       <nav className="nav-card" aria-label="Main navigation">
@@ -1070,7 +1030,7 @@ function Sidebar({ hideBrand = false }: { hideBrand?: boolean; incognito?: boole
         ))}
       </nav>
       <section className="kernel-card">
-        <img src={logoUrl} alt="" />
+        <img src={FRONTEND_LOGO_ASSETS.icon} alt="" />
         <div>
           Powered by
           <br />
@@ -2208,7 +2168,7 @@ function OptionsScreen({
               })
             }
           >
-            <option value="graphqlMk2">GraphQL MKII</option>
+            <option value="graphqlMk2">Cardano GraphQL MKII</option>
             <option value="blockfrost">Blockfrost</option>
           </select>
         </label>
@@ -2410,7 +2370,7 @@ function Drawer({ close, incognito }: { close: () => void; incognito: boolean })
     <div className="mobile-drawer" onMouseDown={(event) => event.target === event.currentTarget && close()}>
       <div className="drawer">
         <div className="drawer-head">
-          <img src={textLogoUrl} alt="NeonSoup" />
+          <img src={FRONTEND_LOGO_ASSETS.wordmark} alt="NeonSoup" />
           <button type="button" className="modal-action-btn" onClick={close} aria-label="Close menu">
             <i className="bi bi-x-lg" aria-hidden="true" />
           </button>
