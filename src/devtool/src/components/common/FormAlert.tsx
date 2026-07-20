@@ -7,7 +7,7 @@ interface FormAlertProps {
   children: ReactNode;
 }
 
-const GOGGLES_CLEANING_ASSET = '/assets/cybernekos/goggles-cleaning_Y.png';
+const GOGGLES_CLEANING_ASSET = '/assets/cybernekos/goggles-cleaning_Y.webp';
 
 function nodeText(node: ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node);

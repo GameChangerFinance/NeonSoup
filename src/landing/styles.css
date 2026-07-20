@@ -23,7 +23,7 @@
   --ns-font-display: "Archivo Black", "Arial Black", Impact, system-ui, sans-serif;
   --ns-font-body: "Rajdhani", "Sohne", "Avenir Next", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --ns-font-mono: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
-  --ns-bg-image: url("../assets/images/dark-bg.png");
+  --ns-bg-image: url("../assets/images/dark-bg.jpg");
 }
 
 [data-theme="light"] {
@@ -44,7 +44,7 @@
   --ns-shadow-riot: 0 0 28px oklch(72% 0.22 178 / 0.44), 0 0 84px oklch(70% 0.22 326 / 0.26), 0 0 136px oklch(67% 0.23 151 / 0.18);
   --ns-glass: oklch(100% 0.014 170 / 0.56);
   --ns-overlay: oklch(98% 0.028 170 / 0.5);
-  --ns-bg-image: url("../assets/images/light-bg.png");
+  --ns-bg-image: url("../assets/images/light-bg.jpg");
 }
 
 * { box-sizing: border-box; }
