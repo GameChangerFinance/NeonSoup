@@ -66,8 +66,12 @@ implementation details.
   `src/landing/.htaccess`, then copied by `scripts/build-landing.mjs`.
 - Standalone shell deploy fallbacks live in `src/frontend/public/_redirects`
   and `src/devtool/public/_redirects`.
-- Shared visual assets live in `src/assets` and are copied to `dist/assets`.
-  Old shell-local asset copies are not the source of truth.
+- Raw high-resolution visual assets live in top-level `assets/` and must stay
+  byte-for-byte source material unless the user explicitly asks to replace raw
+  art.
+- Optimized runtime visual assets live in `src/assets` and are copied to
+  `dist/assets` by the existing build asset copy step. Old shell-local asset
+  copies are not the source of truth.
 - Keep protocol source intent files under `src/intents/` unchanged unless the
   user explicitly approves the protocol/signature impact. Generated
   `dist/intents/*.gcscript.json` files may be rebuilt freely from unchanged
@@ -206,6 +210,10 @@ implementation details.
   `pnpm exec tsc -p ./src/frontend/tsconfig.json`
 - Build user frontend:
   `pnpm run build:frontend`
+- Optimize runtime assets from raw source assets:
+  `pnpm run assets:optimize`
+- Verify optimized runtime assets, references, and stray `dist/` images:
+  `pnpm run assets:verify`
 - Build only one intent:
   - `pnpm run build:open`
   - `pnpm run build:close`
@@ -222,6 +230,9 @@ shared frontend behavior, bundling, provider contracts, or wallet-intent
 loading.
 `pnpm serve` must mirror production SPA fallback behavior for `/app/*` and
 `/devtool/*`, including wallet return URLs with query parameters.
+Asset optimization commands are dev-only pre-prepare tools. Do not wire
+`pnpm run assets:optimize` or `pnpm run assets:verify` into `build`, `dev`,
+`serve`, or shell build scripts.
 
 ## TODO
 
@@ -245,6 +256,20 @@ loading.
   boundaries.
 - For any code or design change, preserve the existing working logic and style
   unless the user explicitly asks to change them.
+- Do not edit generated optimized runtime assets in `src/assets` by hand when
+  the raw source in `assets/` is the intended source of truth; regenerate via
+  `pnpm run assets:optimize`.
+- Use `scripts/asset-policy.mjs` as the local source of truth for generated
+  runtime asset extensions and intentional compatibility fallbacks.
+- Generated transparent runtime art must preserve source resolution and alpha.
+  The only current transparency exception is `assets/images/dark-bg.png` and
+  `assets/images/light-bg.png`: they are background-only assets generated as
+  full-resolution JPGs by compositing over theme-matched background colors
+  because JPG cannot preserve alpha.
+- Keep all Landing, Frontend, DevTool, README, and docs image references on
+  optimized `src/assets` or `/assets` paths. Avoid root-level or stale images
+  such as `banner.jpg`, root `logo.png`, root `icon.png`, or root
+  `favicon.*`.
 - Do not store Blockfrost keys, wallet secrets, seed phrases, private keys, or
   personal addresses in committed files.
 - Do not hardcode provider URLs or API tokens in source. Use Vite env variables:

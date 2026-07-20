@@ -4,25 +4,25 @@
     window.p2p_soup_fluid_separator_config = {
       selector: "[data-p2p-soup-fluid-separator]",
       assets: {
-        potBg: "../assets/images/empty_pot_bg.png",
-        potFg: "../assets/images/empty_pot_fg.png",
+        potBg: "../assets/images/empty_pot_bg.webp",
+        potFg: "../assets/images/empty_pot_fg.webp",
         cybernekos: [
-          "../assets/cybernekos/serving-soup_AD.png",
-          "../assets/cybernekos/soup-machine_AP.png",
-          "../assets/cybernekos/order-tablet_O.png",
-          "../assets/cybernekos/hologram-wave_AO.png",
-          "../assets/cybernekos/peeking-counter_A.png"
+          "../assets/cybernekos/serving-soup_AD.webp",
+          "../assets/cybernekos/soup-machine_AP.webp",
+          "../assets/cybernekos/order-tablet_O.webp",
+          "../assets/cybernekos/hologram-wave_AO.webp",
+          "../assets/cybernekos/peeking-counter_A.webp"
         ],
         kitchen: [
-          "../assets/kitchen/whisk_A.png",
-          "../assets/kitchen/whisk_B.png",
-          "../assets/kitchen/chef_knife_A.png",
-          "../assets/kitchen/peeler_A.png",
-          "../assets/kitchen/measuring_spoon_A.png",
-          "../assets/kitchen/strainer_ladle_A.png",
-          "../assets/kitchen/chef_hat_A.png",
-          "../assets/kitchen/soup_bowl_A.png",
-          "../assets/kitchen/blender_A.png"
+          "../assets/kitchen/whisk_A.webp",
+          "../assets/kitchen/whisk_B.webp",
+          "../assets/kitchen/chef_knife_A.webp",
+          "../assets/kitchen/peeler_A.webp",
+          "../assets/kitchen/measuring_spoon_A.webp",
+          "../assets/kitchen/strainer_ladle_A.webp",
+          "../assets/kitchen/chef_hat_A.webp",
+          "../assets/kitchen/soup_bowl_A.webp",
+          "../assets/kitchen/blender_A.webp"
         ]
       },
       tokens: ["ADA", "MIN", "iUSD", "DJED", "USDM", "WMT", "SNEK"],
