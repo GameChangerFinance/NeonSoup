@@ -28,7 +28,7 @@
     "prepare:autogen": "node ./scripts/generate-snippet-args.mjs ./config/snippet-args.json ./dist/intents/*.gcscript.json"
   },
   "devDependencies": {
-    "@gamechanger-finance/gc": "file:../gamechanger-lib/",
+    "@gamechanger-finance/gc": "1.2.1",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",

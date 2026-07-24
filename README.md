@@ -65,12 +65,6 @@ build metadata: `package.json` version + `VITE_NEONSOUP_BUILD_TAG`, for example
 update/reset incompatible browser state.
 
 
-### Installing Note:
-
-The used version of the NPM module `@gamechanger-finance/gc` is the next release candidate, currently requires manual installation until it's official NPM release (soon).
-
-For now, to install it locally, you must clone this branch `https://github.com/GameChangerFinance/gamechanger/tree/feat/build` which brings the new builder features used to improve DevX. Install this single core Cardano dependency from here.
-
 ## 🚀 Overview
 
 **NeonSoup** is a peer-to-peer execution layer for Cardano DeFi with a deep exploration for cypherpunk values: 
