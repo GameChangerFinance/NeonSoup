@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@gamechanger-finance/gc':
-        specifier: file:../gamechanger-lib/
-        version: file:../gamechanger-lib
+        specifier: 1.2.1
+        version: 1.2.1
       '@types/react':
         specifier: ^18.3.18
         version: 18.3.29
@@ -367,8 +367,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@gamechanger-finance/gc@file:../gamechanger-lib':
-    resolution: {directory: ../gamechanger-lib, type: directory}
+  '@gamechanger-finance/gc@1.2.1':
+    resolution: {integrity: sha512-5j8wPbOdLFXkx2H+dIacCNbI2/wtgma4iuSXjh8c51ECejVcp0s2RP/2WPaUJWJAO0HcTq4KKP70pRGOiG8GmQ==}
     engines: {node: '>=24.12.0'}
     hasBin: true
 
@@ -1065,6 +1065,9 @@ packages:
   fast-uri@3.1.2:
     resolution: {integrity: sha512-rVjf7ArG3LTk+FS6Yw81V1DLuZl1bRbNrev6Tmd/9RaroeeRRJhAt7jg/6YFxbvAQXUCavSoZhPPj6oOx+5KjQ==}
 
+  fast-uri@3.1.4:
+    resolution: {integrity: sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw==}
+
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
     engines: {node: '>=12.0.0'}
@@ -1074,8 +1077,8 @@ packages:
       picomatch:
         optional: true
 
-  fflate@0.8.2:
-    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
@@ -1382,8 +1385,8 @@ packages:
     resolution: {integrity: sha512-R4nPAVTAU0B9D35/Gk3uJf/7XYbQcyohSKdvAxIRSNghFl4e71hVoGnBNQz9cWaXxO2I10KTC+3jMdvvoKw6dQ==}
     engines: {node: '>=6'}
 
-  pako@2.1.0:
-    resolution: {integrity: sha512-w+eufiZ1WuJYgPXbV/PO3NCMEc3xqylkKHzp8bxp1uW4qaSNQUkwmLLEc3kKsfz8lpV1F8Ht3U1Cm+9Srog2ug==}
+  pako@2.2.0:
+    resolution: {integrity: sha512-zJq6RP/5q+TO2OpFV3FHzlPnFjmkb7Nc99a5SNjJE+uu/PkpChs+NIZSSzbBoD+6kjiISXjfYdwj1ZRQ81dz/w==}
 
   parse-json@5.2.0:
     resolution: {integrity: sha512-ayCKvm/phCGxOkYRSCM82iDwct8/EonSEgCSxWxD7ve6jHggsFl4fZVQBPRNgQoKiuV/odhFrGzQXZwbifC8Rg==}
@@ -1622,8 +1625,8 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
-  svgo@3.3.3:
-    resolution: {integrity: sha512-+wn7I4p7YgJhHs38k2TNjy1vCfPIfLIJWR5MnCStsN8WuuTcBnRKcMHQLMM2ijxGZmDoZwNv8ipl5aTTen62ng==}
+  svgo@3.3.4:
+    resolution: {integrity: sha512-GsNRis4e8jxn2Y9ENz/8lbJ93CstG8svtMnuRaHbiF2LTJ5tK0/q3t/URPq9Zc7zVWBJnNnJMIp6bevK7bSmNg==}
     engines: {node: '>=14.0.0'}
     hasBin: true
 
@@ -2046,21 +2049,22 @@ snapshots:
     optionalDependencies:
       '@noble/hashes': 1.8.0
 
-  '@gamechanger-finance/gc@file:../gamechanger-lib':
+  '@gamechanger-finance/gc@1.2.1':
     dependencies:
       '@napi-rs/canvas': 0.1.100
       '@noble/hashes': 1.8.0
       ajv: 8.20.0
       easyqrcodejs: 4.6.2
-      fflate: 0.8.2
+      fast-uri: 3.1.4
+      fflate: 0.8.3
       get-stdin: 8.0.0
       jsdom: 29.1.1(@noble/hashes@1.8.0)
       json-stringify-safe: 5.0.1
       jsonc-parser: 3.3.1
       meow: 9.0.0
-      pako: 2.1.0
+      pako: 2.2.0
       string-placeholder: 1.0.2
-      svgo: 3.3.3
+      svgo: 3.3.4
     transitivePeerDependencies:
       - canvas
 
@@ -2661,11 +2665,13 @@ snapshots:
 
   fast-uri@3.1.2: {}
 
+  fast-uri@3.1.4: {}
+
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
       picomatch: 4.0.4
 
-  fflate@0.8.2: {}
+  fflate@0.8.3: {}
 
   fill-range@7.1.1:
     dependencies:
@@ -2962,7 +2968,7 @@ snapshots:
 
   p-try@2.2.0: {}
 
-  pako@2.1.0: {}
+  pako@2.2.0: {}
 
   parse-json@5.2.0:
     dependencies:
@@ -3260,7 +3266,7 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  svgo@3.3.3:
+  svgo@3.3.4:
     dependencies:
       commander: 7.2.0
       css-select: 5.2.2

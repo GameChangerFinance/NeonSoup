@@ -1,2 +1,5 @@
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - fast-uri@3.1.4
+  - '@gamechanger-finance/gc@1.2.1'
